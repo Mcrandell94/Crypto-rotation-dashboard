@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import RotationChart from './components/RotationChart';
 
 const TRACKED = ['BTC', 'ETH', 'SOL', 'SUI', 'LINK'];
 
@@ -88,11 +89,13 @@ export default function DashboardHome() {
         })}
       </div>
 
+      <RotationChart tickers={data?.tickers} symbols={TRACKED} />
+
       <p style={{ fontSize: 11, color: '#6E767B', marginTop: 32, lineHeight: 1.6 }}>
         This proves the full pipeline: browser → Next.js API route → CoinMarketCap → back to the
         browser, with the API key never leaving the server. Once this is confirmed working live,
-        the plan is to port the rotation chart, AI Vibe scoring, and the rest of the existing
-        dashboard's panels over to read from this same kind of route instead of hardcoded data.
+        the plan is to port AI Vibe scoring and the rest of the existing dashboard's panels over
+        to read from this same kind of route instead of hardcoded data.
       </p>
     </main>
   );
