@@ -4,12 +4,13 @@ import { useState, useEffect, useCallback } from 'react';
 import RotationChart from './components/RotationChart';
 import RelativeRotationGraph from './components/RelativeRotationGraph';
 import MacroSentiment from './components/MacroSentiment';
-
-const TRACKED = ['BTC', 'ETH', 'SOL', 'SUI', 'LINK'];
-const RRG_BENCHMARK = 'BTC';
-const RRG_SYMBOLS = TRACKED.filter((s) => s !== RRG_BENCHMARK);
+import { SECTORS, BENCHMARK } from './lib/sectors';
 
 export default function DashboardHome() {
+  const [activeSector, setActiveSector] = useState(SECTORS[0].key);
+  const sectorTickers = SECTORS.find((s) => s.key === activeSector)?.tickers || [];
+  const tracked = [BENCHMARK, ...sectorTickers];
+
   const [data, setData] = useState(null);
   const [rrgData, setRrgData] = useState(null);
   const [macroData, setMacroData] = useState(null);
@@ -18,13 +19,13 @@ export default function DashboardHome() {
   const [macroError, setMacroError] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (symbols, benchmark) => {
     setLoading(true);
     setError(null);
     setRrgError(null);
     setMacroError(null);
     try {
-      const res = await fetch(`/api/crypto?symbols=${TRACKED.join(',')}`);
+      const res = await fetch(`/api/crypto?symbols=${[benchmark, ...symbols].join(',')}`);
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Unknown error');
       setData(json);
@@ -35,7 +36,7 @@ export default function DashboardHome() {
     }
 
     try {
-      const rrgRes = await fetch(`/api/rrg?benchmark=${RRG_BENCHMARK}&symbols=${RRG_SYMBOLS.join(',')}`);
+      const rrgRes = await fetch(`/api/rrg?benchmark=${benchmark}&symbols=${symbols.join(',')}`);
       const rrgJson = await rrgRes.json();
       if (!rrgRes.ok) throw new Error(rrgJson.error || 'Unknown error');
       setRrgData(rrgJson);
@@ -54,15 +55,16 @@ export default function DashboardHome() {
   }, []);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    fetchData(sectorTickers, BENCHMARK);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSector]);
 
   return (
     <main style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 12 }}>
         <h1 style={{ fontSize: 20, fontWeight: 600, margin: 0 }}>Crypto Rotation Dashboard</h1>
         <button
-          onClick={fetchData}
+          onClick={() => fetchData(sectorTickers, BENCHMARK)}
           disabled={loading}
           style={{
             background: '#171D21', border: '1px solid #2A3136', color: '#C9A66B',
@@ -73,7 +75,24 @@ export default function DashboardHome() {
         </button>
       </div>
 
-      <p style={{ fontSize: 12, color: '#6E767B', marginTop: 6 }}>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 14 }}>
+        {SECTORS.map((sec) => (
+          <button
+            key={sec.key}
+            onClick={() => setActiveSector(sec.key)}
+            style={{
+              background: activeSector === sec.key ? '#1E252A' : '#171D21',
+              border: `1px solid ${activeSector === sec.key ? '#C9A66B' : '#2A3136'}`,
+              color: activeSector === sec.key ? '#C9A66B' : '#8B9298',
+              borderRadius: 4, padding: '5px 12px', fontSize: 12, cursor: 'pointer',
+            }}
+          >
+            {sec.label}
+          </button>
+        ))}
+      </div>
+
+      <p style={{ fontSize: 12, color: '#6E767B', marginTop: 10 }}>
         {data?.fetchedAt
           ? `Live from CoinMarketCap — last fetched ${new Date(data.fetchedAt).toLocaleTimeString()}`
           : 'Fetching live data…'}
@@ -89,7 +108,7 @@ export default function DashboardHome() {
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, marginTop: 24 }}>
-        {TRACKED.map((sym) => {
+        {tracked.map((sym) => {
           const t = data?.tickers?.[sym];
           return (
             <div key={sym} style={{ background: '#171D21', border: '1px solid #2A3136', borderRadius: 6, padding: 16 }}>
@@ -117,7 +136,7 @@ export default function DashboardHome() {
         })}
       </div>
 
-      <RotationChart tickers={data?.tickers} symbols={TRACKED} />
+      <RotationChart tickers={data?.tickers} symbols={tracked} />
 
       {rrgError ? (
         <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
@@ -127,7 +146,14 @@ export default function DashboardHome() {
           </div>
         </div>
       ) : (
-        <RelativeRotationGraph data={rrgData} symbols={RRG_SYMBOLS} benchmark={RRG_BENCHMARK} />
+        <>
+          <RelativeRotationGraph data={rrgData} symbols={sectorTickers} benchmark={BENCHMARK} />
+          {rrgData?.failed?.length > 0 && (
+            <p style={{ fontSize: 11, color: '#6E767B', marginTop: 8 }}>
+              No live data for: {rrgData.failed.join(', ')} — skipped.
+            </p>
+          )}
+        </>
       )}
 
       {macroError ? (

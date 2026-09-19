@@ -4,13 +4,7 @@
 // RelativeRotationGraph.js) so the interactive controls (tail/trend/momentum
 // windows, z-score toggle, scrubber) don't need a refetch per change.
 
-const COINGECKO_IDS = {
-  BTC: 'bitcoin',
-  ETH: 'ethereum',
-  SOL: 'solana',
-  SUI: 'sui',
-  LINK: 'chainlink',
-};
+import { COINGECKO_IDS } from '../../lib/coingecko-ids';
 
 const HISTORY_DAYS = 100; // >90 days makes CoinGecko return daily granularity on the free plan
 
@@ -52,28 +46,47 @@ export async function GET(request) {
 
   const { searchParams } = new URL(request.url);
   const benchmark = searchParams.get('benchmark') || 'BTC';
-  const symbols = (searchParams.get('symbols') || 'ETH,SOL,SUI,LINK')
+  const requested = (searchParams.get('symbols') || 'ETH,SOL,SUI,LINK')
     .split(',')
     .map((s) => s.trim())
     .filter((s) => s && s !== benchmark);
 
+  if (!COINGECKO_IDS[benchmark]) {
+    return Response.json({ error: `No CoinGecko id mapped for benchmark ${benchmark}` }, { status: 400 });
+  }
+
+  const unmapped = requested.filter((s) => !COINGECKO_IDS[s]);
+  const symbols = requested.filter((s) => COINGECKO_IDS[s]);
+
   try {
     const allSymbols = [benchmark, ...symbols];
-    const maps = await Promise.all(allSymbols.map((sym) => fetchDailyPrices(sym, apiKey)));
-    const mapBySymbol = Object.fromEntries(allSymbols.map((sym, i) => [sym, maps[i]]));
+    const results = await Promise.allSettled(allSymbols.map((sym) => fetchDailyPrices(sym, apiKey)));
 
+    const failed = [...unmapped];
+    const mapBySymbol = {};
+    results.forEach((r, i) => {
+      const sym = allSymbols[i];
+      if (r.status === 'fulfilled') mapBySymbol[sym] = r.value;
+      else failed.push(sym);
+    });
+
+    if (!mapBySymbol[benchmark]) {
+      return Response.json({ error: `Could not fetch benchmark ${benchmark} from CoinGecko` }, { status: 502 });
+    }
+
+    const okSymbols = symbols.filter((s) => mapBySymbol[s]);
     let commonDays = [...mapBySymbol[benchmark].keys()];
-    for (const sym of symbols) {
+    for (const sym of okSymbols) {
       commonDays = commonDays.filter((d) => mapBySymbol[sym].has(d));
     }
     commonDays.sort();
 
     const prices = {};
-    for (const sym of allSymbols) {
+    for (const sym of [benchmark, ...okSymbols]) {
       prices[sym] = commonDays.map((d) => mapBySymbol[sym].get(d));
     }
 
-    return Response.json({ benchmark, days: commonDays, prices, fetchedAt: new Date().toISOString() });
+    return Response.json({ benchmark, days: commonDays, prices, failed, fetchedAt: new Date().toISOString() });
   } catch (err) {
     return Response.json(
       { error: err.message || 'Fetch failed', detail: err.detail || String(err) },

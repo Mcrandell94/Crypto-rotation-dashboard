@@ -18,7 +18,9 @@ export async function GET(request) {
   const symbols = searchParams.get('symbols') || 'BTC,ETH,SOL,SUI,LINK';
 
   try {
-    const cmcUrl = `https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?symbol=${symbols}&convert=USD`;
+    // skip_invalid=true so one unrecognized/delisted symbol in a larger sector batch
+    // doesn't fail the whole request — CMC just omits it from the response.
+    const cmcUrl = `https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?symbol=${symbols}&convert=USD&skip_invalid=true`;
 
     const res = await fetch(cmcUrl, {
       headers: {
