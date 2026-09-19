@@ -4,7 +4,10 @@ import { useState, useEffect, useCallback } from 'react';
 import RotationChart from './components/RotationChart';
 import RelativeRotationGraph from './components/RelativeRotationGraph';
 import MacroSentiment from './components/MacroSentiment';
+import EmaLevels from './components/EmaLevels';
 import { SECTORS, BENCHMARKS } from './lib/sectors';
+
+const EMA_SYMBOLS = ['BTC', 'ETH'];
 
 export default function DashboardHome() {
   const [activeSector, setActiveSector] = useState(SECTORS[0].key);
@@ -21,10 +24,24 @@ export default function DashboardHome() {
   const [data, setData] = useState(null);
   const [rrgData, setRrgData] = useState(null);
   const [macroData, setMacroData] = useState(null);
+  const [emaData, setEmaData] = useState(null);
   const [error, setError] = useState(null);
   const [rrgError, setRrgError] = useState(null);
   const [macroError, setMacroError] = useState(null);
+  const [emaError, setEmaError] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const fetchEma = useCallback(async () => {
+    setEmaError(null);
+    try {
+      const res = await fetch('/api/ema');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setEmaData(json);
+    } catch (e) {
+      setEmaError(e.message);
+    }
+  }, []);
 
   const fetchData = useCallback(async (symbols, benchmark) => {
     setLoading(true);
@@ -66,12 +83,21 @@ export default function DashboardHome() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSector, benchmark]);
 
+  // EMA levels track fixed BTC/ETH, not the active sector — fetch once on
+  // mount, then refresh alongside everything else on manual refresh.
+  useEffect(() => {
+    fetchEma();
+  }, [fetchEma]);
+
   return (
     <main style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 12 }}>
         <h1 style={{ fontSize: 20, fontWeight: 600, margin: 0 }}>Crypto Rotation Dashboard</h1>
         <button
-          onClick={() => fetchData(sectorTickers, benchmark)}
+          onClick={() => {
+            fetchData(sectorTickers, benchmark);
+            fetchEma();
+          }}
           disabled={loading}
           style={{
             background: '#171D21', border: '1px solid #2A3136', color: '#C9A66B',
@@ -190,6 +216,17 @@ export default function DashboardHome() {
         </div>
       ) : (
         <MacroSentiment data={macroData} />
+      )}
+
+      {emaError ? (
+        <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+          <strong>EMA fetch failed:</strong> {emaError}
+          <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
+            Most likely cause: COINGECKO_API_KEY isn't set yet in this environment's variables.
+          </div>
+        </div>
+      ) : (
+        <EmaLevels data={emaData} symbols={EMA_SYMBOLS} />
       )}
 
       <p style={{ fontSize: 11, color: '#6E767B', marginTop: 32, lineHeight: 1.6 }}>
