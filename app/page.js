@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import RotationChart from './components/RotationChart';
 import RelativeRotationGraph from './components/RelativeRotationGraph';
+import MacroSentiment from './components/MacroSentiment';
 
 const TRACKED = ['BTC', 'ETH', 'SOL', 'SUI', 'LINK'];
 const RRG_BENCHMARK = 'BTC';
@@ -11,14 +12,17 @@ const RRG_SYMBOLS = TRACKED.filter((s) => s !== RRG_BENCHMARK);
 export default function DashboardHome() {
   const [data, setData] = useState(null);
   const [rrgData, setRrgData] = useState(null);
+  const [macroData, setMacroData] = useState(null);
   const [error, setError] = useState(null);
   const [rrgError, setRrgError] = useState(null);
+  const [macroError, setMacroError] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
     setRrgError(null);
+    setMacroError(null);
     try {
       const res = await fetch(`/api/crypto?symbols=${TRACKED.join(',')}`);
       const json = await res.json();
@@ -37,6 +41,15 @@ export default function DashboardHome() {
       setRrgData(rrgJson);
     } catch (e) {
       setRrgError(e.message);
+    }
+
+    try {
+      const macroRes = await fetch('/api/macro');
+      const macroJson = await macroRes.json();
+      if (!macroRes.ok) throw new Error(macroJson.error || 'Unknown error');
+      setMacroData(macroJson);
+    } catch (e) {
+      setMacroError(e.message);
     }
   }, []);
 
@@ -115,6 +128,17 @@ export default function DashboardHome() {
         </div>
       ) : (
         <RelativeRotationGraph data={rrgData} symbols={RRG_SYMBOLS} benchmark={RRG_BENCHMARK} />
+      )}
+
+      {macroError ? (
+        <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+          <strong>Macro fetch failed:</strong> {macroError}
+          <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
+            Most likely cause: COINGECKO_API_KEY isn't set yet in this environment's variables.
+          </div>
+        </div>
+      ) : (
+        <MacroSentiment data={macroData} />
       )}
 
       <p style={{ fontSize: 11, color: '#6E767B', marginTop: 32, lineHeight: 1.6 }}>
