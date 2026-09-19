@@ -536,8 +536,8 @@ export default function RelativeRotationGraph({ data, symbols, benchmark }) {
 
       <p style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 12, lineHeight: 1.6 }}>
         RS-Ratio and RS-Momentum are a standard open approximation of the JdK RRG method, not the
-        exact proprietary formula. Only BTC is wired up as a benchmark right now — ETH/Gold/USD
-        would need their own data sources.
+        exact proprietary formula. BTC and ETH are wired up as benchmarks — Gold/USD from the
+        prototype would need a non-crypto data source.
       </p>
     </section>
   );

@@ -1,7 +1,5 @@
 // Sector taxonomy ported verbatim from the original prototype
-// (crypto-rotation-dashboard-v2.jsx). BTC is the fixed benchmark and isn't
-// listed in any sector — it's always shown/plotted alongside whichever
-// sector is active.
+// (crypto-rotation-dashboard-v2.jsx).
 
 export const SECTORS = [
   { key: 'l1', label: 'Layer 1s',
@@ -20,7 +18,13 @@ export const SECTORS = [
     tickers: ['HBAR', 'ONDO', 'ALGO', 'XDC', 'POLYX', 'VET', 'QNT', 'CFG', 'TRU'] },
 ];
 
-export const BENCHMARK = 'BTC';
+// BTC and ETH are the only benchmarks with a wired-up live data source
+// (both come from the same CoinGecko pipeline as everything else). Gold/USD
+// from the prototype would need a non-crypto data source.
+export const BENCHMARKS = [
+  { key: 'BTC', label: 'Bitcoin' },
+  { key: 'ETH', label: 'Ethereum' },
+];
 
 export function sectorTickers(sectorKey) {
   const sec = SECTORS.find((s) => s.key === sectorKey);

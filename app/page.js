@@ -4,12 +4,19 @@ import { useState, useEffect, useCallback } from 'react';
 import RotationChart from './components/RotationChart';
 import RelativeRotationGraph from './components/RelativeRotationGraph';
 import MacroSentiment from './components/MacroSentiment';
-import { SECTORS, BENCHMARK } from './lib/sectors';
+import { SECTORS, BENCHMARKS } from './lib/sectors';
 
 export default function DashboardHome() {
   const [activeSector, setActiveSector] = useState(SECTORS[0].key);
-  const sectorTickers = SECTORS.find((s) => s.key === activeSector)?.tickers || [];
-  const tracked = [BENCHMARK, ...sectorTickers];
+  const [benchmark, setBenchmark] = useState(BENCHMARKS[0].key);
+
+  // A benchmark can't be plotted against itself, so drop it from the sector's
+  // own ticker list; when the benchmark isn't BTC, BTC becomes a plottable
+  // ticker instead (so you can see BTC's own rotation vs the new benchmark).
+  const rawSectorTickers = SECTORS.find((s) => s.key === activeSector)?.tickers || [];
+  const sectorTickers = rawSectorTickers.filter((t) => t !== benchmark);
+  if (benchmark !== 'BTC' && !sectorTickers.includes('BTC')) sectorTickers.unshift('BTC');
+  const tracked = [benchmark, ...sectorTickers];
 
   const [data, setData] = useState(null);
   const [rrgData, setRrgData] = useState(null);
@@ -55,16 +62,16 @@ export default function DashboardHome() {
   }, []);
 
   useEffect(() => {
-    fetchData(sectorTickers, BENCHMARK);
+    fetchData(sectorTickers, benchmark);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSector]);
+  }, [activeSector, benchmark]);
 
   return (
     <main style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 12 }}>
         <h1 style={{ fontSize: 20, fontWeight: 600, margin: 0 }}>Crypto Rotation Dashboard</h1>
         <button
-          onClick={() => fetchData(sectorTickers, BENCHMARK)}
+          onClick={() => fetchData(sectorTickers, benchmark)}
           disabled={loading}
           style={{
             background: '#171D21', border: '1px solid #2A3136', color: '#C9A66B',
@@ -88,6 +95,24 @@ export default function DashboardHome() {
             }}
           >
             {sec.label}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+        <span style={{ fontSize: 12, color: '#8B9298' }}>Measured against</span>
+        {BENCHMARKS.map((b) => (
+          <button
+            key={b.key}
+            onClick={() => setBenchmark(b.key)}
+            style={{
+              background: benchmark === b.key ? '#1E252A' : '#171D21',
+              border: `1px solid ${benchmark === b.key ? '#C9A66B' : '#2A3136'}`,
+              color: benchmark === b.key ? '#C9A66B' : '#8B9298',
+              borderRadius: 4, padding: '4px 10px', fontSize: 12, cursor: 'pointer',
+            }}
+          >
+            {b.label}
           </button>
         ))}
       </div>
@@ -147,7 +172,7 @@ export default function DashboardHome() {
         </div>
       ) : (
         <>
-          <RelativeRotationGraph data={rrgData} symbols={sectorTickers} benchmark={BENCHMARK} />
+          <RelativeRotationGraph data={rrgData} symbols={sectorTickers} benchmark={benchmark} />
           {rrgData?.failed?.length > 0 && (
             <p style={{ fontSize: 11, color: '#6E767B', marginTop: 8 }}>
               No live data for: {rrgData.failed.join(', ')} — skipped.
