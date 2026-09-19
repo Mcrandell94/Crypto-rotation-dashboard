@@ -2,17 +2,23 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import RotationChart from './components/RotationChart';
+import RelativeRotationGraph from './components/RelativeRotationGraph';
 
 const TRACKED = ['BTC', 'ETH', 'SOL', 'SUI', 'LINK'];
+const RRG_BENCHMARK = 'BTC';
+const RRG_SYMBOLS = TRACKED.filter((s) => s !== RRG_BENCHMARK);
 
 export default function DashboardHome() {
   const [data, setData] = useState(null);
+  const [rrgData, setRrgData] = useState(null);
   const [error, setError] = useState(null);
+  const [rrgError, setRrgError] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setRrgError(null);
     try {
       const res = await fetch(`/api/crypto?symbols=${TRACKED.join(',')}`);
       const json = await res.json();
@@ -22,6 +28,15 @@ export default function DashboardHome() {
       setError(e.message);
     } finally {
       setLoading(false);
+    }
+
+    try {
+      const rrgRes = await fetch(`/api/rrg?benchmark=${RRG_BENCHMARK}&symbols=${RRG_SYMBOLS.join(',')}`);
+      const rrgJson = await rrgRes.json();
+      if (!rrgRes.ok) throw new Error(rrgJson.error || 'Unknown error');
+      setRrgData(rrgJson);
+    } catch (e) {
+      setRrgError(e.message);
     }
   }, []);
 
@@ -90,6 +105,17 @@ export default function DashboardHome() {
       </div>
 
       <RotationChart tickers={data?.tickers} symbols={TRACKED} />
+
+      {rrgError ? (
+        <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+          <strong>RRG fetch failed:</strong> {rrgError}
+          <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
+            Most likely cause: COINGECKO_API_KEY isn't set yet in this environment's variables.
+          </div>
+        </div>
+      ) : (
+        <RelativeRotationGraph data={rrgData} symbols={RRG_SYMBOLS} benchmark={RRG_BENCHMARK} />
+      )}
 
       <p style={{ fontSize: 11, color: '#6E767B', marginTop: 32, lineHeight: 1.6 }}>
         This proves the full pipeline: browser → Next.js API route → CoinMarketCap → back to the
