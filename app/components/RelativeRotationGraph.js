@@ -17,15 +17,21 @@ const QUADRANTS = {
   improving: { name: 'Improving', color: '#5E8FA8' },
 };
 
-// 3 of the 4 series clear the all-pairs CVD/contrast checks on their own;
-// LINK reuses SUI's hue but with a diamond marker (composite hue x shape
-// encoding) since a 4th fully-distinct hue doesn't pass at this surface.
-const SERIES_STYLE = {
-  ETH: { color: '#3987e5', shape: 'circle' },
-  SOL: { color: '#d95926', shape: 'circle' },
-  SUI: { color: '#199e70', shape: 'circle' },
-  LINK: { color: '#199e70', shape: 'diamond' },
-};
+// The first 3 hues clear the all-pairs CVD/contrast checks on their own; past
+// that, a scatter chart can't keep every pair distinct by hue alone (verified
+// with the dataviz palette validator — see project notes). Sectors here run
+// up to 14 tickers, well past that cap, so color is a secondary channel:
+// identity is carried primarily by the always-visible ticker label next to
+// each dot, the click-to-hide legend, and the pin-for-detail view. Color +
+// shape are cycled together (8 hues x 2 shapes = 16 combinations) so no two
+// tickers in the same sector ever share both.
+const CATEGORICAL_HUES = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300', '#9085e9', '#e66767'];
+function seriesStyleFor(index) {
+  return {
+    color: CATEGORICAL_HUES[index % CATEGORICAL_HUES.length],
+    shape: Math.floor(index / CATEGORICAL_HUES.length) % 2 === 0 ? 'circle' : 'diamond',
+  };
+}
 
 function sma(arr, i, w) {
   const s = arr.slice(Math.max(0, i - w + 1), i + 1);
@@ -96,6 +102,7 @@ export default function RelativeRotationGraph({ data, symbols, benchmark }) {
   const days = data?.days || [];
   const prices = data?.prices;
   const activeSymbols = symbols.filter((s) => prices?.[s]?.length);
+  const styleOf = (sym) => seriesStyleFor(activeSymbols.indexOf(sym));
   const lastIdx = days.length - 1;
 
   const [endIdx, setEndIdx] = useState(0);
@@ -281,7 +288,7 @@ export default function RelativeRotationGraph({ data, symbols, benchmark }) {
                 <text x={MARGIN + 8} y={MARGIN + 16} fill={QUADRANTS.improving.color} fontSize={12}>Improving</text>
 
                 {shownSymbols.map((sym) => {
-                  const { color, shape } = SERIES_STYLE[sym] || { color: TEXT_SECONDARY, shape: 'circle' };
+                  const { color, shape } = styleOf(sym);
                   const tail = tailOf(sym);
                   if (tail.length === 0) return null;
                   const px = tail.map((p) => toPx(p.x, p.y));
@@ -335,7 +342,7 @@ export default function RelativeRotationGraph({ data, symbols, benchmark }) {
                       height={34}
                       rx={3}
                       fill="#0E1316"
-                      stroke={SERIES_STYLE[hover.sym]?.color || TEXT_SECONDARY}
+                      stroke={styleOf(hover.sym).color}
                       opacity={0.97}
                     />
                     <text
@@ -400,7 +407,7 @@ export default function RelativeRotationGraph({ data, symbols, benchmark }) {
               </div>
             </div>
             {activeSymbols.map((sym) => {
-              const { color, shape } = SERIES_STYLE[sym] || { color: TEXT_SECONDARY, shape: 'circle' };
+              const { color, shape } = styleOf(sym);
               const tail = tailOf(sym);
               const last = tail[tail.length - 1];
               if (!last) return null;
@@ -462,7 +469,7 @@ export default function RelativeRotationGraph({ data, symbols, benchmark }) {
 
       {pinned && !tableView && (() => {
         const sym = pinned;
-        const { color } = SERIES_STYLE[sym] || { color: TEXT_SECONDARY };
+        const { color } = styleOf(sym);
         const tail = tailOf(sym);
         const startIdx = Math.max(0, endIdx - tailLength + 1);
         if (tail.length === 0) return null;
@@ -529,8 +536,8 @@ export default function RelativeRotationGraph({ data, symbols, benchmark }) {
 
       <p style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 12, lineHeight: 1.6 }}>
         RS-Ratio and RS-Momentum are a standard open approximation of the JdK RRG method, not the
-        exact proprietary formula. Only BTC is wired up as a benchmark right now — ETH/Gold/USD
-        would need their own data sources.
+        exact proprietary formula. BTC and ETH are wired up as benchmarks — Gold/USD from the
+        prototype would need a non-crypto data source.
       </p>
     </section>
   );
