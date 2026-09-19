@@ -6,6 +6,7 @@ import RelativeRotationGraph from './components/RelativeRotationGraph';
 import MacroSentiment from './components/MacroSentiment';
 import EmaLevels from './components/EmaLevels';
 import CotPanel from './components/CotPanel';
+import FundingOI from './components/FundingOI';
 import { SECTORS, BENCHMARKS } from './lib/sectors';
 
 const EMA_SYMBOLS = ['BTC', 'ETH'];
@@ -27,11 +28,13 @@ export default function DashboardHome() {
   const [macroData, setMacroData] = useState(null);
   const [emaData, setEmaData] = useState(null);
   const [cotData, setCotData] = useState(null);
+  const [fundingData, setFundingData] = useState(null);
   const [error, setError] = useState(null);
   const [rrgError, setRrgError] = useState(null);
   const [macroError, setMacroError] = useState(null);
   const [emaError, setEmaError] = useState(null);
   const [cotError, setCotError] = useState(null);
+  const [fundingError, setFundingError] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const fetchEma = useCallback(async () => {
@@ -63,6 +66,7 @@ export default function DashboardHome() {
     setError(null);
     setRrgError(null);
     setMacroError(null);
+    setFundingError(null);
     try {
       const res = await fetch(`/api/crypto?symbols=${[benchmark, ...symbols].join(',')}`);
       const json = await res.json();
@@ -90,6 +94,15 @@ export default function DashboardHome() {
       setMacroData(macroJson);
     } catch (e) {
       setMacroError(e.message);
+    }
+
+    try {
+      const fundingRes = await fetch(`/api/funding?symbols=${[benchmark, ...symbols].join(',')}`);
+      const fundingJson = await fundingRes.json();
+      if (!fundingRes.ok) throw new Error(fundingJson.error || 'Unknown error');
+      setFundingData(fundingJson);
+    } catch (e) {
+      setFundingError(e.message);
     }
   }, []);
 
@@ -255,6 +268,14 @@ export default function DashboardHome() {
         </div>
       ) : (
         <CotPanel data={cotData} />
+      )}
+
+      {fundingError ? (
+        <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+          <strong>Funding/OI fetch failed:</strong> {fundingError}
+        </div>
+      ) : (
+        <FundingOI data={fundingData} symbols={tracked} />
       )}
 
       <p style={{ fontSize: 11, color: '#6E767B', marginTop: 32, lineHeight: 1.6 }}>
