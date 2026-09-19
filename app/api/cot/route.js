@@ -29,14 +29,24 @@ export async function GET() {
       'nonrept_positions_short_all',
     ].join(',');
 
-    const url =
-      `${CFTC_BASE}?cftc_contract_market_code=${BITCOIN_CONTRACT_CODE}` +
-      `&$select=${fields}` +
-      `&$order=report_date_as_yyyy_mm_dd DESC` +
-      `&$limit=${LOOKBACK_WEEKS}`;
+    // Built with URLSearchParams rather than manual string concatenation so
+    // every value (including the space in "$order=... DESC") gets properly
+    // URL-encoded — a raw space in the query string is invalid and was
+    // silently producing a malformed request before this fix.
+    const params = new URLSearchParams({
+      cftc_contract_market_code: BITCOIN_CONTRACT_CODE,
+      $select: fields,
+      $order: 'report_date_as_yyyy_mm_dd DESC',
+      $limit: String(LOOKBACK_WEEKS),
+    });
+    const url = `${CFTC_BASE}?${params.toString()}`;
 
     const res = await fetch(url, {
-      headers: { Accept: 'application/json' },
+      headers: {
+        Accept: 'application/json',
+        // Some government endpoints reject requests with no/blank User-Agent.
+        'User-Agent': 'crypto-rotation-dashboard (contact: via GitHub repo)',
+      },
       next: { revalidate: 3600 },
     });
 
