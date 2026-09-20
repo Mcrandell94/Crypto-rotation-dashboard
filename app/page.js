@@ -14,6 +14,7 @@ import PolymarketPredictions from './components/PolymarketPredictions';
 import SeasonalityTable from './components/SeasonalityTable';
 import AltseasonIndex from './components/AltseasonIndex';
 import EtfFlows from './components/EtfFlows';
+import OptionsPositioning from './components/OptionsPositioning';
 import TabErrorBoundary from './components/TabErrorBoundary';
 import { SECTORS, BENCHMARKS } from './lib/sectors';
 
@@ -66,7 +67,21 @@ export default function DashboardHome() {
   const [etfFlowsError, setEtfFlowsError] = useState(null);
   const [rrgSectorsData, setRrgSectorsData] = useState(null);
   const [rrgSectorsError, setRrgSectorsError] = useState(null);
+  const [optionsData, setOptionsData] = useState(null);
+  const [optionsError, setOptionsError] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const fetchOptions = useCallback(async () => {
+    setOptionsError(null);
+    try {
+      const res = await fetch('/api/options');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setOptionsData(json);
+    } catch (e) {
+      setOptionsError(e.message);
+    }
+  }, []);
 
   const fetchRrgSectors = useCallback(async (bench) => {
     setRrgSectorsError(null);
@@ -233,7 +248,8 @@ export default function DashboardHome() {
     fetchSeasonality();
     fetchAltseason();
     fetchEtfFlows();
-  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality, fetchAltseason, fetchEtfFlows]);
+    fetchOptions();
+  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality, fetchAltseason, fetchEtfFlows, fetchOptions]);
 
   return (
     <main style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
@@ -249,6 +265,7 @@ export default function DashboardHome() {
             fetchSeasonality();
             fetchAltseason();
             fetchEtfFlows();
+            fetchOptions();
             if (rrgMode === 'sectors') fetchRrgSectors(benchmark);
           }}
           disabled={loading}
@@ -462,6 +479,17 @@ export default function DashboardHome() {
             </div>
           ) : (
             <EtfFlows data={etfFlowsData} />
+          )}
+
+          {optionsError ? (
+            <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+              <strong>Options positioning fetch failed:</strong> {optionsError}
+              <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
+                Deribit's public API may be temporarily unavailable — try refreshing.
+              </div>
+            </div>
+          ) : (
+            <OptionsPositioning data={optionsData} />
           )}
 
           {polymarketError ? (
