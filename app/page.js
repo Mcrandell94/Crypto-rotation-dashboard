@@ -12,6 +12,7 @@ import CbCalendar from './components/CbCalendar';
 import AstroOutlook from './components/AstroOutlook';
 import PolymarketPredictions from './components/PolymarketPredictions';
 import SeasonalityTable from './components/SeasonalityTable';
+import AltseasonIndex from './components/AltseasonIndex';
 import TabErrorBoundary from './components/TabErrorBoundary';
 import { SECTORS, BENCHMARKS } from './lib/sectors';
 
@@ -57,6 +58,8 @@ export default function DashboardHome() {
   const [polymarketError, setPolymarketError] = useState(null);
   const [seasonalityData, setSeasonalityData] = useState(null);
   const [seasonalityError, setSeasonalityError] = useState(null);
+  const [altseasonData, setAltseasonData] = useState(null);
+  const [altseasonError, setAltseasonError] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const fetchSeasonality = useCallback(async () => {
@@ -68,6 +71,18 @@ export default function DashboardHome() {
       setSeasonalityData(json);
     } catch (e) {
       setSeasonalityError(e.message);
+    }
+  }, []);
+
+  const fetchAltseason = useCallback(async () => {
+    setAltseasonError(null);
+    try {
+      const res = await fetch('/api/altseason');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setAltseasonData(json);
+    } catch (e) {
+      setAltseasonError(e.message);
     }
   }, []);
 
@@ -178,7 +193,8 @@ export default function DashboardHome() {
     fetchTimeframes();
     fetchPolymarket();
     fetchSeasonality();
-  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality]);
+    fetchAltseason();
+  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality, fetchAltseason]);
 
   return (
     <main style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
@@ -192,6 +208,7 @@ export default function DashboardHome() {
             fetchTimeframes();
             fetchPolymarket();
             fetchSeasonality();
+            fetchAltseason();
           }}
           disabled={loading}
           style={{
@@ -332,6 +349,14 @@ export default function DashboardHome() {
             </div>
           ) : (
             <MacroSentiment data={macroData} />
+          )}
+
+          {altseasonError ? (
+            <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+              <strong>Altcoin Season Index fetch failed:</strong> {altseasonError}
+            </div>
+          ) : (
+            <AltseasonIndex data={altseasonData} />
           )}
 
           {polymarketError ? (
