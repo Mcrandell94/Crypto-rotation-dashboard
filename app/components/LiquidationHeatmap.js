@@ -115,22 +115,22 @@ export default function LiquidationHeatmap({ data, dataError, coinalyzeData, coi
 
       <SourcePicker source={source} setSource={setSource} />
 
-      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 16 }}>
-        <div style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: 16, flex: '1 1 160px' }}>
-          <div style={{ fontSize: 11, color: TEXT_MUTED }}>{isModeled ? 'Spot' : 'Center of range'}</div>
-          <div style={{ fontSize: 20, fontWeight: 600, color: TEXT_PRIMARY, marginTop: 6, fontFamily: 'ui-monospace, monospace' }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14, alignItems: 'flex-start' }}>
+        <div style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: '10px 12px', flex: '1 1 130px' }}>
+          <div style={{ fontSize: 10, color: TEXT_MUTED }}>{isModeled ? 'Spot' : 'Center of range'}</div>
+          <div style={{ fontSize: 17, fontWeight: 600, color: TEXT_PRIMARY, marginTop: 3, fontFamily: 'ui-monospace, monospace' }}>
             {formatPrice(price)}
           </div>
         </div>
-        <div style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: 16, flex: '1 1 160px' }}>
-          <div style={{ fontSize: 11, color: TEXT_MUTED }}>Nearest long cluster (below)</div>
-          <div style={{ fontSize: 16, fontWeight: 600, color: LOSS, marginTop: 6, fontFamily: 'ui-monospace, monospace' }}>
+        <div style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: '10px 12px', flex: '1 1 130px' }}>
+          <div style={{ fontSize: 10, color: TEXT_MUTED }}>Nearest long cluster (below)</div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: LOSS, marginTop: 3, fontFamily: 'ui-monospace, monospace' }}>
             {nearestLongCluster ? formatPrice((nearestLongCluster.priceLow + nearestLongCluster.priceHigh) / 2) : '—'}
           </div>
         </div>
-        <div style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: 16, flex: '1 1 160px' }}>
-          <div style={{ fontSize: 11, color: TEXT_MUTED }}>Nearest short cluster (above)</div>
-          <div style={{ fontSize: 16, fontWeight: 600, color: GAIN, marginTop: 6, fontFamily: 'ui-monospace, monospace' }}>
+        <div style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: '10px 12px', flex: '1 1 130px' }}>
+          <div style={{ fontSize: 10, color: TEXT_MUTED }}>Nearest short cluster (above)</div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: GAIN, marginTop: 3, fontFamily: 'ui-monospace, monospace' }}>
             {nearestShortCluster ? formatPrice((nearestShortCluster.priceLow + nearestShortCluster.priceHigh) / 2) : '—'}
           </div>
         </div>

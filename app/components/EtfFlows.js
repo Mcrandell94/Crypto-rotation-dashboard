@@ -123,23 +123,23 @@ export default function EtfFlows({
         {subtitle}
       </p>
 
-      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-        <div style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: 16, flex: '1 1 160px' }}>
-          <div style={{ fontSize: 11, color: TEXT_MUTED }}>Latest day ({formatDate(latest.date)})</div>
-          <div style={{ fontSize: 22, fontWeight: 600, color: latest.netInflow >= 0 ? GAIN : LOSS, marginTop: 6, fontFamily: 'ui-monospace, monospace' }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+        <div style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: '10px 12px', flex: '1 1 130px' }}>
+          <div style={{ fontSize: 10, color: TEXT_MUTED }}>Latest day ({formatDate(latest.date)})</div>
+          <div style={{ fontSize: 17, fontWeight: 600, color: latest.netInflow >= 0 ? GAIN : LOSS, marginTop: 3, fontFamily: 'ui-monospace, monospace' }}>
             {formatUsd(latest.netInflow)}
           </div>
         </div>
-        <div style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: 16, flex: '1 1 160px' }}>
-          <div style={{ fontSize: 11, color: TEXT_MUTED }}>Last 5 days</div>
-          <div style={{ fontSize: 22, fontWeight: 600, color: last5Total >= 0 ? GAIN : LOSS, marginTop: 6, fontFamily: 'ui-monospace, monospace' }}>
+        <div style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: '10px 12px', flex: '1 1 130px' }}>
+          <div style={{ fontSize: 10, color: TEXT_MUTED }}>Last 5 days</div>
+          <div style={{ fontSize: 17, fontWeight: 600, color: last5Total >= 0 ? GAIN : LOSS, marginTop: 3, fontFamily: 'ui-monospace, monospace' }}>
             {formatUsd(last5Total)}
           </div>
         </div>
         {latest.netAssets != null && (
-          <div style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: 16, flex: '1 1 160px' }}>
-            <div style={{ fontSize: 11, color: TEXT_MUTED }}>Total net assets</div>
-            <div style={{ fontSize: 22, fontWeight: 600, color: TEXT_PRIMARY, marginTop: 6, fontFamily: 'ui-monospace, monospace' }}>
+          <div style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: '10px 12px', flex: '1 1 130px' }}>
+            <div style={{ fontSize: 10, color: TEXT_MUTED }}>Total net assets</div>
+            <div style={{ fontSize: 17, fontWeight: 600, color: TEXT_PRIMARY, marginTop: 3, fontFamily: 'ui-monospace, monospace' }}>
               {formatUsdAbs(latest.netAssets)}
             </div>
           </div>

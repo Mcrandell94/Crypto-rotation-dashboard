@@ -54,16 +54,16 @@ export default function LiveLiquidationFeed({ data }) {
         {asOf ? ` As of ${formatRelative(asOf)}.` : ''}
       </p>
 
-      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 16 }}>
-        <div style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: 16, flex: '1 1 160px' }}>
-          <div style={{ fontSize: 11, color: TEXT_MUTED }}>Market-wide long liquidated</div>
-          <div style={{ fontSize: 20, fontWeight: 600, color: LOSS, marginTop: 6, fontFamily: 'ui-monospace, monospace' }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14, alignItems: 'flex-start' }}>
+        <div style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: '10px 12px', flex: '1 1 130px' }}>
+          <div style={{ fontSize: 10, color: TEXT_MUTED }}>Market-wide long liquidated</div>
+          <div style={{ fontSize: 17, fontWeight: 600, color: LOSS, marginTop: 3, fontFamily: 'ui-monospace, monospace' }}>
             {formatUsdAbs(marketLongUsd)}
           </div>
         </div>
-        <div style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: 16, flex: '1 1 160px' }}>
-          <div style={{ fontSize: 11, color: TEXT_MUTED }}>Market-wide short liquidated</div>
-          <div style={{ fontSize: 20, fontWeight: 600, color: GAIN, marginTop: 6, fontFamily: 'ui-monospace, monospace' }}>
+        <div style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: '10px 12px', flex: '1 1 130px' }}>
+          <div style={{ fontSize: 10, color: TEXT_MUTED }}>Market-wide short liquidated</div>
+          <div style={{ fontSize: 17, fontWeight: 600, color: GAIN, marginTop: 3, fontFamily: 'ui-monospace, monospace' }}>
             {formatUsdAbs(marketShortUsd)}
           </div>
         </div>
