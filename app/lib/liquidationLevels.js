@@ -34,16 +34,18 @@
 // relationship is what LiquidationLevelsTracker uses to decide whether
 // current price has crossed it.
 
-// Two different chart types feed the two horizons, both cross-checked
-// across Bybit AND Binance:
-//   shortTerm — Coinglass's per-price liquidation LEVERAGE distribution
-//     (actual numeric x-axis, bar height = leverage volume at that price,
-//     from currently-open positions) — precise, not eyeballed color, and
-//     the more reliable of the two chart types. Superseded an earlier,
-//     less precise eyeballed read off a 24h heatmap.
-//   longTerm — Coinglass's 1-year liquidation HEATMAP (color intensity
-//     over time) — still an eyeballed pixel-intensity read, treat exact
-//     prices as approximate (±0.5-1%).
+// shortTerm blends two chart types across five venues: Coinglass's
+// per-price liquidation LEVERAGE distribution (actual numeric x-axis,
+// bar height = leverage volume, from currently-open positions — Binance +
+// Bybit) plus BitcoinCounterFlow's own Heatmap Terminal (24h, numeric
+// price axis — OKX, Bitget, Hyperliquid), which sharpened the near-spot
+// long level from a 5-way cross-check. A bright band right at BCF's
+// chart's top edge was NOT used as a level — it's likely a rendering
+// artifact (heatmaps often bin everything above the visible range into
+// the top row) rather than a genuine standalone cluster.
+// longTerm — Coinglass's 1-year liquidation HEATMAP (color intensity
+// over time, Bybit + Binance) — still an eyeballed pixel-intensity read,
+// treat exact prices as approximate (±0.5-1%).
 const CAPTURED_AT = '2026-09-20T19:00:00Z';
 const SPOT_AT_CAPTURE = 81200;
 
@@ -53,12 +55,12 @@ export const HORIZONS = {
     label: 'Near-Term (live leverage map)',
     capturedAt: CAPTURED_AT,
     spotAtCapture: SPOT_AT_CAPTURE,
-    source: 'Coinglass — Binance + Bybit BTC/USDT liquidation leverage distribution by price (current open positions, wide + zoomed views), cross-checked',
+    source: 'Coinglass Binance+Bybit liquidation leverage distribution (numeric axis) plus BitcoinCounterFlow\'s own Heatmap Terminal across OKX, Bitget, and Hyperliquid (24h view) — cross-checked across 5 venues near spot',
     levels: [
       { kind: 'level', price: 84000, side: 'short', label: 'Secondary cluster further above spot — Bybit wide view (~220M)' },
       { kind: 'level', price: 82400, side: 'short', label: 'Dominant cluster just above spot — tallest or near-tallest bar on both Binance and Bybit' },
-      { kind: 'zone', zoneLow: 80600, zoneHigh: 82000, label: 'Thin gap between spot and the dominant cluster above, both exchanges' },
-      { kind: 'level', price: 79700, side: 'long', label: 'Dense wall of leveraged positions just below spot, both exchanges' },
+      { kind: 'zone', zoneLow: 80600, zoneHigh: 82000, label: 'Thin gap between spot and the dominant cluster above — confirmed on Binance, Bybit, and BCF\'s OKX/Bitget/Hyperliquid views' },
+      { kind: 'level', price: 78850, side: 'long', label: 'Sharpest, most-confirmed near-term magnet — single hottest line on BCF\'s heatmap across OKX, Bitget, AND Hyperliquid independently, refining the earlier ~$79.7K read' },
       { kind: 'level', price: 74500, side: 'long', label: "Very large cluster further below spot — single largest bar on Bybit's wide view (~350M), less prominent on Binance" },
       { kind: 'level', price: 70700, side: 'long', label: 'Large cluster further out, Binance wide view (~170M)' },
     ],
