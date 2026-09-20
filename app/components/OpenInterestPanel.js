@@ -90,11 +90,6 @@ export default function OpenInterestPanel({ data }) {
           );
         })}
       </div>
-
-      <p style={{ fontSize: 10, color: TEXT_MUTED, marginTop: 12, lineHeight: 1.5, maxWidth: 620 }}>
-        Coinglass's liquidation heatmap, liquidation map, and liquidation max-pain data all require
-        its Professional plan ($699+/mo) — not included on the current key, and not shown here.
-      </p>
     </section>
   );
 }

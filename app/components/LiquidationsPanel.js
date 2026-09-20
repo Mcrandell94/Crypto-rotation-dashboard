@@ -94,9 +94,7 @@ export default function LiquidationsPanel({ data }) {
       </div>
 
       <p style={{ fontSize: 10, color: TEXT_MUTED, marginTop: 12, lineHeight: 1.5, maxWidth: 620 }}>
-        This is realized liquidation volume, not a forward-looking price-level map — Coinglass's
-        liquidation heatmap and liquidation map (where future liquidations would cluster) require its
-        Professional plan ($699+/mo) and aren't included here.
+        This is realized liquidation volume as it happens, not a forward-looking price-level map.
       </p>
     </section>
   );
