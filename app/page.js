@@ -11,6 +11,7 @@ import TimeframesPanel from './components/TimeframesPanel';
 import CbCalendar from './components/CbCalendar';
 import AstroOutlook from './components/AstroOutlook';
 import PolymarketPredictions from './components/PolymarketPredictions';
+import SeasonalityTable from './components/SeasonalityTable';
 import TabErrorBoundary from './components/TabErrorBoundary';
 import { SECTORS, BENCHMARKS } from './lib/sectors';
 
@@ -22,7 +23,7 @@ const TABS = [
   { key: 'calendar', label: 'CB Calendar' },
   { key: 'astro', label: 'Astro Outlook' },
   { key: 'macro', label: 'Macro & Sentiment' },
-  { key: 'levels', label: 'Levels' },
+  { key: 'levels', label: 'Levels & Seasonality' },
 ];
 
 export default function DashboardHome() {
@@ -54,7 +55,21 @@ export default function DashboardHome() {
   const [timeframesError, setTimeframesError] = useState(null);
   const [polymarketData, setPolymarketData] = useState(null);
   const [polymarketError, setPolymarketError] = useState(null);
+  const [seasonalityData, setSeasonalityData] = useState(null);
+  const [seasonalityError, setSeasonalityError] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const fetchSeasonality = useCallback(async () => {
+    setSeasonalityError(null);
+    try {
+      const res = await fetch('/api/seasonality');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setSeasonalityData(json);
+    } catch (e) {
+      setSeasonalityError(e.message);
+    }
+  }, []);
 
   const fetchPolymarket = useCallback(async () => {
     setPolymarketError(null);
@@ -162,7 +177,8 @@ export default function DashboardHome() {
     fetchCot();
     fetchTimeframes();
     fetchPolymarket();
-  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket]);
+    fetchSeasonality();
+  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality]);
 
   return (
     <main style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
@@ -175,6 +191,7 @@ export default function DashboardHome() {
             fetchCot();
             fetchTimeframes();
             fetchPolymarket();
+            fetchSeasonality();
           }}
           disabled={loading}
           style={{
@@ -352,12 +369,35 @@ export default function DashboardHome() {
             <div style={{ marginTop: 20, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
               <strong>EMA fetch failed:</strong> {emaError}
               <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
-                Most likely cause: COINGECKO_API_KEY isn't set yet in this environment's variables.
+                Kraken's public OHLC endpoint may be temporarily unavailable — try refreshing.
               </div>
             </div>
           ) : (
             <EmaLevels data={emaData} symbols={EMA_SYMBOLS} />
           )}
+
+          {seasonalityError ? (
+            <div style={{ marginTop: 20, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+              <strong>Seasonality fetch failed:</strong> {seasonalityError}
+              <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
+                Kraken's public OHLC endpoint may be temporarily unavailable — try refreshing.
+              </div>
+            </div>
+          ) : (
+            <SeasonalityTable data={seasonalityData} />
+          )}
+
+          <div style={{ marginTop: 20, background: '#1E1B14', border: '1px solid #3A3526', borderRadius: 6, padding: '14px 16px' }}>
+            <div style={{ fontSize: 12, color: '#C9A66B', fontWeight: 600, marginBottom: 6 }}>
+              Liquidation levels — still blocked
+            </div>
+            <p style={{ fontSize: 11, color: '#8B9298', lineHeight: 1.55 }}>
+              Coinglass, the usual source for a liquidation heatmap, has no free API tier (Hobbyist starts
+              at $29/mo). There&apos;s no other free, live source for this that's been found. Confluence
+              zones (where liquidation, EMA, and options levels agree) are blocked on the same thing, plus
+              options data, which isn&apos;t built yet either.
+            </p>
+          </div>
         </TabErrorBoundary>
       )}
     </main>
