@@ -1,21 +1,25 @@
-// Server-side only — the CoinGecko demo key is used here too.
-// Computes real Daily 50/200 EMA for BTC and ETH from daily closes.
+// Server-side, but no secret involved — Kraken's public OHLC endpoint is
+// fully keyless. Computes real Daily and Weekly 50/200 EMA for BTC and ETH.
 //
-// The prototype also tracked Weekly 50/200 EMA, but those need far more
-// history than this route can get: 50 weeks is ~1 year, 200 weeks is ~4
-// years, and CoinGecko's free Demo plan caps historical data at 365 days.
-// A "200 EMA" computed off ~52 weekly bars wouldn't be a real 200-period
-// EMA (barely past its own seed) — it would just be a mislabeled average.
-// Daily EMAs are left out of that problem: 365 daily closes gives a
-// 200-period EMA a genuine ~165-day settling window, which is normal and
-// solid. So this route only ever returns daily EMAs.
+// Previously used CoinGecko, capped at 365 days of history — enough for a
+// solid Daily 200 EMA but nowhere near enough for Weekly (200 weeks is ~4
+// years), so Weekly EMA was left out rather than shipped badly converged.
+// Kraken's OHLC endpoint returns up to 720 of the most recent candles
+// *regardless of interval* (verified against Kraken's own docs), so a
+// weekly request alone gets ~13.8 years of history — comfortably enough
+// for both Daily and Weekly 200 EMA. Switching sources also matches this
+// panel to whatever real exchange price series Kraken quotes, rather than
+// CoinGecko's cross-exchange aggregate, which is one likely source of any
+// mismatch against a chart pinned to a specific exchange.
 
-import { COINGECKO_IDS } from '../../lib/coingecko-ids';
+import { PAIRS, fetchCandles } from '../../lib/kraken';
 
 export const dynamic = 'force-dynamic';
 
-const ASSETS = ['BTC', 'ETH'];
-const HISTORY_DAYS = 365; // the max the free Demo plan allows
+const TIMEFRAMES = [
+  { key: 'daily', minutes: 1440 },
+  { key: 'weekly', minutes: 10080 },
+];
 const PERIODS = [50, 200];
 
 function ema(values, period) {
@@ -28,54 +32,30 @@ function ema(values, period) {
   return value;
 }
 
-async function fetchDailyCloses(symbol, apiKey) {
-  const id = COINGECKO_IDS[symbol];
-  const url = `https://api.coingecko.com/api/v3/coins/${id}/market_chart?vs_currency=usd&days=${HISTORY_DAYS}`;
-  const res = await fetch(url, {
-    headers: { 'x-cg-demo-api-key': apiKey, Accept: 'application/json' },
-    next: { revalidate: 900 },
-  });
-  if (!res.ok) {
-    const detail = await res.text();
-    const err = new Error(`CoinGecko returned ${res.status} for ${symbol}`);
-    err.status = res.status;
-    err.detail = detail;
-    throw err;
-  }
-  const json = await res.json();
-  return (json.prices || []).map(([, price]) => price);
-}
-
 export async function GET() {
-  const apiKey = process.env.COINGECKO_API_KEY;
-  if (!apiKey) {
-    return Response.json(
-      { error: 'COINGECKO_API_KEY is not set. Add it in Vercel > Project Settings > Environment Variables.' },
-      { status: 500 }
-    );
-  }
-
   try {
-    const results = await Promise.allSettled(ASSETS.map((sym) => fetchDailyCloses(sym, apiKey)));
-
     const assets = {};
     const failed = [];
-    results.forEach((r, i) => {
-      const sym = ASSETS[i];
-      if (r.status !== 'fulfilled') {
-        failed.push(sym);
-        return;
+
+    for (const [sym, pair] of Object.entries(PAIRS)) {
+      assets[sym] = { price: null };
+      for (const { key, minutes } of TIMEFRAMES) {
+        try {
+          const candles = await fetchCandles(pair, minutes);
+          const closes = candles.map((c) => parseFloat(c[4]));
+          const price = closes[closes.length - 1];
+          const emas = Object.fromEntries(PERIODS.map((p) => [`ema${p}`, ema(closes, p)]));
+          assets[sym].price = price;
+          assets[sym][key] = {
+            ...emas,
+            goldenCross: emas.ema50 != null && emas.ema200 != null ? emas.ema50 > emas.ema200 : null,
+            historyPoints: closes.length,
+          };
+        } catch (e) {
+          failed.push(`${sym} ${key}`);
+        }
       }
-      const closes = r.value;
-      const price = closes[closes.length - 1];
-      const emas = Object.fromEntries(PERIODS.map((p) => [`ema${p}`, ema(closes, p)]));
-      assets[sym] = {
-        price,
-        ...emas,
-        goldenCross: emas.ema50 != null && emas.ema200 != null ? emas.ema50 > emas.ema200 : null,
-        historyDays: closes.length,
-      };
-    });
+    }
 
     return Response.json({ assets, failed, fetchedAt: new Date().toISOString() });
   } catch (err) {
