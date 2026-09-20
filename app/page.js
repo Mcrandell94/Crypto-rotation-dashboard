@@ -10,6 +10,7 @@ import FundingOI from './components/FundingOI';
 import TimeframesPanel from './components/TimeframesPanel';
 import CbCalendar from './components/CbCalendar';
 import AstroOutlook from './components/AstroOutlook';
+import PolymarketPredictions from './components/PolymarketPredictions';
 import { SECTORS, BENCHMARKS } from './lib/sectors';
 
 const EMA_SYMBOLS = ['BTC', 'ETH'];
@@ -40,7 +41,21 @@ export default function DashboardHome() {
   const [fundingError, setFundingError] = useState(null);
   const [timeframesData, setTimeframesData] = useState(null);
   const [timeframesError, setTimeframesError] = useState(null);
+  const [polymarketData, setPolymarketData] = useState(null);
+  const [polymarketError, setPolymarketError] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const fetchPolymarket = useCallback(async () => {
+    setPolymarketError(null);
+    try {
+      const res = await fetch('/api/polymarket');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setPolymarketData(json);
+    } catch (e) {
+      setPolymarketError(e.message);
+    }
+  }, []);
 
   const fetchTimeframes = useCallback(async () => {
     setTimeframesError(null);
@@ -128,14 +143,15 @@ export default function DashboardHome() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSector, benchmark]);
 
-  // EMA, COT, and Timeframes all track fixed BTC/ETH data, not the active
-  // sector — fetch once on mount, then refresh alongside everything else
-  // on manual refresh.
+  // EMA, COT, Timeframes, and Polymarket all track fixed BTC data, not the
+  // active sector — fetch once on mount, then refresh alongside everything
+  // else on manual refresh.
   useEffect(() => {
     fetchEma();
     fetchCot();
     fetchTimeframes();
-  }, [fetchEma, fetchCot, fetchTimeframes]);
+    fetchPolymarket();
+  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket]);
 
   return (
     <main style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
@@ -147,6 +163,7 @@ export default function DashboardHome() {
             fetchEma();
             fetchCot();
             fetchTimeframes();
+            fetchPolymarket();
           }}
           disabled={loading}
           style={{
@@ -275,6 +292,14 @@ export default function DashboardHome() {
         </div>
       ) : (
         <TimeframesPanel data={timeframesData} />
+      )}
+
+      {polymarketError ? (
+        <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+          <strong>Polymarket fetch failed:</strong> {polymarketError}
+        </div>
+      ) : (
+        <PolymarketPredictions data={polymarketData} />
       )}
 
       <CbCalendar />
