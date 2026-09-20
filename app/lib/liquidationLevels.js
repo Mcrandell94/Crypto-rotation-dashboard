@@ -27,7 +27,22 @@
 // LiquidationLevelsTracker uses to decide whether current price has
 // crossed it.
 
-export const CAPTURED_AT = null;
-export const SPOT_AT_CAPTURE = null;
-export const SOURCE = null;
-export const LEVELS = [];
+// First capture. Read by eye off a BitcoinCounterFlow heatmap chart
+// (BTCUSDT, 4h, Binance Futures) — pixel color intensity, not a precise
+// vendor extraction, so treat exact prices as approximate (±0.5-1%) until
+// refined against the other exchanges' copies. The bright orange/yellow
+// band around $82.5K was the one clearly dominant cluster on the chart;
+// the rest are moderate green bands. The two zones are stretches that
+// read as visibly thin/dark between the marked clusters.
+export const CAPTURED_AT = '2026-09-20T22:30:00Z';
+export const SPOT_AT_CAPTURE = 80679.71;
+export const SOURCE = 'BitcoinCounterFlow heatmap — BTCUSDT 4h, Binance Futures (read by eye from screenshot)';
+export const LEVELS = [
+  { kind: 'level', price: 82500, side: 'short', label: 'Dominant cluster on the chart — brightest band, just above spot' },
+  { kind: 'level', price: 78700, side: 'long', label: 'Moderate cluster, just below spot' },
+  { kind: 'level', price: 72300, side: 'long', label: 'Moderate cluster near the early-Aug breakout zone' },
+  { kind: 'level', price: 67000, side: 'long', label: 'Moderate cluster, mid-July range' },
+  { kind: 'level', price: 62000, side: 'long', label: 'Moderate cluster near the June lows' },
+  { kind: 'zone', zoneLow: 80700, zoneHigh: 82400, label: 'Thin band between spot and the $82.5K cluster' },
+  { kind: 'zone', zoneLow: 73000, zoneHigh: 78500, label: 'Thin band below the $78.7K cluster' },
+];
