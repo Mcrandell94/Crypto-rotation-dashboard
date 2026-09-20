@@ -5,6 +5,9 @@ import RotationChart from './components/RotationChart';
 import RelativeRotationGraph from './components/RelativeRotationGraph';
 import MacroSentiment from './components/MacroSentiment';
 import EmaLevels from './components/EmaLevels';
+import CotPanel from './components/CotPanel';
+import FundingOI from './components/FundingOI';
+import TimeframesPanel from './components/TimeframesPanel';
 import { SECTORS, BENCHMARKS } from './lib/sectors';
 
 const EMA_SYMBOLS = ['BTC', 'ETH'];
@@ -25,11 +28,29 @@ export default function DashboardHome() {
   const [rrgData, setRrgData] = useState(null);
   const [macroData, setMacroData] = useState(null);
   const [emaData, setEmaData] = useState(null);
+  const [cotData, setCotData] = useState(null);
+  const [fundingData, setFundingData] = useState(null);
   const [error, setError] = useState(null);
   const [rrgError, setRrgError] = useState(null);
   const [macroError, setMacroError] = useState(null);
   const [emaError, setEmaError] = useState(null);
+  const [cotError, setCotError] = useState(null);
+  const [fundingError, setFundingError] = useState(null);
+  const [timeframesData, setTimeframesData] = useState(null);
+  const [timeframesError, setTimeframesError] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const fetchTimeframes = useCallback(async () => {
+    setTimeframesError(null);
+    try {
+      const res = await fetch('/api/timeframes');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setTimeframesData(json);
+    } catch (e) {
+      setTimeframesError(e.message);
+    }
+  }, []);
 
   const fetchEma = useCallback(async () => {
     setEmaError(null);
@@ -43,11 +64,24 @@ export default function DashboardHome() {
     }
   }, []);
 
+  const fetchCot = useCallback(async () => {
+    setCotError(null);
+    try {
+      const res = await fetch('/api/cot');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setCotData(json);
+    } catch (e) {
+      setCotError(e.message);
+    }
+  }, []);
+
   const fetchData = useCallback(async (symbols, benchmark) => {
     setLoading(true);
     setError(null);
     setRrgError(null);
     setMacroError(null);
+    setFundingError(null);
     try {
       const res = await fetch(`/api/crypto?symbols=${[benchmark, ...symbols].join(',')}`);
       const json = await res.json();
@@ -76,6 +110,15 @@ export default function DashboardHome() {
     } catch (e) {
       setMacroError(e.message);
     }
+
+    try {
+      const fundingRes = await fetch(`/api/funding?symbols=${[benchmark, ...symbols].join(',')}`);
+      const fundingJson = await fundingRes.json();
+      if (!fundingRes.ok) throw new Error(fundingJson.error || 'Unknown error');
+      setFundingData(fundingJson);
+    } catch (e) {
+      setFundingError(e.message);
+    }
   }, []);
 
   useEffect(() => {
@@ -83,11 +126,14 @@ export default function DashboardHome() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSector, benchmark]);
 
-  // EMA levels track fixed BTC/ETH, not the active sector — fetch once on
-  // mount, then refresh alongside everything else on manual refresh.
+  // EMA, COT, and Timeframes all track fixed BTC/ETH data, not the active
+  // sector — fetch once on mount, then refresh alongside everything else
+  // on manual refresh.
   useEffect(() => {
     fetchEma();
-  }, [fetchEma]);
+    fetchCot();
+    fetchTimeframes();
+  }, [fetchEma, fetchCot, fetchTimeframes]);
 
   return (
     <main style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
@@ -97,6 +143,8 @@ export default function DashboardHome() {
           onClick={() => {
             fetchData(sectorTickers, benchmark);
             fetchEma();
+            fetchCot();
+            fetchTimeframes();
           }}
           disabled={loading}
           style={{
@@ -227,6 +275,33 @@ export default function DashboardHome() {
         </div>
       ) : (
         <EmaLevels data={emaData} symbols={EMA_SYMBOLS} />
+      )}
+
+      {cotError ? (
+        <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+          <strong>COT fetch failed:</strong> {cotError}
+          <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
+            The CFTC's public reporting site may be temporarily unavailable — try refreshing.
+          </div>
+        </div>
+      ) : (
+        <CotPanel data={cotData} />
+      )}
+
+      {fundingError ? (
+        <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+          <strong>Funding/OI fetch failed:</strong> {fundingError}
+        </div>
+      ) : (
+        <FundingOI data={fundingData} symbols={tracked} />
+      )}
+
+      {timeframesError ? (
+        <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+          <strong>Timeframes fetch failed:</strong> {timeframesError}
+        </div>
+      ) : (
+        <TimeframesPanel data={timeframesData} />
       )}
 
       <p style={{ fontSize: 11, color: '#6E767B', marginTop: 32, lineHeight: 1.6 }}>

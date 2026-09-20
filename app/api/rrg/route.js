@@ -6,6 +6,8 @@
 
 import { COINGECKO_IDS } from '../../lib/coingecko-ids';
 
+export const dynamic = 'force-dynamic';
+
 const HISTORY_DAYS = 100; // >90 days makes CoinGecko return daily granularity on the free plan
 
 function toDayMap(prices) {

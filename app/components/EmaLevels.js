@@ -28,6 +28,24 @@ function Row({ label, level, price }) {
   );
 }
 
+function TimeframeBlock({ label, tf, price }) {
+  if (!tf) return null;
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <span style={{ fontSize: 11, color: TEXT_MUTED, textTransform: 'uppercase', letterSpacing: 0.4 }}>{label}</span>
+        {tf.goldenCross != null && (
+          <span style={{ fontSize: 10, color: tf.goldenCross ? GAIN : LOSS }}>
+            {tf.goldenCross ? 'Golden cross' : 'Death cross'}
+          </span>
+        )}
+      </div>
+      <Row label="50 EMA" level={tf.ema50} price={price} />
+      <Row label="200 EMA" level={tf.ema200} price={price} />
+    </div>
+  );
+}
+
 function AssetCard({ symbol, data }) {
   if (!data) {
     return (
@@ -38,7 +56,7 @@ function AssetCard({ symbol, data }) {
     );
   }
 
-  const { price, ema50, ema200, goldenCross } = data;
+  const { price, daily, weekly } = data;
 
   return (
     <div style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: 16, flex: '1 1 260px' }}>
@@ -46,15 +64,8 @@ function AssetCard({ symbol, data }) {
         <div style={{ fontSize: 14, fontWeight: 600, color: TEXT_PRIMARY }}>{symbol}</div>
         <div style={{ fontSize: 18, fontFamily: 'ui-monospace, monospace', color: TEXT_PRIMARY }}>{formatPrice(price)}</div>
       </div>
-      {goldenCross != null && (
-        <div style={{ fontSize: 11, color: goldenCross ? GAIN : LOSS, marginTop: 4 }}>
-          {goldenCross ? 'Golden cross — 50 EMA above 200' : 'Death cross — 50 EMA below 200'}
-        </div>
-      )}
-      <div style={{ marginTop: 10 }}>
-        <Row label="Daily 50 EMA" level={ema50} price={price} />
-        <Row label="Daily 200 EMA" level={ema200} price={price} />
-      </div>
+      <TimeframeBlock label="Daily" tf={daily} price={price} />
+      <TimeframeBlock label="Weekly" tf={weekly} price={price} />
     </div>
   );
 }
@@ -73,7 +84,7 @@ export default function EmaLevels({ data, symbols }) {
     <section style={{ marginTop: 32 }}>
       <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: TEXT_PRIMARY }}>EMA Levels</h2>
       <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '4px 0 16px' }}>
-        Daily 50/200 EMA, computed live from CoinGecko daily closes
+        Daily and Weekly 50/200 EMA, computed live from Kraken candles
       </p>
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
         {symbols.map((sym) => (
@@ -85,11 +96,6 @@ export default function EmaLevels({ data, symbols }) {
           No live data for: {data.failed.join(', ')} — skipped.
         </p>
       )}
-      <p style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 12, lineHeight: 1.6 }}>
-        Weekly 50/200 EMA aren't shown — they need ~1–4 years of weekly history, more than the
-        free CoinGecko tier's 365-day cap provides. Computing them off the available data would
-        just be a mislabeled average, not a real EMA.
-      </p>
     </section>
   );
 }

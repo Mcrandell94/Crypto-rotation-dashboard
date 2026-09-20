@@ -2,6 +2,8 @@
 // Fear & Greed Index (fully keyless) and CoinGecko's /global endpoint
 // (same Demo key as the RRG route) for BTC/USDT market cap dominance.
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   const cgKey = process.env.COINGECKO_API_KEY;
   if (!cgKey) {
