@@ -20,6 +20,7 @@ import OpenInterestPanel from './components/OpenInterestPanel';
 import LiquidationsPanel from './components/LiquidationsPanel';
 import LiquidationHeatmap from './components/LiquidationHeatmap';
 import LiveLiquidationFeed from './components/LiveLiquidationFeed';
+import LiquidationLevelsTracker from './components/LiquidationLevelsTracker';
 import MarketRead from './components/MarketRead';
 import TabErrorBoundary from './components/TabErrorBoundary';
 import { SECTORS, BENCHMARKS } from './lib/sectors';
@@ -91,7 +92,21 @@ export default function DashboardHome() {
   const [liquidationHeatmapBcfError, setLiquidationHeatmapBcfError] = useState(null);
   const [liquidationFeedData, setLiquidationFeedData] = useState(null);
   const [liquidationFeedError, setLiquidationFeedError] = useState(null);
+  const [btcPriceData, setBtcPriceData] = useState(null);
+  const [btcPriceError, setBtcPriceError] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const fetchBtcPrice = useCallback(async () => {
+    setBtcPriceError(null);
+    try {
+      const res = await fetch('/api/btcprice');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setBtcPriceData(json);
+    } catch (e) {
+      setBtcPriceError(e.message);
+    }
+  }, []);
 
   const fetchLiquidationFeed = useCallback(async () => {
     setLiquidationFeedError(null);
@@ -375,7 +390,8 @@ export default function DashboardHome() {
     fetchLiquidationHeatmapCoinalyze();
     fetchLiquidationHeatmapBcf();
     fetchLiquidationFeed();
-  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality, fetchAltseason, fetchEtfFlows, fetchOptions, fetchNews, fetchOpenInterest, fetchLiquidations, fetchEthEtfFlows, fetchLiquidationHeatmap, fetchLiquidationHeatmapCoinalyze, fetchLiquidationHeatmapBcf, fetchLiquidationFeed]);
+    fetchBtcPrice();
+  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality, fetchAltseason, fetchEtfFlows, fetchOptions, fetchNews, fetchOpenInterest, fetchLiquidations, fetchEthEtfFlows, fetchLiquidationHeatmap, fetchLiquidationHeatmapCoinalyze, fetchLiquidationHeatmapBcf, fetchLiquidationFeed, fetchBtcPrice]);
 
   return (
     <main style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
@@ -400,6 +416,7 @@ export default function DashboardHome() {
             fetchLiquidationHeatmapCoinalyze();
             fetchLiquidationHeatmapBcf();
             fetchLiquidationFeed();
+            fetchBtcPrice();
             if (rrgMode === 'sectors') fetchRrgSectors(benchmark);
           }}
           disabled={loading}
@@ -756,6 +773,11 @@ export default function DashboardHome() {
             coinalyzeError={liquidationHeatmapCoinalyzeError}
             bcfData={liquidationHeatmapBcfData}
             bcfError={liquidationHeatmapBcfError}
+          />
+
+          <LiquidationLevelsTracker
+            btcPrice={btcPriceData?.price ?? null}
+            btcPriceError={btcPriceError}
           />
         </TabErrorBoundary>
       )}
