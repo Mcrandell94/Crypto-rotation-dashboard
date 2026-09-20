@@ -29,11 +29,12 @@ const EMA_SYMBOLS = ['BTC', 'ETH'];
 
 const TABS = [
   { key: 'rotation', label: 'Rotation' },
+  { key: 'macro', label: 'Macro & Sentiment' },
+  { key: 'levels', label: 'Levels & Seasonality' },
+  { key: 'derivatives', label: 'Derivatives' },
   { key: 'timeframes', label: 'Timeframes' },
   { key: 'calendar', label: 'CB Calendar' },
   { key: 'astro', label: 'Astro Outlook' },
-  { key: 'macro', label: 'Macro & Sentiment' },
-  { key: 'levels', label: 'Levels & Seasonality' },
 ];
 
 export default function DashboardHome() {
@@ -688,47 +689,6 @@ export default function DashboardHome() {
             <PolymarketPredictions data={polymarketData} />
           )}
 
-          {openInterestError ? (
-            <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-              <strong>Cross-exchange open interest fetch failed:</strong> {openInterestError}
-              <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
-                Most likely cause: COINGLASS_API_KEY isn't set yet, or the key's plan doesn't include this endpoint.
-              </div>
-            </div>
-          ) : (
-            <OpenInterestPanel data={openInterestData} />
-          )}
-
-          {liquidationsError ? (
-            <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-              <strong>Liquidations fetch failed:</strong> {liquidationsError}
-              <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
-                Most likely cause: COINGLASS_API_KEY isn't set yet in this environment's variables.
-              </div>
-            </div>
-          ) : (
-            <LiquidationsPanel data={liquidationsData} />
-          )}
-
-          {liquidationFeedError ? (
-            <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-              <strong>Live liquidation feed fetch failed:</strong> {liquidationFeedError}
-              <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
-                MarginPad's public API may be temporarily unavailable — try refreshing.
-              </div>
-            </div>
-          ) : (
-            <LiveLiquidationFeed data={liquidationFeedData} />
-          )}
-
-          {fundingError ? (
-            <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-              <strong>Funding/OI fetch failed:</strong> {fundingError}
-            </div>
-          ) : (
-            <FundingOI data={fundingData} symbols={tracked} />
-          )}
-
           {cotError ? (
             <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
               <strong>COT fetch failed:</strong> {cotError}
@@ -779,6 +739,51 @@ export default function DashboardHome() {
             btcPrice={btcPriceData?.price ?? null}
             btcPriceError={btcPriceError}
           />
+        </TabErrorBoundary>
+      )}
+
+      {activeTab === 'derivatives' && (
+        <TabErrorBoundary tabName="Derivatives">
+          {openInterestError ? (
+            <div style={{ marginTop: 20, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+              <strong>Cross-exchange open interest fetch failed:</strong> {openInterestError}
+              <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
+                Most likely cause: COINGLASS_API_KEY isn't set yet, or the key's plan doesn't include this endpoint.
+              </div>
+            </div>
+          ) : (
+            <OpenInterestPanel data={openInterestData} />
+          )}
+
+          {liquidationsError ? (
+            <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+              <strong>Liquidations fetch failed:</strong> {liquidationsError}
+              <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
+                Most likely cause: COINGLASS_API_KEY isn't set yet in this environment's variables.
+              </div>
+            </div>
+          ) : (
+            <LiquidationsPanel data={liquidationsData} />
+          )}
+
+          {liquidationFeedError ? (
+            <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+              <strong>Live liquidation feed fetch failed:</strong> {liquidationFeedError}
+              <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
+                MarginPad's public API may be temporarily unavailable — try refreshing.
+              </div>
+            </div>
+          ) : (
+            <LiveLiquidationFeed data={liquidationFeedData} />
+          )}
+
+          {fundingError ? (
+            <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+              <strong>Funding/OI fetch failed:</strong> {fundingError}
+            </div>
+          ) : (
+            <FundingOI data={fundingData} symbols={tracked} />
+          )}
         </TabErrorBoundary>
       )}
     </main>
