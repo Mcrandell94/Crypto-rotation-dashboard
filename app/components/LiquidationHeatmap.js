@@ -16,6 +16,7 @@ const SOURCES = [
   { key: 'default', label: 'Kraken + Coinglass (modeled, 4h bars)' },
   { key: 'coinalyze', label: 'Coinalyze (modeled, hourly bars)' },
   { key: 'bcf', label: "BitcoinCounterFlow (vendor's own heatmap)" },
+  { key: 'openmarket', label: "OpenMarket (Hyperliquid, vendor's own heatmap)" },
 ];
 
 function formatUsd(v) {
@@ -55,11 +56,13 @@ function SourcePicker({ source, setSource }) {
   );
 }
 
-export default function LiquidationHeatmap({ data, dataError, coinalyzeData, coinalyzeError, bcfData, bcfError }) {
+export default function LiquidationHeatmap({
+  data, dataError, coinalyzeData, coinalyzeError, bcfData, bcfError, openmarketData, openmarketError,
+}) {
   const [source, setSource] = useState('default');
 
-  const bySource = { default: data, coinalyze: coinalyzeData, bcf: bcfData };
-  const errorsBySource = { default: dataError, coinalyze: coinalyzeError, bcf: bcfError };
+  const bySource = { default: data, coinalyze: coinalyzeData, bcf: bcfData, openmarket: openmarketData };
+  const errorsBySource = { default: dataError, coinalyze: coinalyzeError, bcf: bcfError, openmarket: openmarketError };
   const active = bySource[source];
   const activeError = errorsBySource[source];
 
@@ -91,7 +94,7 @@ export default function LiquidationHeatmap({ data, dataError, coinalyzeData, coi
   }
 
   const { price, bins, nearestLongCluster, nearestShortCluster, lookbackDays, source: sourceLabel, weightUnit } = active;
-  const isModeled = source !== 'bcf';
+  const isModeled = source !== 'bcf' && source !== 'openmarket';
 
   const activeBins = bins.filter((b) => b.longWeight > 0 || b.shortWeight > 0);
   const nearest = [...activeBins]
@@ -108,6 +111,8 @@ export default function LiquidationHeatmap({ data, dataError, coinalyzeData, coi
       <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '4px 0 12px', maxWidth: 680, lineHeight: 1.5 }}>
         {isModeled
           ? "Modeled from real BTC price and open-interest data — not an exchange-reported figure. Detects open-interest surges, projects where leveraged longs/shorts at that moment would get liquidated, and clears a level once price actually trades through it."
+          : source === 'openmarket'
+          ? "OpenMarket's own vendor-computed liquidation heatmap for Hyperliquid's BTC order book specifically — not modeled here, and not aggregated across other exchanges the way the other sources are."
           : "BitcoinCounterFlow's own vendor-computed liquidation heatmap — not modeled here, pulled directly from their API."}
         {sourceLabel ? ` Source: ${sourceLabel}.` : ''}
         {lookbackDays ? ` ~${lookbackDays} days of lookback.` : ''}

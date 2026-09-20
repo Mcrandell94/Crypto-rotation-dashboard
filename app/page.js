@@ -89,6 +89,8 @@ export default function DashboardHome() {
   const [liquidationHeatmapCoinalyzeError, setLiquidationHeatmapCoinalyzeError] = useState(null);
   const [liquidationHeatmapBcfData, setLiquidationHeatmapBcfData] = useState(null);
   const [liquidationHeatmapBcfError, setLiquidationHeatmapBcfError] = useState(null);
+  const [liquidationHeatmapOpenmarketData, setLiquidationHeatmapOpenmarketData] = useState(null);
+  const [liquidationHeatmapOpenmarketError, setLiquidationHeatmapOpenmarketError] = useState(null);
   const [liquidationFeedData, setLiquidationFeedData] = useState(null);
   const [liquidationFeedError, setLiquidationFeedError] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -114,6 +116,18 @@ export default function DashboardHome() {
       setLiquidationHeatmapBcfData(json);
     } catch (e) {
       setLiquidationHeatmapBcfError(e.message);
+    }
+  }, []);
+
+  const fetchLiquidationHeatmapOpenmarket = useCallback(async () => {
+    setLiquidationHeatmapOpenmarketError(null);
+    try {
+      const res = await fetch('/api/liquidationheatmap-openmarket');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setLiquidationHeatmapOpenmarketData(json);
+    } catch (e) {
+      setLiquidationHeatmapOpenmarketError(e.message);
     }
   }, []);
 
@@ -374,8 +388,9 @@ export default function DashboardHome() {
     fetchLiquidationHeatmap();
     fetchLiquidationHeatmapCoinalyze();
     fetchLiquidationHeatmapBcf();
+    fetchLiquidationHeatmapOpenmarket();
     fetchLiquidationFeed();
-  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality, fetchAltseason, fetchEtfFlows, fetchOptions, fetchNews, fetchOpenInterest, fetchLiquidations, fetchEthEtfFlows, fetchLiquidationHeatmap, fetchLiquidationHeatmapCoinalyze, fetchLiquidationHeatmapBcf, fetchLiquidationFeed]);
+  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality, fetchAltseason, fetchEtfFlows, fetchOptions, fetchNews, fetchOpenInterest, fetchLiquidations, fetchEthEtfFlows, fetchLiquidationHeatmap, fetchLiquidationHeatmapCoinalyze, fetchLiquidationHeatmapBcf, fetchLiquidationHeatmapOpenmarket, fetchLiquidationFeed]);
 
   return (
     <main style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
@@ -399,6 +414,7 @@ export default function DashboardHome() {
             fetchLiquidationHeatmap();
             fetchLiquidationHeatmapCoinalyze();
             fetchLiquidationHeatmapBcf();
+            fetchLiquidationHeatmapOpenmarket();
             fetchLiquidationFeed();
             if (rrgMode === 'sectors') fetchRrgSectors(benchmark);
           }}
@@ -756,6 +772,8 @@ export default function DashboardHome() {
             coinalyzeError={liquidationHeatmapCoinalyzeError}
             bcfData={liquidationHeatmapBcfData}
             bcfError={liquidationHeatmapBcfError}
+            openmarketData={liquidationHeatmapOpenmarketData}
+            openmarketError={liquidationHeatmapOpenmarketError}
           />
         </TabErrorBoundary>
       )}
