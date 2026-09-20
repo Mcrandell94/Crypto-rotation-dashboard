@@ -94,7 +94,15 @@ const defaultAssetFormat = (v) => `$${v?.toLocaleString(undefined, { maximumFrac
 export default function RelativeRotationGraph({ data, symbols, benchmark, assetLabel = 'price', assetFormat = defaultAssetFormat }) {
   const [tableView, setTableView] = useState(false);
   const [zscore, setZscore] = useState(true);
-  const [tailLength, setTailLength] = useState(20);
+  // Defaults tuned for a "one trading week at a glance" read. In the
+  // default z-score mode, the trend/momentum windows only set how many
+  // days feed each axis's rolling mean/stdev *reference* — every plotted
+  // point still reflects that exact day's real ratio, so window length
+  // controls statistical stability, not lag or resolution (see
+  // computeSeries below). 14/5 give a ~2-week trend reference and a
+  // ~1-week momentum reference, both long enough for a stable stdev
+  // without going stale; a 7-day tail matches that timescale.
+  const [tailLength, setTailLength] = useState(7);
   const [trendWindow, setTrendWindow] = useState(14);
   const [momentumWindow, setMomentumWindow] = useState(5);
   const [hidden, setHidden] = useState(new Set());
