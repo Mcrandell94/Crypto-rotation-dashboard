@@ -111,7 +111,12 @@ export default function RelativeRotationGraph({ data, symbols, benchmark }) {
   }, [lastIdx]);
 
   const seriesByTicker = useMemo(() => {
-    if (!prices) return {};
+    // `data` can still be a stale fetch for the *previous* benchmark right
+    // after switching (the new fetch hasn't resolved yet) — if that old
+    // payload never included the new benchmark's price series, computeSeries
+    // would divide by an undefined array and crash the page. Bail until the
+    // fresh fetch lands instead.
+    if (!prices || !prices[benchmark]) return {};
     const out = {};
     for (const sym of activeSymbols) {
       out[sym] = computeSeries(prices[sym], prices[benchmark], trendWindow, momentumWindow, zscore);
