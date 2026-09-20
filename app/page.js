@@ -208,39 +208,8 @@ export default function DashboardHome() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, marginTop: 24 }}>
-        {tracked.map((sym) => {
-          const t = data?.tickers?.[sym];
-          return (
-            <div key={sym} style={{ background: '#171D21', border: '1px solid #2A3136', borderRadius: 6, padding: 16 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: '#E7E4DD' }}>{sym}</div>
-              {t ? (
-                <>
-                  <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: 20, marginTop: 8 }}>
-                    ${t.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                  </div>
-                  <div style={{ fontSize: 11, color: '#8B9298', marginTop: 4 }}>
-                    Mkt Cap: ${(t.marketCap / 1e9).toFixed(2)}B
-                  </div>
-                  <div style={{ fontSize: 11, marginTop: 4, color: t.percentChange24h >= 0 ? '#7FA37F' : '#A85D4F' }}>
-                    24h: {t.percentChange24h >= 0 ? '+' : ''}{t.percentChange24h.toFixed(2)}%
-                  </div>
-                  <div style={{ fontSize: 11, color: t.percentChange7d >= 0 ? '#7FA37F' : '#A85D4F' }}>
-                    7d: {t.percentChange7d >= 0 ? '+' : ''}{t.percentChange7d.toFixed(2)}%
-                  </div>
-                </>
-              ) : (
-                <div style={{ fontSize: 12, color: '#6E767B', marginTop: 8 }}>—</div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      <RotationChart tickers={data?.tickers} symbols={tracked} />
-
       {rrgError ? (
-        <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+        <div style={{ marginTop: 24, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
           <strong>RRG fetch failed:</strong> {rrgError}
           <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
             Most likely cause: COINGECKO_API_KEY isn't set yet in this environment's variables.
@@ -256,6 +225,8 @@ export default function DashboardHome() {
           )}
         </>
       )}
+
+      <RotationChart tickers={data?.tickers} symbols={tracked} />
 
       {macroError ? (
         <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
