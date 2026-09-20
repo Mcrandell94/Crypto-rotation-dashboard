@@ -19,6 +19,7 @@ import MarketNews from './components/MarketNews';
 import OpenInterestPanel from './components/OpenInterestPanel';
 import LiquidationsPanel from './components/LiquidationsPanel';
 import LiquidationHeatmap from './components/LiquidationHeatmap';
+import LiveLiquidationFeed from './components/LiveLiquidationFeed';
 import MarketRead from './components/MarketRead';
 import TabErrorBoundary from './components/TabErrorBoundary';
 import { SECTORS, BENCHMARKS } from './lib/sectors';
@@ -88,7 +89,21 @@ export default function DashboardHome() {
   const [liquidationHeatmapCoinalyzeError, setLiquidationHeatmapCoinalyzeError] = useState(null);
   const [liquidationHeatmapBcfData, setLiquidationHeatmapBcfData] = useState(null);
   const [liquidationHeatmapBcfError, setLiquidationHeatmapBcfError] = useState(null);
+  const [liquidationFeedData, setLiquidationFeedData] = useState(null);
+  const [liquidationFeedError, setLiquidationFeedError] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const fetchLiquidationFeed = useCallback(async () => {
+    setLiquidationFeedError(null);
+    try {
+      const res = await fetch('/api/liquidationfeed');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setLiquidationFeedData(json);
+    } catch (e) {
+      setLiquidationFeedError(e.message);
+    }
+  }, []);
 
   const fetchLiquidationHeatmapBcf = useCallback(async () => {
     setLiquidationHeatmapBcfError(null);
@@ -359,7 +374,8 @@ export default function DashboardHome() {
     fetchLiquidationHeatmap();
     fetchLiquidationHeatmapCoinalyze();
     fetchLiquidationHeatmapBcf();
-  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality, fetchAltseason, fetchEtfFlows, fetchOptions, fetchNews, fetchOpenInterest, fetchLiquidations, fetchEthEtfFlows, fetchLiquidationHeatmap, fetchLiquidationHeatmapCoinalyze, fetchLiquidationHeatmapBcf]);
+    fetchLiquidationFeed();
+  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality, fetchAltseason, fetchEtfFlows, fetchOptions, fetchNews, fetchOpenInterest, fetchLiquidations, fetchEthEtfFlows, fetchLiquidationHeatmap, fetchLiquidationHeatmapCoinalyze, fetchLiquidationHeatmapBcf, fetchLiquidationFeed]);
 
   return (
     <main style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
@@ -383,6 +399,7 @@ export default function DashboardHome() {
             fetchLiquidationHeatmap();
             fetchLiquidationHeatmapCoinalyze();
             fetchLiquidationHeatmapBcf();
+            fetchLiquidationFeed();
             if (rrgMode === 'sectors') fetchRrgSectors(benchmark);
           }}
           disabled={loading}
@@ -674,6 +691,17 @@ export default function DashboardHome() {
             </div>
           ) : (
             <LiquidationsPanel data={liquidationsData} />
+          )}
+
+          {liquidationFeedError ? (
+            <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+              <strong>Live liquidation feed fetch failed:</strong> {liquidationFeedError}
+              <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
+                MarginPad's public API may be temporarily unavailable — try refreshing.
+              </div>
+            </div>
+          ) : (
+            <LiveLiquidationFeed data={liquidationFeedData} />
           )}
 
           {fundingError ? (
