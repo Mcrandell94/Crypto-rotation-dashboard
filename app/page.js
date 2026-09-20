@@ -13,6 +13,7 @@ import AstroOutlook from './components/AstroOutlook';
 import PolymarketPredictions from './components/PolymarketPredictions';
 import SeasonalityTable from './components/SeasonalityTable';
 import AltseasonIndex from './components/AltseasonIndex';
+import EtfFlows from './components/EtfFlows';
 import TabErrorBoundary from './components/TabErrorBoundary';
 import { SECTORS, BENCHMARKS } from './lib/sectors';
 
@@ -60,7 +61,21 @@ export default function DashboardHome() {
   const [seasonalityError, setSeasonalityError] = useState(null);
   const [altseasonData, setAltseasonData] = useState(null);
   const [altseasonError, setAltseasonError] = useState(null);
+  const [etfFlowsData, setEtfFlowsData] = useState(null);
+  const [etfFlowsError, setEtfFlowsError] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const fetchEtfFlows = useCallback(async () => {
+    setEtfFlowsError(null);
+    try {
+      const res = await fetch('/api/etfflows');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setEtfFlowsData(json);
+    } catch (e) {
+      setEtfFlowsError(e.message);
+    }
+  }, []);
 
   const fetchSeasonality = useCallback(async () => {
     setSeasonalityError(null);
@@ -194,7 +209,8 @@ export default function DashboardHome() {
     fetchPolymarket();
     fetchSeasonality();
     fetchAltseason();
-  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality, fetchAltseason]);
+    fetchEtfFlows();
+  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality, fetchAltseason, fetchEtfFlows]);
 
   return (
     <main style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
@@ -209,6 +225,7 @@ export default function DashboardHome() {
             fetchPolymarket();
             fetchSeasonality();
             fetchAltseason();
+            fetchEtfFlows();
           }}
           disabled={loading}
           style={{
@@ -357,6 +374,17 @@ export default function DashboardHome() {
             </div>
           ) : (
             <AltseasonIndex data={altseasonData} />
+          )}
+
+          {etfFlowsError ? (
+            <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+              <strong>ETF flows fetch failed:</strong> {etfFlowsError}
+              <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
+                Most likely cause: SOSOVALUE_API_KEY isn't set yet in this environment's variables.
+              </div>
+            </div>
+          ) : (
+            <EtfFlows data={etfFlowsData} />
           )}
 
           {polymarketError ? (
