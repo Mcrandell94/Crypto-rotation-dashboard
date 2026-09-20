@@ -1,12 +1,20 @@
 'use client';
 
+import { useState } from 'react';
+
 const TEXT_PRIMARY = '#E7E4DD';
 const TEXT_SECONDARY = '#8B9298';
 const TEXT_MUTED = '#6E767B';
 const CARD_BG = '#171D21';
 const CARD_BORDER = '#2A3136';
+const AMBER = '#C9A66B';
 const GAIN = '#7FA37F';
 const LOSS = '#A85D4F';
+
+const FNG_SOURCES = [
+  { key: 'altme', label: 'alternative.me' },
+  { key: 'coinstats', label: 'CoinStats' },
+];
 
 function yieldCurveNote(spread) {
   if (spread < 0) {
@@ -35,6 +43,8 @@ function StatTile({ label, value, sub, accent }) {
 }
 
 export default function MacroSentiment({ data }) {
+  const [fngSource, setFngSource] = useState('altme');
+
   if (!data) {
     return (
       <section style={{ marginTop: 32 }}>
@@ -44,25 +54,49 @@ export default function MacroSentiment({ data }) {
     );
   }
 
-  const zone = data.fng ? fngZone(data.fng.value) : null;
   const rates = data.rates;
   const curve = rates?.yieldCurveSpread ? yieldCurveNote(rates.yieldCurveSpread.value) : null;
+
+  const hasBothFng = !!data.fng && !!data.fngCoinstats;
+  const activeFng = fngSource === 'coinstats' && data.fngCoinstats ? data.fngCoinstats : data.fng;
+  const zone = activeFng ? fngZone(activeFng.value) : null;
 
   return (
     <section style={{ marginTop: 32 }}>
       <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: TEXT_PRIMARY }}>Macro &amp; Sentiment</h2>
       <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '4px 0 16px' }}>
-        Fear &amp; Greed from alternative.me · dominance from CoinGecko's global market data · rates
-        from the St. Louis Fed&apos;s FRED and the Bank of England&apos;s own statistical database
+        Fear &amp; Greed from alternative.me{data.fngCoinstats ? ' or CoinStats — independent methodologies, toggle below' : ''} · dominance
+        from CoinGecko's global market data · rates from the St. Louis Fed&apos;s FRED and the Bank of
+        England&apos;s own statistical database
       </p>
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-        {data.fng && (
-          <StatTile
-            label="Fear & Greed Index"
-            value={data.fng.value}
-            accent={zone.color}
-            sub={zone.label}
-          />
+        {activeFng && (
+          <div style={{ flex: '1 1 160px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <StatTile
+              label="Fear & Greed Index"
+              value={activeFng.value}
+              accent={zone.color}
+              sub={zone.label}
+            />
+            {hasBothFng && (
+              <div style={{ display: 'flex', gap: 4 }}>
+                {FNG_SOURCES.map((s) => (
+                  <button
+                    key={s.key}
+                    onClick={() => setFngSource(s.key)}
+                    style={{
+                      background: fngSource === s.key ? '#1E252A' : '#171D21',
+                      border: `1px solid ${fngSource === s.key ? AMBER : CARD_BORDER}`,
+                      color: fngSource === s.key ? AMBER : TEXT_SECONDARY,
+                      borderRadius: 4, padding: '2px 8px', fontSize: 10, cursor: 'pointer', flex: 1,
+                    }}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         )}
         <StatTile
           label="BTC dominance"

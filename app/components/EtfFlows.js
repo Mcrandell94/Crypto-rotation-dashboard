@@ -91,14 +91,18 @@ function aggregate(days, granularity) {
   }));
 }
 
-export default function EtfFlows({ data }) {
+export default function EtfFlows({
+  data,
+  title = 'Spot BTC ETF Flows',
+  subtitle = "Live daily net flow across US spot Bitcoin ETFs, via SoSoValue — weekly/monthly views sum the same daily numbers, not a separately reported figure",
+}) {
   const [granularity, setGranularity] = useState('daily');
 
   if (!data) {
     return (
       <section style={{ marginTop: 32 }}>
         <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: TEXT_PRIMARY }}>
-          Spot BTC ETF Flows
+          {title}
         </h2>
         <p style={{ fontSize: 12, color: TEXT_MUTED, marginTop: 16 }}>Waiting for data…</p>
       </section>
@@ -113,11 +117,10 @@ export default function EtfFlows({ data }) {
   return (
     <section style={{ marginTop: 32 }}>
       <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: TEXT_PRIMARY }}>
-        Spot BTC ETF Flows
+        {title}
       </h2>
       <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '4px 0 16px' }}>
-        Live daily net flow across US spot Bitcoin ETFs, via SoSoValue — weekly/monthly views sum the
-        same daily numbers, not a separately reported figure
+        {subtitle}
       </p>
 
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>

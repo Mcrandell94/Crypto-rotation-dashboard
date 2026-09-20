@@ -15,6 +15,9 @@ import SeasonalityTable from './components/SeasonalityTable';
 import AltseasonIndex from './components/AltseasonIndex';
 import EtfFlows from './components/EtfFlows';
 import OptionsPositioning from './components/OptionsPositioning';
+import MarketNews from './components/MarketNews';
+import OpenInterestPanel from './components/OpenInterestPanel';
+import LiquidationsPanel from './components/LiquidationsPanel';
 import MarketRead from './components/MarketRead';
 import TabErrorBoundary from './components/TabErrorBoundary';
 import { SECTORS, BENCHMARKS } from './lib/sectors';
@@ -70,7 +73,63 @@ export default function DashboardHome() {
   const [rrgSectorsError, setRrgSectorsError] = useState(null);
   const [optionsData, setOptionsData] = useState(null);
   const [optionsError, setOptionsError] = useState(null);
+  const [newsData, setNewsData] = useState(null);
+  const [newsError, setNewsError] = useState(null);
+  const [openInterestData, setOpenInterestData] = useState(null);
+  const [openInterestError, setOpenInterestError] = useState(null);
+  const [liquidationsData, setLiquidationsData] = useState(null);
+  const [liquidationsError, setLiquidationsError] = useState(null);
+  const [ethEtfFlowsData, setEthEtfFlowsData] = useState(null);
+  const [ethEtfFlowsError, setEthEtfFlowsError] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const fetchLiquidations = useCallback(async () => {
+    setLiquidationsError(null);
+    try {
+      const res = await fetch('/api/liquidations');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setLiquidationsData(json);
+    } catch (e) {
+      setLiquidationsError(e.message);
+    }
+  }, []);
+
+  const fetchEthEtfFlows = useCallback(async () => {
+    setEthEtfFlowsError(null);
+    try {
+      const res = await fetch('/api/etfflows-eth');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setEthEtfFlowsData(json);
+    } catch (e) {
+      setEthEtfFlowsError(e.message);
+    }
+  }, []);
+
+  const fetchNews = useCallback(async () => {
+    setNewsError(null);
+    try {
+      const res = await fetch('/api/news');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setNewsData(json);
+    } catch (e) {
+      setNewsError(e.message);
+    }
+  }, []);
+
+  const fetchOpenInterest = useCallback(async () => {
+    setOpenInterestError(null);
+    try {
+      const res = await fetch('/api/openinterest');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setOpenInterestData(json);
+    } catch (e) {
+      setOpenInterestError(e.message);
+    }
+  }, []);
 
   const fetchOptions = useCallback(async () => {
     setOptionsError(null);
@@ -250,7 +309,11 @@ export default function DashboardHome() {
     fetchAltseason();
     fetchEtfFlows();
     fetchOptions();
-  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality, fetchAltseason, fetchEtfFlows, fetchOptions]);
+    fetchNews();
+    fetchOpenInterest();
+    fetchLiquidations();
+    fetchEthEtfFlows();
+  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality, fetchAltseason, fetchEtfFlows, fetchOptions, fetchNews, fetchOpenInterest, fetchLiquidations, fetchEthEtfFlows]);
 
   return (
     <main style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
@@ -267,6 +330,10 @@ export default function DashboardHome() {
             fetchAltseason();
             fetchEtfFlows();
             fetchOptions();
+            fetchNews();
+            fetchOpenInterest();
+            fetchLiquidations();
+            fetchEthEtfFlows();
             if (rrgMode === 'sectors') fetchRrgSectors(benchmark);
           }}
           disabled={loading}
@@ -474,6 +541,17 @@ export default function DashboardHome() {
             <MacroSentiment data={macroData} />
           )}
 
+          {newsError ? (
+            <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+              <strong>Market news fetch failed:</strong> {newsError}
+              <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
+                Most likely cause: COINSTATS_API_KEY isn't set yet in this environment's variables.
+              </div>
+            </div>
+          ) : (
+            <MarketNews data={newsData} />
+          )}
+
           {altseasonError ? (
             <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
               <strong>Altcoin Season Index fetch failed:</strong> {altseasonError}
@@ -493,6 +571,21 @@ export default function DashboardHome() {
             <EtfFlows data={etfFlowsData} />
           )}
 
+          {ethEtfFlowsError ? (
+            <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+              <strong>ETH ETF flows fetch failed:</strong> {ethEtfFlowsError}
+              <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
+                Most likely cause: COINGLASS_API_KEY isn't set yet in this environment's variables.
+              </div>
+            </div>
+          ) : (
+            <EtfFlows
+              data={ethEtfFlowsData}
+              title="Spot ETH ETF Flows"
+              subtitle="Live daily net flow across US spot Ethereum ETFs, via Coinglass — weekly/monthly views sum the same daily numbers, not a separately reported figure"
+            />
+          )}
+
           {optionsError ? (
             <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
               <strong>Options positioning fetch failed:</strong> {optionsError}
@@ -510,6 +603,28 @@ export default function DashboardHome() {
             </div>
           ) : (
             <PolymarketPredictions data={polymarketData} />
+          )}
+
+          {openInterestError ? (
+            <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+              <strong>Cross-exchange open interest fetch failed:</strong> {openInterestError}
+              <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
+                Most likely cause: COINGLASS_API_KEY isn't set yet, or the key's plan doesn't include this endpoint.
+              </div>
+            </div>
+          ) : (
+            <OpenInterestPanel data={openInterestData} />
+          )}
+
+          {liquidationsError ? (
+            <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+              <strong>Liquidations fetch failed:</strong> {liquidationsError}
+              <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
+                Most likely cause: COINGLASS_API_KEY isn't set yet in this environment's variables.
+              </div>
+            </div>
+          ) : (
+            <LiquidationsPanel data={liquidationsData} />
           )}
 
           {fundingError ? (
