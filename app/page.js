@@ -29,11 +29,10 @@ const EMA_SYMBOLS = ['BTC', 'ETH'];
 
 const TABS = [
   { key: 'rotation', label: 'Rotation' },
-  { key: 'timeframes', label: 'Timeframes' },
+  { key: 'macro', label: 'Macro & Seasonality' },
+  { key: 'levels', label: 'Levels & Liquidations' },
   { key: 'calendar', label: 'CB Calendar' },
   { key: 'astro', label: 'Astro Outlook' },
-  { key: 'macro', label: 'Macro & Sentiment' },
-  { key: 'levels', label: 'Levels & Seasonality' },
 ];
 
 export default function DashboardHome() {
@@ -587,18 +586,6 @@ export default function DashboardHome() {
         </TabErrorBoundary>
       )}
 
-      {activeTab === 'timeframes' && (
-        <TabErrorBoundary tabName="Timeframes">
-          {timeframesError ? (
-            <div style={{ marginTop: 20, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-              <strong>Timeframes fetch failed:</strong> {timeframesError}
-            </div>
-          ) : (
-            <TimeframesPanel data={timeframesData} />
-          )}
-        </TabErrorBoundary>
-      )}
-
       {activeTab === 'calendar' && (
         <TabErrorBoundary tabName="CB Calendar">
           <CbCalendar />
@@ -612,7 +599,7 @@ export default function DashboardHome() {
       )}
 
       {activeTab === 'macro' && (
-        <TabErrorBoundary tabName="Macro & Sentiment">
+        <TabErrorBoundary tabName="Macro & Seasonality">
           {macroError ? (
             <div style={{ marginTop: 20, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
               <strong>Macro fetch failed:</strong> {macroError}
@@ -688,8 +675,67 @@ export default function DashboardHome() {
             <PolymarketPredictions data={polymarketData} />
           )}
 
-          {openInterestError ? (
+          {cotError ? (
             <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+              <strong>COT fetch failed:</strong> {cotError}
+              <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
+                The CFTC's public reporting site may be temporarily unavailable — try refreshing.
+              </div>
+            </div>
+          ) : (
+            <CotPanel data={cotData} />
+          )}
+
+          {seasonalityError ? (
+            <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+              <strong>Seasonality fetch failed:</strong> {seasonalityError}
+              <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
+                Kraken's public OHLC endpoint may be temporarily unavailable — try refreshing.
+              </div>
+            </div>
+          ) : (
+            <SeasonalityTable data={seasonalityData} />
+          )}
+        </TabErrorBoundary>
+      )}
+
+      {activeTab === 'levels' && (
+        <TabErrorBoundary tabName="Levels & Liquidations">
+          {emaError ? (
+            <div style={{ marginTop: 20, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+              <strong>EMA fetch failed:</strong> {emaError}
+              <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
+                Kraken's public OHLC endpoint may be temporarily unavailable — try refreshing.
+              </div>
+            </div>
+          ) : (
+            <EmaLevels data={emaData} symbols={EMA_SYMBOLS} />
+          )}
+
+          {timeframesError ? (
+            <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+              <strong>Timeframes fetch failed:</strong> {timeframesError}
+            </div>
+          ) : (
+            <TimeframesPanel data={timeframesData} />
+          )}
+
+          <LiquidationHeatmap
+            data={liquidationHeatmapData}
+            dataError={liquidationHeatmapError}
+            coinalyzeData={liquidationHeatmapCoinalyzeData}
+            coinalyzeError={liquidationHeatmapCoinalyzeError}
+            bcfData={liquidationHeatmapBcfData}
+            bcfError={liquidationHeatmapBcfError}
+          />
+
+          <LiquidationLevelsTracker
+            btcPrice={btcPriceData?.price ?? null}
+            btcPriceError={btcPriceError}
+          />
+
+          {openInterestError ? (
+            <div style={{ marginTop: 20, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
               <strong>Cross-exchange open interest fetch failed:</strong> {openInterestError}
               <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
                 Most likely cause: COINGLASS_API_KEY isn't set yet, or the key's plan doesn't include this endpoint.
@@ -728,57 +774,6 @@ export default function DashboardHome() {
           ) : (
             <FundingOI data={fundingData} symbols={tracked} />
           )}
-
-          {cotError ? (
-            <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-              <strong>COT fetch failed:</strong> {cotError}
-              <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
-                The CFTC's public reporting site may be temporarily unavailable — try refreshing.
-              </div>
-            </div>
-          ) : (
-            <CotPanel data={cotData} />
-          )}
-        </TabErrorBoundary>
-      )}
-
-      {activeTab === 'levels' && (
-        <TabErrorBoundary tabName="Levels">
-          {emaError ? (
-            <div style={{ marginTop: 20, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-              <strong>EMA fetch failed:</strong> {emaError}
-              <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
-                Kraken's public OHLC endpoint may be temporarily unavailable — try refreshing.
-              </div>
-            </div>
-          ) : (
-            <EmaLevels data={emaData} symbols={EMA_SYMBOLS} />
-          )}
-
-          {seasonalityError ? (
-            <div style={{ marginTop: 20, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-              <strong>Seasonality fetch failed:</strong> {seasonalityError}
-              <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
-                Kraken's public OHLC endpoint may be temporarily unavailable — try refreshing.
-              </div>
-            </div>
-          ) : (
-            <SeasonalityTable data={seasonalityData} />
-          )}
-
-          <LiquidationHeatmap
-            data={liquidationHeatmapData}
-            dataError={liquidationHeatmapError}
-            coinalyzeData={liquidationHeatmapCoinalyzeData}
-            coinalyzeError={liquidationHeatmapCoinalyzeError}
-            bcfData={liquidationHeatmapBcfData}
-            bcfError={liquidationHeatmapBcfError}
-          />
-
-          <LiquidationLevelsTracker
-            btcPrice={btcPriceData?.price ?? null}
-            btcPriceError={btcPriceError}
-          />
         </TabErrorBoundary>
       )}
     </main>

@@ -34,10 +34,10 @@ function fngZone(v) {
 
 function StatTile({ label, value, sub, accent }) {
   return (
-    <div style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: 16, flex: '1 1 160px' }}>
-      <div style={{ fontSize: 11, color: TEXT_MUTED }}>{label}</div>
-      <div style={{ fontSize: 24, fontWeight: 600, color: accent || TEXT_PRIMARY, marginTop: 6 }}>{value}</div>
-      {sub && <div style={{ fontSize: 11, color: TEXT_SECONDARY, marginTop: 4 }}>{sub}</div>}
+    <div style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: '10px 12px', flex: '1 1 130px' }}>
+      <div style={{ fontSize: 10, color: TEXT_MUTED }}>{label}</div>
+      <div style={{ fontSize: 18, fontWeight: 600, color: accent || TEXT_PRIMARY, marginTop: 3 }}>{value}</div>
+      {sub && <div style={{ fontSize: 10, color: TEXT_SECONDARY, marginTop: 2 }}>{sub}</div>}
     </div>
   );
 }
@@ -69,9 +69,9 @@ export default function MacroSentiment({ data }) {
         from CoinGecko's global market data · rates from the St. Louis Fed&apos;s FRED and the Bank of
         England&apos;s own statistical database
       </p>
-      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
         {activeFng && (
-          <div style={{ flex: '1 1 160px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ flex: '1 1 130px', display: 'flex', flexDirection: 'column', gap: 4 }}>
             <StatTile
               label="Fear & Greed Index"
               value={activeFng.value}

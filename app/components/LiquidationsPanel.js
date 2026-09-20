@@ -45,25 +45,25 @@ export default function LiquidationsPanel({ data }) {
         long liquidations are forced selling, short liquidations are forced buying
       </p>
 
-      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-        <div style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: 16, flex: '1 1 160px' }}>
-          <div style={{ fontSize: 11, color: TEXT_MUTED }}>Latest day ({formatDate(last24h.date)})</div>
-          <div style={{ fontSize: 18, fontWeight: 600, marginTop: 6, fontFamily: 'ui-monospace, monospace' }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+        <div style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: '10px 12px', flex: '1 1 130px' }}>
+          <div style={{ fontSize: 10, color: TEXT_MUTED }}>Latest day ({formatDate(last24h.date)})</div>
+          <div style={{ fontSize: 16, fontWeight: 600, marginTop: 3, fontFamily: 'ui-monospace, monospace' }}>
             <span style={{ color: LOSS }}>{formatUsdAbs(last24h.longUsd)}</span>
-            <span style={{ color: TEXT_MUTED, fontSize: 13 }}> long / </span>
+            <span style={{ color: TEXT_MUTED, fontSize: 12 }}> long / </span>
             <span style={{ color: GAIN }}>{formatUsdAbs(last24h.shortUsd)}</span>
-            <span style={{ color: TEXT_MUTED, fontSize: 13 }}> short</span>
+            <span style={{ color: TEXT_MUTED, fontSize: 12 }}> short</span>
           </div>
         </div>
-        <div style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: 16, flex: '1 1 160px' }}>
-          <div style={{ fontSize: 11, color: TEXT_MUTED }}>7-day long liquidations</div>
-          <div style={{ fontSize: 22, fontWeight: 600, color: LOSS, marginTop: 6, fontFamily: 'ui-monospace, monospace' }}>
+        <div style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: '10px 12px', flex: '1 1 130px' }}>
+          <div style={{ fontSize: 10, color: TEXT_MUTED }}>7-day long liquidations</div>
+          <div style={{ fontSize: 17, fontWeight: 600, color: LOSS, marginTop: 3, fontFamily: 'ui-monospace, monospace' }}>
             {formatUsdAbs(last7dLong)}
           </div>
         </div>
-        <div style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: 16, flex: '1 1 160px' }}>
-          <div style={{ fontSize: 11, color: TEXT_MUTED }}>7-day short liquidations</div>
-          <div style={{ fontSize: 22, fontWeight: 600, color: GAIN, marginTop: 6, fontFamily: 'ui-monospace, monospace' }}>
+        <div style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: '10px 12px', flex: '1 1 130px' }}>
+          <div style={{ fontSize: 10, color: TEXT_MUTED }}>7-day short liquidations</div>
+          <div style={{ fontSize: 17, fontWeight: 600, color: GAIN, marginTop: 3, fontFamily: 'ui-monospace, monospace' }}>
             {formatUsdAbs(last7dShort)}
           </div>
         </div>
