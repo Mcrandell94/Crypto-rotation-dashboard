@@ -8,6 +8,7 @@ import EmaLevels from './components/EmaLevels';
 import CotPanel from './components/CotPanel';
 import FundingOI from './components/FundingOI';
 import TimeframesPanel from './components/TimeframesPanel';
+import CbCalendar from './components/CbCalendar';
 import { SECTORS, BENCHMARKS } from './lib/sectors';
 
 const EMA_SYMBOLS = ['BTC', 'ETH'];
@@ -303,6 +304,8 @@ export default function DashboardHome() {
       ) : (
         <TimeframesPanel data={timeframesData} />
       )}
+
+      <CbCalendar />
 
       <p style={{ fontSize: 11, color: '#6E767B', marginTop: 32, lineHeight: 1.6 }}>
         This proves the full pipeline: browser → Next.js API route → CoinMarketCap → back to the
