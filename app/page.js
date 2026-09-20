@@ -16,6 +16,7 @@ import AltseasonIndex from './components/AltseasonIndex';
 import EtfFlows from './components/EtfFlows';
 import OptionsPositioning from './components/OptionsPositioning';
 import MarketNews from './components/MarketNews';
+import OpenInterestPanel from './components/OpenInterestPanel';
 import MarketRead from './components/MarketRead';
 import TabErrorBoundary from './components/TabErrorBoundary';
 import { SECTORS, BENCHMARKS } from './lib/sectors';
@@ -73,6 +74,8 @@ export default function DashboardHome() {
   const [optionsError, setOptionsError] = useState(null);
   const [newsData, setNewsData] = useState(null);
   const [newsError, setNewsError] = useState(null);
+  const [openInterestData, setOpenInterestData] = useState(null);
+  const [openInterestError, setOpenInterestError] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const fetchNews = useCallback(async () => {
@@ -84,6 +87,18 @@ export default function DashboardHome() {
       setNewsData(json);
     } catch (e) {
       setNewsError(e.message);
+    }
+  }, []);
+
+  const fetchOpenInterest = useCallback(async () => {
+    setOpenInterestError(null);
+    try {
+      const res = await fetch('/api/openinterest');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setOpenInterestData(json);
+    } catch (e) {
+      setOpenInterestError(e.message);
     }
   }, []);
 
@@ -266,7 +281,8 @@ export default function DashboardHome() {
     fetchEtfFlows();
     fetchOptions();
     fetchNews();
-  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality, fetchAltseason, fetchEtfFlows, fetchOptions, fetchNews]);
+    fetchOpenInterest();
+  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality, fetchAltseason, fetchEtfFlows, fetchOptions, fetchNews, fetchOpenInterest]);
 
   return (
     <main style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
@@ -284,6 +300,7 @@ export default function DashboardHome() {
             fetchEtfFlows();
             fetchOptions();
             fetchNews();
+            fetchOpenInterest();
             if (rrgMode === 'sectors') fetchRrgSectors(benchmark);
           }}
           disabled={loading}
@@ -538,6 +555,17 @@ export default function DashboardHome() {
             </div>
           ) : (
             <PolymarketPredictions data={polymarketData} />
+          )}
+
+          {openInterestError ? (
+            <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+              <strong>Cross-exchange open interest fetch failed:</strong> {openInterestError}
+              <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
+                Most likely cause: COINGLASS_API_KEY isn't set yet, or the key's plan doesn't include this endpoint.
+              </div>
+            </div>
+          ) : (
+            <OpenInterestPanel data={openInterestData} />
           )}
 
           {fundingError ? (
