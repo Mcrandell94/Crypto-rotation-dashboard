@@ -87,10 +87,27 @@ export async function GET() {
       const bucket = classify(ev.title || '');
       if (!bucket || buckets[bucket]) continue; // first hit wins — events arrive sorted by volume desc
 
-      const thresholds = (ev.markets || [])
+      let thresholds = (ev.markets || [])
         .map(parseMarket)
         .filter(Boolean)
         .sort((a, b) => thresholdValue(a.label) - thresholdValue(b.label));
+
+      // Ladder-style events (weekly/monthly/yearly) carry dozens of price
+      // brackets, most already decided one way or the other once the price
+      // has moved past them (pinned at ~100% or ~0%) — real data, but not
+      // forward-looking. Keep only the part of the ladder still genuinely
+      // undecided, capped to a handful closest to the coin-flip line, since
+      // that's the only part that's actually a live prediction rather than
+      // settled history. The single-market daily Up/Down bucket has no
+      // ladder to condense, so it's left alone regardless of how lopsided
+      // it is.
+      if (thresholds.length > 1) {
+        const live = thresholds.filter((t) => t.pct > 1 && t.pct < 99);
+        thresholds = (live.length > 6
+          ? [...live].sort((a, b) => Math.abs(a.pct - 50) - Math.abs(b.pct - 50)).slice(0, 6)
+          : live
+        ).sort((a, b) => thresholdValue(a.label) - thresholdValue(b.label));
+      }
 
       if (thresholds.length === 0) continue;
 
