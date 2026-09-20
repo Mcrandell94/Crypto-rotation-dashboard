@@ -15,6 +15,7 @@ import SeasonalityTable from './components/SeasonalityTable';
 import AltseasonIndex from './components/AltseasonIndex';
 import EtfFlows from './components/EtfFlows';
 import OptionsPositioning from './components/OptionsPositioning';
+import MarketRead from './components/MarketRead';
 import TabErrorBoundary from './components/TabErrorBoundary';
 import { SECTORS, BENCHMARKS } from './lib/sectors';
 
@@ -277,6 +278,17 @@ export default function DashboardHome() {
           {loading ? 'Refreshing…' : 'Refresh now'}
         </button>
       </div>
+
+      <MarketRead
+        btcTicker={data?.tickers?.BTC}
+        macroData={macroData}
+        emaData={emaData}
+        cotData={cotData}
+        optionsData={optionsData}
+        etfFlowsData={etfFlowsData}
+        fundingData={fundingData}
+        seasonalityData={seasonalityData}
+      />
 
       <div style={{
         display: 'flex', gap: 4, marginTop: 20, borderBottom: '1px solid #2A3136',
