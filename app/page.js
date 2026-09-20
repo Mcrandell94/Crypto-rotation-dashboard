@@ -86,7 +86,21 @@ export default function DashboardHome() {
   const [liquidationHeatmapError, setLiquidationHeatmapError] = useState(null);
   const [liquidationHeatmapCoinalyzeData, setLiquidationHeatmapCoinalyzeData] = useState(null);
   const [liquidationHeatmapCoinalyzeError, setLiquidationHeatmapCoinalyzeError] = useState(null);
+  const [liquidationHeatmapBcfData, setLiquidationHeatmapBcfData] = useState(null);
+  const [liquidationHeatmapBcfError, setLiquidationHeatmapBcfError] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const fetchLiquidationHeatmapBcf = useCallback(async () => {
+    setLiquidationHeatmapBcfError(null);
+    try {
+      const res = await fetch('/api/liquidationheatmap-bcf');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setLiquidationHeatmapBcfData(json);
+    } catch (e) {
+      setLiquidationHeatmapBcfError(e.message);
+    }
+  }, []);
 
   const fetchLiquidationHeatmap = useCallback(async () => {
     setLiquidationHeatmapError(null);
@@ -344,7 +358,8 @@ export default function DashboardHome() {
     fetchEthEtfFlows();
     fetchLiquidationHeatmap();
     fetchLiquidationHeatmapCoinalyze();
-  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality, fetchAltseason, fetchEtfFlows, fetchOptions, fetchNews, fetchOpenInterest, fetchLiquidations, fetchEthEtfFlows, fetchLiquidationHeatmap, fetchLiquidationHeatmapCoinalyze]);
+    fetchLiquidationHeatmapBcf();
+  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality, fetchAltseason, fetchEtfFlows, fetchOptions, fetchNews, fetchOpenInterest, fetchLiquidations, fetchEthEtfFlows, fetchLiquidationHeatmap, fetchLiquidationHeatmapCoinalyze, fetchLiquidationHeatmapBcf]);
 
   return (
     <main style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
@@ -367,6 +382,7 @@ export default function DashboardHome() {
             fetchEthEtfFlows();
             fetchLiquidationHeatmap();
             fetchLiquidationHeatmapCoinalyze();
+            fetchLiquidationHeatmapBcf();
             if (rrgMode === 'sectors') fetchRrgSectors(benchmark);
           }}
           disabled={loading}
@@ -710,6 +726,8 @@ export default function DashboardHome() {
             dataError={liquidationHeatmapError}
             coinalyzeData={liquidationHeatmapCoinalyzeData}
             coinalyzeError={liquidationHeatmapCoinalyzeError}
+            bcfData={liquidationHeatmapBcfData}
+            bcfError={liquidationHeatmapBcfError}
           />
         </TabErrorBoundary>
       )}
