@@ -31,7 +31,6 @@ const TABS = [
   { key: 'rotation', label: 'Rotation' },
   { key: 'macro', label: 'Macro & Seasonality' },
   { key: 'levels', label: 'Levels & Liquidations' },
-  { key: 'timeframes', label: 'Timeframes' },
   { key: 'calendar', label: 'CB Calendar' },
   { key: 'astro', label: 'Astro Outlook' },
 ];
@@ -587,18 +586,6 @@ export default function DashboardHome() {
         </TabErrorBoundary>
       )}
 
-      {activeTab === 'timeframes' && (
-        <TabErrorBoundary tabName="Timeframes">
-          {timeframesError ? (
-            <div style={{ marginTop: 20, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-              <strong>Timeframes fetch failed:</strong> {timeframesError}
-            </div>
-          ) : (
-            <TimeframesPanel data={timeframesData} />
-          )}
-        </TabErrorBoundary>
-      )}
-
       {activeTab === 'calendar' && (
         <TabErrorBoundary tabName="CB Calendar">
           <CbCalendar />
@@ -723,6 +710,14 @@ export default function DashboardHome() {
             </div>
           ) : (
             <EmaLevels data={emaData} symbols={EMA_SYMBOLS} />
+          )}
+
+          {timeframesError ? (
+            <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+              <strong>Timeframes fetch failed:</strong> {timeframesError}
+            </div>
+          ) : (
+            <TimeframesPanel data={timeframesData} />
           )}
 
           <LiquidationHeatmap
