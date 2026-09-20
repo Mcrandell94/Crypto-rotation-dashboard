@@ -27,22 +27,20 @@
 // LiquidationLevelsTracker uses to decide whether current price has
 // crossed it.
 
-// First capture. Read by eye off a BitcoinCounterFlow heatmap chart
-// (BTCUSDT, 4h, Binance Futures) — pixel color intensity, not a precise
-// vendor extraction, so treat exact prices as approximate (±0.5-1%) until
-// refined against the other exchanges' copies. The bright orange/yellow
-// band around $82.5K was the one clearly dominant cluster on the chart;
-// the rest are moderate green bands. The two zones are stretches that
-// read as visibly thin/dark between the marked clusters.
-export const CAPTURED_AT = '2026-09-20T22:30:00Z';
-export const SPOT_AT_CAPTURE = 80679.71;
-export const SOURCE = 'BitcoinCounterFlow heatmap — BTCUSDT 4h, Binance Futures (read by eye from screenshot)';
+// Second capture, superseding the first. Read by eye off the same
+// BitcoinCounterFlow chart (BTCUSDT, 4h, Binance Futures) with three more
+// overlays turned on (Liq. Heatmap VPVR, Orderbook VPVR, Orderbook
+// Heatmap) — much more textured than the first capture, and it changed
+// the read materially: the mid-range clusters from the first pass
+// (~$72.3K, ~$67K) don't hold up here, that stretch now reads as thin
+// rather than clustered. Still an eyeballed pixel-intensity read, not a
+// precise extraction — treat exact prices as approximate (±0.5-1%).
+export const CAPTURED_AT = '2026-09-21T00:00:00Z';
+export const SPOT_AT_CAPTURE = 81119.80;
+export const SOURCE = 'BitcoinCounterFlow heatmap — BTCUSDT 4h, Binance Futures, with Liq. Heatmap VPVR + Orderbook VPVR + Orderbook Heatmap overlays (read by eye from screenshot)';
 export const LEVELS = [
-  { kind: 'level', price: 82500, side: 'short', label: 'Dominant cluster on the chart — brightest band, just above spot' },
-  { kind: 'level', price: 78700, side: 'long', label: 'Moderate cluster, just below spot' },
-  { kind: 'level', price: 72300, side: 'long', label: 'Moderate cluster near the early-Aug breakout zone' },
-  { kind: 'level', price: 67000, side: 'long', label: 'Moderate cluster, mid-July range' },
-  { kind: 'level', price: 62000, side: 'long', label: 'Moderate cluster near the June lows' },
-  { kind: 'zone', zoneLow: 80700, zoneHigh: 82400, label: 'Thin band between spot and the $82.5K cluster' },
-  { kind: 'zone', zoneLow: 73000, zoneHigh: 78500, label: 'Thin band below the $78.7K cluster' },
+  { kind: 'level', price: 82300, side: 'short', label: 'Top edge of the dense hot zone surrounding spot' },
+  { kind: 'level', price: 78300, side: 'long', label: 'Bottom edge of the dense hot zone surrounding spot' },
+  { kind: 'level', price: 60000, side: 'long', label: 'Wide, persistent band — the single most consistent level on the chart, spans nearly the whole visible history' },
+  { kind: 'zone', zoneLow: 70000, zoneHigh: 76000, label: 'Thin band between the dense zone around spot and the $60K level' },
 ];
