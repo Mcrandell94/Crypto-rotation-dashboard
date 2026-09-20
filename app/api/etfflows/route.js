@@ -21,7 +21,12 @@ export async function GET() {
   }
 
   try {
-    const url = `${BASE_URL}/etfs/summary-history?symbol=BTC&country_code=US&limit=10`;
+    // 180 days of daily history — enough for the UI to aggregate into a
+    // meaningful weekly (up to ~26 weeks) or monthly (up to 6 months) view
+    // client-side, not just the raw daily series. No documented max on
+    // `limit` (SoSoValue's own docs site is unreachable from this sandbox,
+    // per the note above); 180 is a conservative request, not a known cap.
+    const url = `${BASE_URL}/etfs/summary-history?symbol=BTC&country_code=US&limit=180`;
     const res = await fetch(url, {
       headers: { 'x-soso-api-key': apiKey, Accept: 'application/json' },
       next: { revalidate: 1800 },

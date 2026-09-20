@@ -1,9 +1,11 @@
-// Server-side only. Combines three free sources: alternative.me's Fear &
+// Server-side only. Combines four free sources: alternative.me's Fear &
 // Greed Index (fully keyless), CoinGecko's /global endpoint (same Demo key
-// as the RRG route) for BTC/USDT market cap dominance, and the St. Louis
-// Fed's FRED API for real traditional-macro context (rates, dollar
-// strength, yield curve) — the one thing an otherwise crypto-only "Macro &
-// Sentiment" panel was missing.
+// as the RRG route) for BTC/USDT market cap dominance, the St. Louis Fed's
+// FRED API for real traditional-macro context (rates, dollar strength,
+// yield curve), and the Bank of England's own public statistical database
+// (also fully keyless) for the BOE's actual Bank Rate — FRED's own mirror
+// of it (BOERUKM) stopped updating in 2017, the same staleness trap that
+// ruled out FRED's Japan discount-rate series earlier.
 
 export const dynamic = 'force-dynamic';
 
@@ -41,7 +43,7 @@ async function fetchFredLatest(seriesId, apiKey) {
 
 async function fetchRates() {
   const apiKey = process.env.FRED_API_KEY;
-  if (!apiKey) return { rates: null, ratesFailed: null };
+  if (!apiKey) return { rates: {}, ratesFailed: [] };
 
   const results = await Promise.allSettled(FRED_SERIES.map((s) => fetchFredLatest(s.seriesId, apiKey)));
   const rates = {};
@@ -54,6 +56,45 @@ async function fetchRates() {
   return { rates, ratesFailed };
 }
 
+// The Bank of England publishes its own Interactive Statistical Database
+// endpoint — no API key needed, but it also isn't documented as a formal
+// JSON API, so the exact query shape here (params, required browser-like
+// User-Agent) was verified against a working real-world example
+// (github.com/bandrewk/BankOfEngland-Exchange-API) rather than guessed,
+// following the same approach used for Deribit and SoSoValue where the
+// official docs site itself was unreachable. IUMABEDR is the Bank's own
+// series code for the Official Bank Rate. A 120-day lookback comfortably
+// covers the gap between rate changes (the MPC meets 8x/year) so the
+// latest row is always the current rate, not a stale one.
+async function fetchBoeRate() {
+  const now = new Date();
+  const from = new Date(now);
+  from.setUTCDate(from.getUTCDate() - 120);
+  const fmt = (d) => `${String(d.getUTCDate()).padStart(2, '0')}/${d.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' })}/${d.getUTCFullYear()}`;
+
+  const url = `https://www.bankofengland.co.uk/boeapps/database/_iadb-fromshowcolumns.asp?csv.x=yes&Datefrom=${encodeURIComponent(fmt(from))}&Dateto=${encodeURIComponent(fmt(now))}&SeriesCodes=IUMABEDR&CSVF=TN&UsingCodes=Y&VPD=Y&VFD=N`;
+  const res = await fetch(url, {
+    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; crypto-rotation-dashboard/1.0)' },
+    next: { revalidate: 3600 },
+  });
+  if (!res.ok) {
+    const err = new Error(`Bank of England database returned ${res.status}`);
+    err.status = res.status;
+    throw err;
+  }
+
+  const text = await res.text();
+  const rows = text
+    .trim()
+    .split('\n')
+    .map((line) => line.split(',').map((cell) => cell.trim()))
+    .filter((cells) => cells.length >= 2 && cells[1] !== '' && !Number.isNaN(parseFloat(cells[1])));
+  if (rows.length === 0) throw new Error('Bank of England database returned no parsable Bank Rate rows');
+
+  const [date, value] = rows[rows.length - 1];
+  return { value: parseFloat(value), date };
+}
+
 export async function GET() {
   const cgKey = process.env.COINGECKO_API_KEY;
   if (!cgKey) {
@@ -64,14 +105,20 @@ export async function GET() {
   }
 
   try {
-    const [fngRes, globalRes, { rates, ratesFailed }] = await Promise.all([
+    const [fngRes, globalRes, { rates: fredRates, ratesFailed: fredFailed }, boeResult] = await Promise.all([
       fetch('https://api.alternative.me/fng/?limit=1', { next: { revalidate: 3600 } }),
       fetch('https://api.coingecko.com/api/v3/global', {
         headers: { 'x-cg-demo-api-key': cgKey, Accept: 'application/json' },
         next: { revalidate: 900 },
       }),
       fetchRates(),
+      fetchBoeRate().then((value) => ({ ok: true, value })).catch((error) => ({ ok: false, error })),
     ]);
+
+    const rates = { ...fredRates };
+    const ratesFailed = [...fredFailed];
+    if (boeResult.ok) rates.boeRate = boeResult.value;
+    else ratesFailed.push('BOE Bank Rate');
 
     if (!fngRes.ok) {
       const detail = await fngRes.text();
