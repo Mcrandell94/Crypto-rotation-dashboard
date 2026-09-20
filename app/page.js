@@ -15,6 +15,7 @@ import SeasonalityTable from './components/SeasonalityTable';
 import AltseasonIndex from './components/AltseasonIndex';
 import EtfFlows from './components/EtfFlows';
 import OptionsPositioning from './components/OptionsPositioning';
+import MarketNews from './components/MarketNews';
 import MarketRead from './components/MarketRead';
 import TabErrorBoundary from './components/TabErrorBoundary';
 import { SECTORS, BENCHMARKS } from './lib/sectors';
@@ -70,7 +71,21 @@ export default function DashboardHome() {
   const [rrgSectorsError, setRrgSectorsError] = useState(null);
   const [optionsData, setOptionsData] = useState(null);
   const [optionsError, setOptionsError] = useState(null);
+  const [newsData, setNewsData] = useState(null);
+  const [newsError, setNewsError] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const fetchNews = useCallback(async () => {
+    setNewsError(null);
+    try {
+      const res = await fetch('/api/news');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setNewsData(json);
+    } catch (e) {
+      setNewsError(e.message);
+    }
+  }, []);
 
   const fetchOptions = useCallback(async () => {
     setOptionsError(null);
@@ -250,7 +265,8 @@ export default function DashboardHome() {
     fetchAltseason();
     fetchEtfFlows();
     fetchOptions();
-  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality, fetchAltseason, fetchEtfFlows, fetchOptions]);
+    fetchNews();
+  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality, fetchAltseason, fetchEtfFlows, fetchOptions, fetchNews]);
 
   return (
     <main style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
@@ -267,6 +283,7 @@ export default function DashboardHome() {
             fetchAltseason();
             fetchEtfFlows();
             fetchOptions();
+            fetchNews();
             if (rrgMode === 'sectors') fetchRrgSectors(benchmark);
           }}
           disabled={loading}
@@ -472,6 +489,17 @@ export default function DashboardHome() {
             </div>
           ) : (
             <MacroSentiment data={macroData} />
+          )}
+
+          {newsError ? (
+            <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+              <strong>Market news fetch failed:</strong> {newsError}
+              <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
+                Most likely cause: COINSTATS_API_KEY isn't set yet in this environment's variables.
+              </div>
+            </div>
+          ) : (
+            <MarketNews data={newsData} />
           )}
 
           {altseasonError ? (

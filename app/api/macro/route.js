@@ -95,6 +95,38 @@ async function fetchBoeRate() {
   return { value: parseFloat(value), date };
 }
 
+// CoinStats runs its own independent Fear & Greed Index, separate from
+// alternative.me's (a different methodology/weighting) — surfaced as a
+// second, toggleable reading rather than replacing the existing one, so
+// agreement or divergence between the two is visible instead of hidden.
+// Base URL and X-API-KEY header verified against CoinStats' own published
+// example response; exact response field names beyond `now.value` /
+// `now.value_classification` weren't independently re-confirmed since
+// every mirror of their docs was unreachable from this sandbox.
+async function fetchCoinstatsFng() {
+  const apiKey = process.env.COINSTATS_API_KEY;
+  if (!apiKey) return null;
+
+  const res = await fetch('https://openapiv1.coinstats.app/insights/fear-and-greed', {
+    headers: { 'X-API-KEY': apiKey, Accept: 'application/json' },
+    next: { revalidate: 3600 },
+  });
+  if (!res.ok) {
+    const err = new Error(`CoinStats returned ${res.status} for fear-and-greed`);
+    err.status = res.status;
+    throw err;
+  }
+  const json = await res.json();
+  const now = json?.now;
+  if (now?.value == null) throw new Error('CoinStats fear-and-greed response missing now.value');
+
+  return {
+    value: Number(now.value),
+    classification: now.value_classification,
+    asOf: now.update_time || (now.timestamp ? new Date(Number(now.timestamp) * 1000).toISOString() : null),
+  };
+}
+
 export async function GET() {
   const cgKey = process.env.COINGECKO_API_KEY;
   if (!cgKey) {
@@ -105,7 +137,7 @@ export async function GET() {
   }
 
   try {
-    const [fngRes, globalRes, { rates: fredRates, ratesFailed: fredFailed }, boeResult] = await Promise.all([
+    const [fngRes, globalRes, { rates: fredRates, ratesFailed: fredFailed }, boeResult, coinstatsFngResult] = await Promise.all([
       fetch('https://api.alternative.me/fng/?limit=1', { next: { revalidate: 3600 } }),
       fetch('https://api.coingecko.com/api/v3/global', {
         headers: { 'x-cg-demo-api-key': cgKey, Accept: 'application/json' },
@@ -113,6 +145,7 @@ export async function GET() {
       }),
       fetchRates(),
       fetchBoeRate().then((value) => ({ ok: true, value })).catch((error) => ({ ok: false, error })),
+      fetchCoinstatsFng().then((value) => ({ ok: true, value })).catch((error) => ({ ok: false, error })),
     ]);
 
     const rates = { ...fredRates };
@@ -139,6 +172,7 @@ export async function GET() {
       fng: point
         ? { value: Number(point.value), classification: point.value_classification, asOf: new Date(Number(point.timestamp) * 1000).toISOString() }
         : null,
+      fngCoinstats: coinstatsFngResult.ok ? coinstatsFngResult.value : null,
       dominance: { btc: pct.btc ?? null, usdt: pct.usdt ?? null },
       rates,
       ratesFailed,
