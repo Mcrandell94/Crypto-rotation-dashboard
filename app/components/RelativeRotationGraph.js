@@ -89,7 +89,9 @@ const SIZE = 460;
 const MARGIN = 34;
 const PLOT = SIZE - MARGIN * 2;
 
-export default function RelativeRotationGraph({ data, symbols, benchmark }) {
+const defaultAssetFormat = (v) => `$${v?.toLocaleString(undefined, { maximumFractionDigits: v < 1 ? 4 : 2 })}`;
+
+export default function RelativeRotationGraph({ data, symbols, benchmark, assetLabel = 'price', assetFormat = defaultAssetFormat }) {
   const [tableView, setTableView] = useState(false);
   const [zscore, setZscore] = useState(true);
   const [tailLength, setTailLength] = useState(20);
@@ -501,7 +503,7 @@ export default function RelativeRotationGraph({ data, symbols, benchmark }) {
                 <thead>
                   <tr style={{ borderBottom: `1px solid ${CARD_BORDER}`, color: TEXT_MUTED, textAlign: 'left' }}>
                     <th style={{ padding: '4px 8px 4px 0' }}>Day</th>
-                    <th style={{ padding: '4px 8px' }}>{sym} price</th>
+                    <th style={{ padding: '4px 8px' }}>{sym} {assetLabel}</th>
                     <th style={{ padding: '4px 8px' }}>{benchmark} price</th>
                     <th style={{ padding: '4px 8px' }}>RS-Ratio</th>
                     <th style={{ padding: '4px 8px' }}>RS-Mom</th>
@@ -518,7 +520,7 @@ export default function RelativeRotationGraph({ data, symbols, benchmark }) {
                       <tr key={days[idx]} style={{ borderTop: `1px solid #1D2226` }}>
                         <td style={{ padding: '4px 8px 4px 0', color: TEXT_SECONDARY, fontFamily: 'ui-monospace,monospace' }}>{days[idx]}</td>
                         <td style={{ padding: '4px 8px', color: TEXT_PRIMARY, fontFamily: 'ui-monospace,monospace' }}>
-                          ${prices[sym][idx]?.toLocaleString(undefined, { maximumFractionDigits: prices[sym][idx] < 1 ? 4 : 2 })}
+                          {assetFormat(prices[sym][idx])}
                         </td>
                         <td style={{ padding: '4px 8px', color: TEXT_PRIMARY, fontFamily: 'ui-monospace,monospace' }}>
                           ${prices[benchmark][idx]?.toLocaleString(undefined, { maximumFractionDigits: 2 })}

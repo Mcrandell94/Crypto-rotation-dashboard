@@ -5,36 +5,12 @@
 // windows, z-score toggle, scrubber) don't need a refetch per change.
 
 import { COINGECKO_IDS } from '../../lib/coingecko-ids';
+import { fetchDailyPrices as fetchDailyPricesById } from '../../lib/coingecko-history';
 
 export const dynamic = 'force-dynamic';
 
-const HISTORY_DAYS = 100; // >90 days makes CoinGecko return daily granularity on the free plan
-
-function toDayMap(prices) {
-  const map = new Map();
-  for (const [ts, price] of prices) {
-    const day = new Date(ts).toISOString().slice(0, 10);
-    map.set(day, price);
-  }
-  return map;
-}
-
-async function fetchDailyPrices(symbol, apiKey) {
-  const id = COINGECKO_IDS[symbol];
-  const url = `https://api.coingecko.com/api/v3/coins/${id}/market_chart?vs_currency=usd&days=${HISTORY_DAYS}`;
-  const res = await fetch(url, {
-    headers: { 'x-cg-demo-api-key': apiKey, Accept: 'application/json' },
-    next: { revalidate: 900 },
-  });
-  if (!res.ok) {
-    const detail = await res.text();
-    const err = new Error(`CoinGecko returned ${res.status} for ${symbol}`);
-    err.status = res.status;
-    err.detail = detail;
-    throw err;
-  }
-  const json = await res.json();
-  return toDayMap(json.prices || []);
+function fetchDailyPrices(symbol, apiKey) {
+  return fetchDailyPricesById(COINGECKO_IDS[symbol], apiKey);
 }
 
 export async function GET(request) {
