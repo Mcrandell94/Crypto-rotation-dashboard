@@ -89,6 +89,12 @@ export default function MacroSentiment({ data }) {
             sub={rates.yieldCurveSpread.value < 0 ? 'Inverted' : 'Normal'}
           />
         )}
+        {rates?.crudeOil && (
+          <StatTile label="WTI Crude Oil" value={`$${rates.crudeOil.value.toFixed(2)}`} />
+        )}
+        {rates?.japanPolicyRate && (
+          <StatTile label="Japan Policy Rate" value={`${rates.japanPolicyRate.value.toFixed(2)}%`} />
+        )}
       </div>
       {zone && (
         <p style={{ fontSize: 11, color: TEXT_SECONDARY, marginTop: 12, lineHeight: 1.6, maxWidth: 620 }}>

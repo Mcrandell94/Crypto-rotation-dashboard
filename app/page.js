@@ -12,6 +12,8 @@ import CbCalendar from './components/CbCalendar';
 import AstroOutlook from './components/AstroOutlook';
 import PolymarketPredictions from './components/PolymarketPredictions';
 import SeasonalityTable from './components/SeasonalityTable';
+import AltseasonIndex from './components/AltseasonIndex';
+import EtfFlows from './components/EtfFlows';
 import TabErrorBoundary from './components/TabErrorBoundary';
 import { SECTORS, BENCHMARKS } from './lib/sectors';
 
@@ -30,6 +32,7 @@ export default function DashboardHome() {
   const [activeTab, setActiveTab] = useState('rotation');
   const [activeSector, setActiveSector] = useState(SECTORS[0].key);
   const [benchmark, setBenchmark] = useState(BENCHMARKS[0].key);
+  const [rrgMode, setRrgMode] = useState('tickers'); // 'tickers' | 'sectors'
 
   // A benchmark can't be plotted against itself, so drop it from the sector's
   // own ticker list; when the benchmark isn't BTC, BTC becomes a plottable
@@ -57,7 +60,37 @@ export default function DashboardHome() {
   const [polymarketError, setPolymarketError] = useState(null);
   const [seasonalityData, setSeasonalityData] = useState(null);
   const [seasonalityError, setSeasonalityError] = useState(null);
+  const [altseasonData, setAltseasonData] = useState(null);
+  const [altseasonError, setAltseasonError] = useState(null);
+  const [etfFlowsData, setEtfFlowsData] = useState(null);
+  const [etfFlowsError, setEtfFlowsError] = useState(null);
+  const [rrgSectorsData, setRrgSectorsData] = useState(null);
+  const [rrgSectorsError, setRrgSectorsError] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const fetchRrgSectors = useCallback(async (bench) => {
+    setRrgSectorsError(null);
+    try {
+      const res = await fetch(`/api/rrg-sectors?benchmark=${bench}`);
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setRrgSectorsData(json);
+    } catch (e) {
+      setRrgSectorsError(e.message);
+    }
+  }, []);
+
+  const fetchEtfFlows = useCallback(async () => {
+    setEtfFlowsError(null);
+    try {
+      const res = await fetch('/api/etfflows');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setEtfFlowsData(json);
+    } catch (e) {
+      setEtfFlowsError(e.message);
+    }
+  }, []);
 
   const fetchSeasonality = useCallback(async () => {
     setSeasonalityError(null);
@@ -68,6 +101,18 @@ export default function DashboardHome() {
       setSeasonalityData(json);
     } catch (e) {
       setSeasonalityError(e.message);
+    }
+  }, []);
+
+  const fetchAltseason = useCallback(async () => {
+    setAltseasonError(null);
+    try {
+      const res = await fetch('/api/altseason');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setAltseasonData(json);
+    } catch (e) {
+      setAltseasonError(e.message);
     }
   }, []);
 
@@ -169,6 +214,14 @@ export default function DashboardHome() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSector, benchmark]);
 
+  // Sector-composite RRG data is heavier to fetch (representative tickers
+  // across every sector at once) — only fetch it when that view is actually
+  // in use, not alongside the per-sector ticker view.
+  useEffect(() => {
+    if (rrgMode === 'sectors') fetchRrgSectors(benchmark);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rrgMode, benchmark]);
+
   // EMA, COT, Timeframes, and Polymarket all track fixed BTC data, not the
   // active sector — fetch once on mount, then refresh alongside everything
   // else on manual refresh.
@@ -178,7 +231,9 @@ export default function DashboardHome() {
     fetchTimeframes();
     fetchPolymarket();
     fetchSeasonality();
-  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality]);
+    fetchAltseason();
+    fetchEtfFlows();
+  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality, fetchAltseason, fetchEtfFlows]);
 
   return (
     <main style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
@@ -192,6 +247,9 @@ export default function DashboardHome() {
             fetchTimeframes();
             fetchPolymarket();
             fetchSeasonality();
+            fetchAltseason();
+            fetchEtfFlows();
+            if (rrgMode === 'sectors') fetchRrgSectors(benchmark);
           }}
           disabled={loading}
           style={{
@@ -225,22 +283,45 @@ export default function DashboardHome() {
 
       {activeTab === 'rotation' && (
         <TabErrorBoundary tabName="Rotation">
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 20 }}>
-            {SECTORS.map((sec) => (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 20 }}>
+            <span style={{ fontSize: 12, color: '#8B9298' }}>RRG shows</span>
+            {[
+              { key: 'tickers', label: 'Sector tickers' },
+              { key: 'sectors', label: 'Sectors vs each other' },
+            ].map((m) => (
               <button
-                key={sec.key}
-                onClick={() => setActiveSector(sec.key)}
+                key={m.key}
+                onClick={() => setRrgMode(m.key)}
                 style={{
-                  background: activeSector === sec.key ? '#1E252A' : '#171D21',
-                  border: `1px solid ${activeSector === sec.key ? '#C9A66B' : '#2A3136'}`,
-                  color: activeSector === sec.key ? '#C9A66B' : '#8B9298',
-                  borderRadius: 4, padding: '5px 12px', fontSize: 12, cursor: 'pointer',
+                  background: rrgMode === m.key ? '#1E252A' : '#171D21',
+                  border: `1px solid ${rrgMode === m.key ? '#C9A66B' : '#2A3136'}`,
+                  color: rrgMode === m.key ? '#C9A66B' : '#8B9298',
+                  borderRadius: 4, padding: '4px 10px', fontSize: 12, cursor: 'pointer',
                 }}
               >
-                {sec.label}
+                {m.label}
               </button>
             ))}
           </div>
+
+          {rrgMode === 'tickers' && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
+              {SECTORS.map((sec) => (
+                <button
+                  key={sec.key}
+                  onClick={() => setActiveSector(sec.key)}
+                  style={{
+                    background: activeSector === sec.key ? '#1E252A' : '#171D21',
+                    border: `1px solid ${activeSector === sec.key ? '#C9A66B' : '#2A3136'}`,
+                    color: activeSector === sec.key ? '#C9A66B' : '#8B9298',
+                    borderRadius: 4, padding: '5px 12px', fontSize: 12, cursor: 'pointer',
+                  }}
+                >
+                  {sec.label}
+                </button>
+              ))}
+            </div>
+          )}
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
             <span style={{ fontSize: 12, color: '#8B9298' }}>Measured against</span>
@@ -275,19 +356,49 @@ export default function DashboardHome() {
             </div>
           )}
 
-          {rrgError ? (
+          {rrgMode === 'tickers' ? (
+            rrgError ? (
+              <div style={{ marginTop: 24, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+                <strong>RRG fetch failed:</strong> {rrgError}
+                <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
+                  Most likely cause: COINGECKO_API_KEY isn't set yet in this environment's variables.
+                </div>
+              </div>
+            ) : (
+              <>
+                <RelativeRotationGraph data={rrgData} symbols={sectorTickers} benchmark={benchmark} />
+                {rrgData?.failed?.length > 0 && (
+                  <p style={{ fontSize: 11, color: '#6E767B', marginTop: 8 }}>
+                    No live data for: {rrgData.failed.join(', ')} — skipped.
+                  </p>
+                )}
+              </>
+            )
+          ) : rrgSectorsError ? (
             <div style={{ marginTop: 24, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-              <strong>RRG fetch failed:</strong> {rrgError}
+              <strong>Sector RRG fetch failed:</strong> {rrgSectorsError}
               <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
                 Most likely cause: COINGECKO_API_KEY isn't set yet in this environment's variables.
               </div>
             </div>
           ) : (
             <>
-              <RelativeRotationGraph data={rrgData} symbols={sectorTickers} benchmark={benchmark} />
-              {rrgData?.failed?.length > 0 && (
+              <p style={{ fontSize: 11, color: '#6E767B', marginTop: 8, maxWidth: 620 }}>
+                Each sector is an equal-weighted composite of its {' '}
+                {rrgSectorsData?.sectorMembers ? Object.values(rrgSectorsData.sectorMembers)[0]?.length : 4}{' '}
+                most prominent tickers, normalized to a common starting index rather than raw price — so a
+                sector&apos;s RS-Ratio/Momentum reflects its overall trend, not any single token&apos;s price level.
+              </p>
+              <RelativeRotationGraph
+                data={rrgSectorsData}
+                symbols={SECTORS.map((s) => s.label)}
+                benchmark={benchmark}
+                assetLabel="index"
+                assetFormat={(v) => v?.toFixed(3)}
+              />
+              {rrgSectorsData?.failed?.length > 0 && (
                 <p style={{ fontSize: 11, color: '#6E767B', marginTop: 8 }}>
-                  No live data for: {rrgData.failed.join(', ')} — skipped.
+                  No live data for: {rrgSectorsData.failed.join(', ')} — skipped.
                 </p>
               )}
             </>
@@ -332,6 +443,25 @@ export default function DashboardHome() {
             </div>
           ) : (
             <MacroSentiment data={macroData} />
+          )}
+
+          {altseasonError ? (
+            <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+              <strong>Altcoin Season Index fetch failed:</strong> {altseasonError}
+            </div>
+          ) : (
+            <AltseasonIndex data={altseasonData} />
+          )}
+
+          {etfFlowsError ? (
+            <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+              <strong>ETF flows fetch failed:</strong> {etfFlowsError}
+              <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
+                Most likely cause: SOSOVALUE_API_KEY isn't set yet in this environment's variables.
+              </div>
+            </div>
+          ) : (
+            <EtfFlows data={etfFlowsData} />
           )}
 
           {polymarketError ? (

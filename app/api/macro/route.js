@@ -13,6 +13,12 @@ const FRED_SERIES = [
   { key: 'treasury10y', seriesId: 'DGS10', label: '10Y Treasury Yield' },
   { key: 'dollarIndex', seriesId: 'DTWEXBGS', label: 'Trade-Weighted Dollar Index' },
   { key: 'yieldCurveSpread', seriesId: 'T10Y2Y', label: '10Y-2Y Spread' },
+  { key: 'crudeOil', seriesId: 'DCOILWTICO', label: 'WTI Crude Oil' },
+  // Japan's actual policy lever — the BOJ sets a target range for this
+  // exact overnight interbank rate, so it's a faithful live proxy for
+  // "the BOJ rate" rather than the discount rate (FRED's INTDSRJPM193N),
+  // which stopped updating in 2017.
+  { key: 'japanPolicyRate', seriesId: 'IRSTCI01JPM156N', label: 'Japan Policy Rate' },
 ];
 
 // FRED's daily series post with a short lag and sometimes carry a "."
