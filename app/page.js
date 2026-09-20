@@ -18,6 +18,7 @@ import OptionsPositioning from './components/OptionsPositioning';
 import MarketNews from './components/MarketNews';
 import OpenInterestPanel from './components/OpenInterestPanel';
 import LiquidationsPanel from './components/LiquidationsPanel';
+import LiquidationHeatmap from './components/LiquidationHeatmap';
 import MarketRead from './components/MarketRead';
 import TabErrorBoundary from './components/TabErrorBoundary';
 import { SECTORS, BENCHMARKS } from './lib/sectors';
@@ -81,7 +82,21 @@ export default function DashboardHome() {
   const [liquidationsError, setLiquidationsError] = useState(null);
   const [ethEtfFlowsData, setEthEtfFlowsData] = useState(null);
   const [ethEtfFlowsError, setEthEtfFlowsError] = useState(null);
+  const [liquidationHeatmapData, setLiquidationHeatmapData] = useState(null);
+  const [liquidationHeatmapError, setLiquidationHeatmapError] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const fetchLiquidationHeatmap = useCallback(async () => {
+    setLiquidationHeatmapError(null);
+    try {
+      const res = await fetch('/api/liquidationheatmap');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setLiquidationHeatmapData(json);
+    } catch (e) {
+      setLiquidationHeatmapError(e.message);
+    }
+  }, []);
 
   const fetchLiquidations = useCallback(async () => {
     setLiquidationsError(null);
@@ -313,7 +328,8 @@ export default function DashboardHome() {
     fetchOpenInterest();
     fetchLiquidations();
     fetchEthEtfFlows();
-  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality, fetchAltseason, fetchEtfFlows, fetchOptions, fetchNews, fetchOpenInterest, fetchLiquidations, fetchEthEtfFlows]);
+    fetchLiquidationHeatmap();
+  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality, fetchAltseason, fetchEtfFlows, fetchOptions, fetchNews, fetchOpenInterest, fetchLiquidations, fetchEthEtfFlows, fetchLiquidationHeatmap]);
 
   return (
     <main style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
@@ -334,6 +350,7 @@ export default function DashboardHome() {
             fetchOpenInterest();
             fetchLiquidations();
             fetchEthEtfFlows();
+            fetchLiquidationHeatmap();
             if (rrgMode === 'sectors') fetchRrgSectors(benchmark);
           }}
           disabled={loading}
@@ -672,17 +689,16 @@ export default function DashboardHome() {
             <SeasonalityTable data={seasonalityData} />
           )}
 
-          <div style={{ marginTop: 20, background: '#1E1B14', border: '1px solid #3A3526', borderRadius: 6, padding: '14px 16px' }}>
-            <div style={{ fontSize: 12, color: '#C9A66B', fontWeight: 600, marginBottom: 6 }}>
-              Liquidation levels — still blocked
+          {liquidationHeatmapError ? (
+            <div style={{ marginTop: 20, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+              <strong>Liquidation cluster model fetch failed:</strong> {liquidationHeatmapError}
+              <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
+                Most likely cause: COINGLASS_API_KEY isn't set yet, or Kraken's/Coinglass's public endpoints are temporarily unavailable.
+              </div>
             </div>
-            <p style={{ fontSize: 11, color: '#8B9298', lineHeight: 1.55 }}>
-              Coinglass, the usual source for a liquidation heatmap, has no free API tier (Hobbyist starts
-              at $29/mo). There&apos;s no other free, live source for this that's been found. Confluence
-              zones (where liquidation, EMA, and options levels agree) are blocked on the same thing, plus
-              options data, which isn&apos;t built yet either.
-            </p>
-          </div>
+          ) : (
+            <LiquidationHeatmap data={liquidationHeatmapData} />
+          )}
         </TabErrorBoundary>
       )}
     </main>
