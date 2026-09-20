@@ -1,20 +1,22 @@
 // Server-side. MarginPad's public liquidation feed — genuinely free and
 // keyless (no account or API key needed for market-data endpoints).
 // Verified against MarginPad's own official Python SDK source
-// (github.com/cocchako-ops/marginpad, sdk/python/marginpad/__init__.py),
-// since marginpad.io's own docs site is unreachable from this sandbox
-// like most providers hit so far. That SDK source is also what corrected
-// an earlier wrong guess (general web search had suggested separate
-// `/recent`, `/live`, `/clusters` endpoints with pre-bucketed price
-// levels) — the real, current API is a single `/api/v1/liquidations`
-// endpoint normalizing events across 9 exchanges (Binance, Bybit, OKX,
-// Hyperliquid, Gate, HTX, dYdX, BitMEX, Bitfinex).
+// (github.com/cocchako-ops/marginpad, sdk/python/marginpad/__init__.py)
+// for the endpoint itself, since marginpad.io's own docs site is
+// unreachable from this sandbox like most providers hit so far.
 //
-// Response envelope per the SDK: {"ok": true, "data": ...} on success,
-// {"ok": false, "error": {code, message}} on failure. The exact shape of
-// `data` for this endpoint specifically (flat array vs. grouped by
-// symbol) wasn't directly confirmed, so parsing handles both and fails
-// loudly with a raw sample if neither matches.
+// The response SHAPE was confirmed by reading a real failure sample off
+// the live deployment (this route's own defensive-parsing error surfaces
+// a raw sample when nothing matches — see app/api/liquidationheatmap-bcf
+// for the same pattern). It is NOT a list of individual events with a
+// price/timestamp each — it's a running session-cumulative snapshot,
+// consistent with what MarginPad's own ecosystem docs describe ("session
+// totals... observed after collector start; no fabricated history"):
+//   { ok: true, data: { ts, src, market: { long, short }, <array of
+//     { s: symbol, liq: total liquidated, long: long-side liquidated } > } }
+// The array's own key name wasn't visible in the sample (line-wrapped out
+// of view), so it's located by scanning `data` for its one array-valued
+// property rather than a hardcoded key.
 
 export const dynamic = 'force-dynamic';
 
@@ -25,16 +27,6 @@ function pick(obj, keys) {
     if (obj[k] != null) return obj[k];
   }
   return null;
-}
-
-function normalizeEvent(e) {
-  return {
-    symbol: pick(e, ['symbol', 'coin', 'asset']),
-    side: pick(e, ['side', 'direction']),
-    price: Number(pick(e, ['price'])),
-    notionalUsd: Number(pick(e, ['notional', 'notional_usd', 'value', 'amount']) ?? 0),
-    timestamp: pick(e, ['timestamp', 'time', 't']),
-  };
 }
 
 export async function GET() {
@@ -56,39 +48,49 @@ export async function GET() {
       );
     }
 
-    const payload = json?.data ?? json;
-    let rows = null;
-    if (Array.isArray(payload)) {
-      rows = payload;
-    } else if (payload && typeof payload === 'object') {
-      // Possible grouped-by-symbol shape: flatten { BTC: [...], ETH: [...] } into one list.
-      const flattened = Object.values(payload).flat();
-      if (Array.isArray(flattened) && flattened.length > 0 && typeof flattened[0] === 'object') rows = flattened;
-    }
+    const data = json?.data ?? json;
+    const market = data?.market;
+    const coinsArray = data && typeof data === 'object' ? Object.values(data).find((v) => Array.isArray(v)) : null;
 
-    if (!rows || rows.length === 0) {
+    if (!market || !coinsArray) {
       const detail = JSON.stringify(json).slice(0, 800);
       return Response.json(
-        { error: `MarginPad's liquidations response didn't match a known shape. Raw sample: ${detail}`, detail },
+        { error: `MarginPad's liquidations response didn't match the expected shape. Raw sample: ${detail}`, detail },
         { status: 502 }
       );
     }
 
-    const events = rows
-      .map(normalizeEvent)
-      .filter((e) => e.symbol && e.side && Number.isFinite(e.price))
-      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-      .slice(0, 50);
+    const coins = coinsArray
+      .map((c) => {
+        const totalUsd = Number(pick(c, ['liq', 'total'])) || 0;
+        const longUsd = Number(pick(c, ['long'])) || 0;
+        return {
+          symbol: pick(c, ['s', 'symbol']),
+          totalUsd,
+          longUsd,
+          // Derived rather than trusting an unconfirmed `short` field name:
+          // self-consistent as long as `liq` really is long+short.
+          shortUsd: Math.max(0, totalUsd - longUsd),
+        };
+      })
+      .filter((c) => c.symbol && c.totalUsd > 0)
+      .sort((a, b) => b.totalUsd - a.totalUsd);
 
-    if (events.length === 0) {
-      const detail = JSON.stringify(rows[0]).slice(0, 500);
+    if (coins.length === 0) {
+      const detail = JSON.stringify(coinsArray[0]).slice(0, 500);
       return Response.json(
-        { error: `MarginPad's liquidation events didn't match the expected field shape. Raw sample: ${detail}`, detail },
+        { error: `MarginPad's per-coin liquidation data didn't match the expected field shape. Raw sample: ${detail}`, detail },
         { status: 502 }
       );
     }
 
-    return Response.json({ events, fetchedAt: new Date().toISOString() });
+    return Response.json({
+      asOf: data.ts ? new Date(Number(data.ts)).toISOString() : new Date().toISOString(),
+      marketLongUsd: Number(market.long) || 0,
+      marketShortUsd: Number(market.short) || 0,
+      coins,
+      fetchedAt: new Date().toISOString(),
+    });
   } catch (err) {
     return Response.json({ error: err.message || 'Fetch failed', detail: String(err) }, { status: 500 });
   }
