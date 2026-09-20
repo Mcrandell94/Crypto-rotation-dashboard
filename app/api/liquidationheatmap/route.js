@@ -108,6 +108,7 @@ export async function GET() {
       bins,
       nearestLongCluster,
       nearestShortCluster,
+      source: 'Kraken price + Coinglass aggregated OI, 4-hour bars',
       fetchedAt: new Date().toISOString(),
     });
   } catch (err) {
