@@ -53,7 +53,7 @@ export default function MacroSentiment({ data }) {
       <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: TEXT_PRIMARY }}>Macro &amp; Sentiment</h2>
       <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '4px 0 16px' }}>
         Fear &amp; Greed from alternative.me · dominance from CoinGecko's global market data · rates
-        from the St. Louis Fed&apos;s FRED
+        from the St. Louis Fed&apos;s FRED and the Bank of England&apos;s own statistical database
       </p>
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
         {data.fng && (
@@ -95,6 +95,9 @@ export default function MacroSentiment({ data }) {
         {rates?.japanPolicyRate && (
           <StatTile label="Japan Policy Rate" value={`${rates.japanPolicyRate.value.toFixed(2)}%`} />
         )}
+        {rates?.boeRate && (
+          <StatTile label="BOE Bank Rate" value={`${rates.boeRate.value.toFixed(2)}%`} />
+        )}
       </div>
       {zone && (
         <p style={{ fontSize: 11, color: TEXT_SECONDARY, marginTop: 12, lineHeight: 1.6, maxWidth: 620 }}>
@@ -106,7 +109,7 @@ export default function MacroSentiment({ data }) {
           {curve.note}
         </p>
       )}
-      {!rates && (
+      {!rates?.fedFundsRate && (
         <p style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 12 }}>
           Add FRED_API_KEY in Vercel to show Fed Funds Rate, Treasury yields, and the dollar index here.
         </p>
