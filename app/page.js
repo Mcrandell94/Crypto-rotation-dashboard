@@ -11,11 +11,22 @@ import TimeframesPanel from './components/TimeframesPanel';
 import CbCalendar from './components/CbCalendar';
 import AstroOutlook from './components/AstroOutlook';
 import PolymarketPredictions from './components/PolymarketPredictions';
+import TabErrorBoundary from './components/TabErrorBoundary';
 import { SECTORS, BENCHMARKS } from './lib/sectors';
 
 const EMA_SYMBOLS = ['BTC', 'ETH'];
 
+const TABS = [
+  { key: 'rotation', label: 'Rotation' },
+  { key: 'timeframes', label: 'Timeframes' },
+  { key: 'calendar', label: 'CB Calendar' },
+  { key: 'astro', label: 'Astro Outlook' },
+  { key: 'macro', label: 'Macro & Sentiment' },
+  { key: 'levels', label: 'Levels' },
+];
+
 export default function DashboardHome() {
+  const [activeTab, setActiveTab] = useState('rotation');
   const [activeSector, setActiveSector] = useState(SECTORS[0].key);
   const [benchmark, setBenchmark] = useState(BENCHMARKS[0].key);
 
@@ -175,143 +186,180 @@ export default function DashboardHome() {
         </button>
       </div>
 
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 14 }}>
-        {SECTORS.map((sec) => (
+      <div style={{
+        display: 'flex', gap: 4, marginTop: 20, borderBottom: '1px solid #2A3136',
+        flexWrap: 'wrap', alignItems: 'center',
+      }}>
+        {TABS.map((t) => (
           <button
-            key={sec.key}
-            onClick={() => setActiveSector(sec.key)}
+            key={t.key}
+            onClick={() => setActiveTab(t.key)}
             style={{
-              background: activeSector === sec.key ? '#1E252A' : '#171D21',
-              border: `1px solid ${activeSector === sec.key ? '#C9A66B' : '#2A3136'}`,
-              color: activeSector === sec.key ? '#C9A66B' : '#8B9298',
-              borderRadius: 4, padding: '5px 12px', fontSize: 12, cursor: 'pointer',
+              background: 'none', border: 'none',
+              borderBottom: activeTab === t.key ? '2px solid #4C7EB8' : '2px solid transparent',
+              color: activeTab === t.key ? '#E7E4DD' : '#8B9298', fontSize: 13, padding: '9px 14px',
+              cursor: 'pointer', marginBottom: -1, fontWeight: activeTab === t.key ? 600 : 400,
             }}
           >
-            {sec.label}
+            {t.label}
           </button>
         ))}
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
-        <span style={{ fontSize: 12, color: '#8B9298' }}>Measured against</span>
-        {BENCHMARKS.map((b) => (
-          <button
-            key={b.key}
-            onClick={() => setBenchmark(b.key)}
-            style={{
-              background: benchmark === b.key ? '#1E252A' : '#171D21',
-              border: `1px solid ${benchmark === b.key ? '#C9A66B' : '#2A3136'}`,
-              color: benchmark === b.key ? '#C9A66B' : '#8B9298',
-              borderRadius: 4, padding: '4px 10px', fontSize: 12, cursor: 'pointer',
-            }}
-          >
-            {b.label}
-          </button>
-        ))}
-      </div>
-
-      <p style={{ fontSize: 12, color: '#6E767B', marginTop: 10 }}>
-        {data?.fetchedAt
-          ? `Live from CoinMarketCap — last fetched ${new Date(data.fetchedAt).toLocaleTimeString()}`
-          : 'Fetching live data…'}
-      </p>
-
-      {error && (
-        <div style={{ marginTop: 20, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-          <strong>Fetch failed:</strong> {error}
-          <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
-            Most likely cause: CMC_API_KEY isn't set yet in this environment's variables.
+      {activeTab === 'rotation' && (
+        <TabErrorBoundary tabName="Rotation">
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 20 }}>
+            {SECTORS.map((sec) => (
+              <button
+                key={sec.key}
+                onClick={() => setActiveSector(sec.key)}
+                style={{
+                  background: activeSector === sec.key ? '#1E252A' : '#171D21',
+                  border: `1px solid ${activeSector === sec.key ? '#C9A66B' : '#2A3136'}`,
+                  color: activeSector === sec.key ? '#C9A66B' : '#8B9298',
+                  borderRadius: 4, padding: '5px 12px', fontSize: 12, cursor: 'pointer',
+                }}
+              >
+                {sec.label}
+              </button>
+            ))}
           </div>
-        </div>
-      )}
 
-      {rrgError ? (
-        <div style={{ marginTop: 24, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-          <strong>RRG fetch failed:</strong> {rrgError}
-          <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
-            Most likely cause: COINGECKO_API_KEY isn't set yet in this environment's variables.
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+            <span style={{ fontSize: 12, color: '#8B9298' }}>Measured against</span>
+            {BENCHMARKS.map((b) => (
+              <button
+                key={b.key}
+                onClick={() => setBenchmark(b.key)}
+                style={{
+                  background: benchmark === b.key ? '#1E252A' : '#171D21',
+                  border: `1px solid ${benchmark === b.key ? '#C9A66B' : '#2A3136'}`,
+                  color: benchmark === b.key ? '#C9A66B' : '#8B9298',
+                  borderRadius: 4, padding: '4px 10px', fontSize: 12, cursor: 'pointer',
+                }}
+              >
+                {b.label}
+              </button>
+            ))}
           </div>
-        </div>
-      ) : (
-        <>
-          <RelativeRotationGraph data={rrgData} symbols={sectorTickers} benchmark={benchmark} />
-          {rrgData?.failed?.length > 0 && (
-            <p style={{ fontSize: 11, color: '#6E767B', marginTop: 8 }}>
-              No live data for: {rrgData.failed.join(', ')} — skipped.
-            </p>
+
+          <p style={{ fontSize: 12, color: '#6E767B', marginTop: 10 }}>
+            {data?.fetchedAt
+              ? `Live from CoinMarketCap — last fetched ${new Date(data.fetchedAt).toLocaleTimeString()}`
+              : 'Fetching live data…'}
+          </p>
+
+          {error && (
+            <div style={{ marginTop: 20, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+              <strong>Fetch failed:</strong> {error}
+              <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
+                Most likely cause: CMC_API_KEY isn't set yet in this environment's variables.
+              </div>
+            </div>
           )}
-        </>
+
+          {rrgError ? (
+            <div style={{ marginTop: 24, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+              <strong>RRG fetch failed:</strong> {rrgError}
+              <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
+                Most likely cause: COINGECKO_API_KEY isn't set yet in this environment's variables.
+              </div>
+            </div>
+          ) : (
+            <>
+              <RelativeRotationGraph data={rrgData} symbols={sectorTickers} benchmark={benchmark} />
+              {rrgData?.failed?.length > 0 && (
+                <p style={{ fontSize: 11, color: '#6E767B', marginTop: 8 }}>
+                  No live data for: {rrgData.failed.join(', ')} — skipped.
+                </p>
+              )}
+            </>
+          )}
+
+          <RotationChart tickers={data?.tickers} symbols={tracked} />
+        </TabErrorBoundary>
       )}
 
-      <RotationChart tickers={data?.tickers} symbols={tracked} />
-
-      {macroError ? (
-        <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-          <strong>Macro fetch failed:</strong> {macroError}
-          <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
-            Most likely cause: COINGECKO_API_KEY isn't set yet in this environment's variables.
-          </div>
-        </div>
-      ) : (
-        <MacroSentiment data={macroData} />
+      {activeTab === 'timeframes' && (
+        <TabErrorBoundary tabName="Timeframes">
+          {timeframesError ? (
+            <div style={{ marginTop: 20, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+              <strong>Timeframes fetch failed:</strong> {timeframesError}
+            </div>
+          ) : (
+            <TimeframesPanel data={timeframesData} />
+          )}
+        </TabErrorBoundary>
       )}
 
-      {emaError ? (
-        <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-          <strong>EMA fetch failed:</strong> {emaError}
-          <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
-            Most likely cause: COINGECKO_API_KEY isn't set yet in this environment's variables.
-          </div>
-        </div>
-      ) : (
-        <EmaLevels data={emaData} symbols={EMA_SYMBOLS} />
+      {activeTab === 'calendar' && (
+        <TabErrorBoundary tabName="CB Calendar">
+          <CbCalendar />
+        </TabErrorBoundary>
       )}
 
-      {cotError ? (
-        <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-          <strong>COT fetch failed:</strong> {cotError}
-          <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
-            The CFTC's public reporting site may be temporarily unavailable — try refreshing.
-          </div>
-        </div>
-      ) : (
-        <CotPanel data={cotData} />
+      {activeTab === 'astro' && (
+        <TabErrorBoundary tabName="Astro Outlook">
+          <AstroOutlook />
+        </TabErrorBoundary>
       )}
 
-      {fundingError ? (
-        <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-          <strong>Funding/OI fetch failed:</strong> {fundingError}
-        </div>
-      ) : (
-        <FundingOI data={fundingData} symbols={tracked} />
+      {activeTab === 'macro' && (
+        <TabErrorBoundary tabName="Macro & Sentiment">
+          {macroError ? (
+            <div style={{ marginTop: 20, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+              <strong>Macro fetch failed:</strong> {macroError}
+              <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
+                Most likely cause: COINGECKO_API_KEY isn't set yet in this environment's variables.
+              </div>
+            </div>
+          ) : (
+            <MacroSentiment data={macroData} />
+          )}
+
+          {polymarketError ? (
+            <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+              <strong>Polymarket fetch failed:</strong> {polymarketError}
+            </div>
+          ) : (
+            <PolymarketPredictions data={polymarketData} />
+          )}
+
+          {fundingError ? (
+            <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+              <strong>Funding/OI fetch failed:</strong> {fundingError}
+            </div>
+          ) : (
+            <FundingOI data={fundingData} symbols={tracked} />
+          )}
+
+          {cotError ? (
+            <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+              <strong>COT fetch failed:</strong> {cotError}
+              <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
+                The CFTC's public reporting site may be temporarily unavailable — try refreshing.
+              </div>
+            </div>
+          ) : (
+            <CotPanel data={cotData} />
+          )}
+        </TabErrorBoundary>
       )}
 
-      {timeframesError ? (
-        <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-          <strong>Timeframes fetch failed:</strong> {timeframesError}
-        </div>
-      ) : (
-        <TimeframesPanel data={timeframesData} />
+      {activeTab === 'levels' && (
+        <TabErrorBoundary tabName="Levels">
+          {emaError ? (
+            <div style={{ marginTop: 20, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+              <strong>EMA fetch failed:</strong> {emaError}
+              <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
+                Most likely cause: COINGECKO_API_KEY isn't set yet in this environment's variables.
+              </div>
+            </div>
+          ) : (
+            <EmaLevels data={emaData} symbols={EMA_SYMBOLS} />
+          )}
+        </TabErrorBoundary>
       )}
-
-      {polymarketError ? (
-        <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-          <strong>Polymarket fetch failed:</strong> {polymarketError}
-        </div>
-      ) : (
-        <PolymarketPredictions data={polymarketData} />
-      )}
-
-      <CbCalendar />
-
-      <AstroOutlook />
-
-      <p style={{ fontSize: 11, color: '#6E767B', marginTop: 32, lineHeight: 1.6 }}>
-        This proves the full pipeline: browser → Next.js API route → CoinMarketCap → back to the
-        browser, with the API key never leaving the server. Once this is confirmed working live,
-        the plan is to port AI Vibe scoring and the rest of the existing dashboard's panels over
-        to read from this same kind of route instead of hardcoded data.
-      </p>
     </main>
   );
 }
