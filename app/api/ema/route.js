@@ -12,6 +12,8 @@
 
 import { COINGECKO_IDS } from '../../lib/coingecko-ids';
 
+export const dynamic = 'force-dynamic';
+
 const ASSETS = ['BTC', 'ETH'];
 const HISTORY_DAYS = 365; // the max the free Demo plan allows
 const PERIODS = [50, 200];

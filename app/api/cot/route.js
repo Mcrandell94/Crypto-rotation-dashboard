@@ -6,6 +6,8 @@
 // Contract: CME Bitcoin futures, CFTC contract market code 133741
 // ("BITCOIN - CHICAGO MERCANTILE EXCHANGE").
 
+export const dynamic = 'force-dynamic';
+
 const CFTC_BASE = 'https://publicreporting.cftc.gov/resource/6dca-aqww.json';
 const BITCOIN_CONTRACT_CODE = '133741';
 const LOOKBACK_WEEKS = 156; // ~3 years — the standard COT Index reference window

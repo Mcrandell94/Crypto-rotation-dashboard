@@ -7,6 +7,7 @@ import MacroSentiment from './components/MacroSentiment';
 import EmaLevels from './components/EmaLevels';
 import CotPanel from './components/CotPanel';
 import FundingOI from './components/FundingOI';
+import TimeframesPanel from './components/TimeframesPanel';
 import { SECTORS, BENCHMARKS } from './lib/sectors';
 
 const EMA_SYMBOLS = ['BTC', 'ETH'];
@@ -35,7 +36,21 @@ export default function DashboardHome() {
   const [emaError, setEmaError] = useState(null);
   const [cotError, setCotError] = useState(null);
   const [fundingError, setFundingError] = useState(null);
+  const [timeframesData, setTimeframesData] = useState(null);
+  const [timeframesError, setTimeframesError] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const fetchTimeframes = useCallback(async () => {
+    setTimeframesError(null);
+    try {
+      const res = await fetch('/api/timeframes');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setTimeframesData(json);
+    } catch (e) {
+      setTimeframesError(e.message);
+    }
+  }, []);
 
   const fetchEma = useCallback(async () => {
     setEmaError(null);
@@ -111,12 +126,14 @@ export default function DashboardHome() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSector, benchmark]);
 
-  // EMA and COT both track fixed BTC data, not the active sector — fetch
-  // once on mount, then refresh alongside everything else on manual refresh.
+  // EMA, COT, and Timeframes all track fixed BTC/ETH data, not the active
+  // sector — fetch once on mount, then refresh alongside everything else
+  // on manual refresh.
   useEffect(() => {
     fetchEma();
     fetchCot();
-  }, [fetchEma, fetchCot]);
+    fetchTimeframes();
+  }, [fetchEma, fetchCot, fetchTimeframes]);
 
   return (
     <main style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
@@ -127,6 +144,7 @@ export default function DashboardHome() {
             fetchData(sectorTickers, benchmark);
             fetchEma();
             fetchCot();
+            fetchTimeframes();
           }}
           disabled={loading}
           style={{
@@ -276,6 +294,14 @@ export default function DashboardHome() {
         </div>
       ) : (
         <FundingOI data={fundingData} symbols={tracked} />
+      )}
+
+      {timeframesError ? (
+        <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+          <strong>Timeframes fetch failed:</strong> {timeframesError}
+        </div>
+      ) : (
+        <TimeframesPanel data={timeframesData} />
       )}
 
       <p style={{ fontSize: 11, color: '#6E767B', marginTop: 32, lineHeight: 1.6 }}>

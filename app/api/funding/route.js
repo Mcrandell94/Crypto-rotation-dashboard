@@ -8,6 +8,8 @@
 // one we'd risk mismatching a ticker to the wrong market, so those are
 // reported as "not listed" instead of guessed).
 
+export const dynamic = 'force-dynamic';
+
 const HYPERLIQUID_INFO_URL = 'https://api.hyperliquid.xyz/info';
 
 export async function GET(request) {

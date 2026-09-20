@@ -3,6 +3,8 @@
 // the client. This is the whole reason a backend route exists instead of calling CoinMarketCap
 // directly from the React page.
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request) {
   const apiKey = process.env.CMC_API_KEY;
 
