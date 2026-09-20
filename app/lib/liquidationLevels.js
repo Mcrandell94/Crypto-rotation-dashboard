@@ -13,6 +13,7 @@
 // separately in LiquidationLevelsTracker:
 //   shortTerm  — near-term magnets, from currently-open positions
 //   mediumTerm — magnets over the past week
+//   monthTerm  — magnets over the past month
 //   longTerm   — structural magnets, read off a 1-year heatmap
 //
 // Update a horizon's capturedAt/spotAtCapture/source/levels wholesale when
@@ -49,6 +50,11 @@
 // wider time window. Its ~$74.5K band is the single brightest feature on
 // all three exchanges' weekly view, strongly reinforcing shortTerm's
 // $74.5K level (previously backed by only one exchange's leverage chart).
+// monthTerm — BitcoinCounterFlow's Heatmap Terminal, 1-month view, same
+// three exchanges. The ~$74.5K band is now the single most robustly
+// confirmed level in this entire dataset — the brightest feature on all
+// three exchanges at all THREE timeframes (24h, 1-week, and 1-month), and
+// wider/more saturated the longer the window gets.
 // longTerm — Coinglass's 1-year liquidation HEATMAP (color intensity
 // over time, Bybit + Binance) — still an eyeballed pixel-intensity read,
 // treat exact prices as approximate (±0.5-1%).
@@ -56,6 +62,8 @@ const CAPTURED_AT = '2026-09-20T19:00:00Z';
 const SPOT_AT_CAPTURE = 81200;
 const MEDIUM_CAPTURED_AT = '2026-09-21T00:27:00Z';
 const MEDIUM_SPOT_AT_CAPTURE = 81220;
+const MONTH_CAPTURED_AT = '2026-09-21T00:30:00Z';
+const MONTH_SPOT_AT_CAPTURE = 81140;
 
 export const HORIZONS = {
   shortTerm: {
@@ -84,6 +92,18 @@ export const HORIZONS = {
       { kind: 'zone', zoneLow: 80300, zoneHigh: 82150, label: 'Thin, dark stretch between spot and the band above — all three exchanges' },
       { kind: 'level', price: 78300, side: 'long', label: 'Moderate band, all three exchanges — overlaps the near-term horizon\'s $78.85K magnet' },
       { kind: 'level', price: 74500, side: 'long', label: 'Dominant, brightest cluster on all three exchanges\' weekly view by a wide margin — the single strongest magnet in this whole horizon' },
+    ],
+  },
+  monthTerm: {
+    key: 'monthTerm',
+    label: 'Monthly (1-month)',
+    capturedAt: MONTH_CAPTURED_AT,
+    spotAtCapture: MONTH_SPOT_AT_CAPTURE,
+    source: "BitcoinCounterFlow's Heatmap Terminal, 1-month view, cross-checked across OKX, Bitget, and Hyperliquid",
+    levels: [
+      { kind: 'level', price: 82700, side: 'short', label: 'Consistent moderate band above spot, all three exchanges over the full month' },
+      { kind: 'zone', zoneLow: 76800, zoneHigh: 80600, label: 'Broad thin/dark stretch below spot before the dominant band, all three exchanges' },
+      { kind: 'level', price: 74500, side: 'long', label: 'The most robustly confirmed level in this entire dataset — brightest, widest band on all three exchanges, and it strengthens the longer the window: present and dominant at 24h, 1-week, AND 1-month' },
     ],
   },
   longTerm: {
