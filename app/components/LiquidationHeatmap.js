@@ -1,5 +1,7 @@
 'use client';
 
+import { useState } from 'react';
+
 const TEXT_PRIMARY = '#E7E4DD';
 const TEXT_SECONDARY = '#8B9298';
 const TEXT_MUTED = '#6E767B';
@@ -21,8 +23,38 @@ function formatPrice(v) {
   return v == null ? '—' : `$${Math.round(v).toLocaleString()}`;
 }
 
-export default function LiquidationHeatmap({ data }) {
-  if (!data) {
+function SourceToggle({ useCoinalyze, setUseCoinalyze }) {
+  return (
+    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: TEXT_SECONDARY, cursor: 'pointer', marginBottom: 14 }}>
+      <input type="checkbox" checked={useCoinalyze} onChange={(e) => setUseCoinalyze(e.target.checked)} />
+      Use Coinalyze (hourly bars, 12 aggregated venues) instead of the Kraken + Coinglass model (4-hour bars)
+    </label>
+  );
+}
+
+export default function LiquidationHeatmap({ data, dataError, coinalyzeData, coinalyzeError }) {
+  const [useCoinalyze, setUseCoinalyze] = useState(false);
+
+  const active = useCoinalyze ? coinalyzeData : data;
+  const activeError = useCoinalyze ? coinalyzeError : dataError;
+
+  if (activeError) {
+    return (
+      <section style={{ marginTop: 32 }}>
+        <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: TEXT_PRIMARY }}>
+          BTC Liquidation Clusters (Modeled)
+        </h2>
+        <div style={{ marginTop: 12 }}>
+          <SourceToggle useCoinalyze={useCoinalyze} setUseCoinalyze={setUseCoinalyze} />
+        </div>
+        <div style={{ background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+          <strong>This source failed to load:</strong> {activeError}
+        </div>
+      </section>
+    );
+  }
+
+  if (!active) {
     return (
       <section style={{ marginTop: 32 }}>
         <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: TEXT_PRIMARY }}>
@@ -33,10 +65,10 @@ export default function LiquidationHeatmap({ data }) {
     );
   }
 
-  const { price, bins, nearestLongCluster, nearestShortCluster, lookbackDays } = data;
+  const { price, bins, nearestLongCluster, nearestShortCluster, lookbackDays, source } = active;
 
-  const active = bins.filter((b) => b.longWeight > 0 || b.shortWeight > 0);
-  const nearest = [...active]
+  const activeBins = bins.filter((b) => b.longWeight > 0 || b.shortWeight > 0);
+  const nearest = [...activeBins]
     .sort((a, b) => Math.abs((a.priceLow + a.priceHigh) / 2 - price) - Math.abs((b.priceLow + b.priceHigh) / 2 - price))
     .slice(0, MAX_ROWS)
     .sort((a, b) => b.priceLow - a.priceLow);
@@ -47,12 +79,15 @@ export default function LiquidationHeatmap({ data }) {
       <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: TEXT_PRIMARY }}>
         BTC Liquidation Clusters (Modeled)
       </h2>
-      <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '4px 0 16px', maxWidth: 680, lineHeight: 1.5 }}>
+      <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '4px 0 12px', maxWidth: 680, lineHeight: 1.5 }}>
         Modeled from real BTC price and open-interest data — not an exchange-reported figure the way
         the panels above are. Detects open-interest surges, projects where leveraged longs/shorts at
         that moment would get liquidated, and clears a level once price actually trades through it.
-        {lookbackDays ? ` Built from ~${lookbackDays} days of 4-hour bars.` : ''}
+        {source ? ` Source: ${source}.` : ''}
+        {lookbackDays ? ` ~${lookbackDays} days of lookback.` : ''}
       </p>
+
+      <SourceToggle useCoinalyze={useCoinalyze} setUseCoinalyze={setUseCoinalyze} />
 
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 16 }}>
         <div style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: 16, flex: '1 1 160px' }}>

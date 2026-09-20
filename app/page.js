@@ -84,6 +84,8 @@ export default function DashboardHome() {
   const [ethEtfFlowsError, setEthEtfFlowsError] = useState(null);
   const [liquidationHeatmapData, setLiquidationHeatmapData] = useState(null);
   const [liquidationHeatmapError, setLiquidationHeatmapError] = useState(null);
+  const [liquidationHeatmapCoinalyzeData, setLiquidationHeatmapCoinalyzeData] = useState(null);
+  const [liquidationHeatmapCoinalyzeError, setLiquidationHeatmapCoinalyzeError] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const fetchLiquidationHeatmap = useCallback(async () => {
@@ -95,6 +97,18 @@ export default function DashboardHome() {
       setLiquidationHeatmapData(json);
     } catch (e) {
       setLiquidationHeatmapError(e.message);
+    }
+  }, []);
+
+  const fetchLiquidationHeatmapCoinalyze = useCallback(async () => {
+    setLiquidationHeatmapCoinalyzeError(null);
+    try {
+      const res = await fetch('/api/liquidationheatmap-coinalyze');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setLiquidationHeatmapCoinalyzeData(json);
+    } catch (e) {
+      setLiquidationHeatmapCoinalyzeError(e.message);
     }
   }, []);
 
@@ -329,7 +343,8 @@ export default function DashboardHome() {
     fetchLiquidations();
     fetchEthEtfFlows();
     fetchLiquidationHeatmap();
-  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality, fetchAltseason, fetchEtfFlows, fetchOptions, fetchNews, fetchOpenInterest, fetchLiquidations, fetchEthEtfFlows, fetchLiquidationHeatmap]);
+    fetchLiquidationHeatmapCoinalyze();
+  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality, fetchAltseason, fetchEtfFlows, fetchOptions, fetchNews, fetchOpenInterest, fetchLiquidations, fetchEthEtfFlows, fetchLiquidationHeatmap, fetchLiquidationHeatmapCoinalyze]);
 
   return (
     <main style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
@@ -351,6 +366,7 @@ export default function DashboardHome() {
             fetchLiquidations();
             fetchEthEtfFlows();
             fetchLiquidationHeatmap();
+            fetchLiquidationHeatmapCoinalyze();
             if (rrgMode === 'sectors') fetchRrgSectors(benchmark);
           }}
           disabled={loading}
@@ -689,16 +705,12 @@ export default function DashboardHome() {
             <SeasonalityTable data={seasonalityData} />
           )}
 
-          {liquidationHeatmapError ? (
-            <div style={{ marginTop: 20, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-              <strong>Liquidation cluster model fetch failed:</strong> {liquidationHeatmapError}
-              <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
-                Most likely cause: COINGLASS_API_KEY isn't set yet, or Kraken's/Coinglass's public endpoints are temporarily unavailable.
-              </div>
-            </div>
-          ) : (
-            <LiquidationHeatmap data={liquidationHeatmapData} />
-          )}
+          <LiquidationHeatmap
+            data={liquidationHeatmapData}
+            dataError={liquidationHeatmapError}
+            coinalyzeData={liquidationHeatmapCoinalyzeData}
+            coinalyzeError={liquidationHeatmapCoinalyzeError}
+          />
         </TabErrorBoundary>
       )}
     </main>
