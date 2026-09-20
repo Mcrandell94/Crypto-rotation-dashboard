@@ -15,10 +15,13 @@
 // sum what every call/put would pay out if the price settled there, and
 // take the strike that minimizes that total.
 
+import { FOMC_MEETINGS, decisionDateTime } from '../../lib/fomc-calendar';
+
 export const dynamic = 'force-dynamic';
 
 const BASE_URL = 'https://www.deribit.com/api/v2';
 const MONTHS = { JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5, JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11 };
+const QUARTER_MONTHS = new Set([2, 5, 8, 11]); // Mar, Jun, Sep, Dec
 
 function parseInstrument(name) {
   const parts = name.split('-');
@@ -51,6 +54,43 @@ function maxPainFor(instruments) {
     if (best === null || payout < best.payout) best = { strike: candidate, payout };
   }
   return best ? best.strike : null;
+}
+
+// Deribit lists weekly expiries every Friday, with the last Friday of each
+// month promoted to "monthly", and the last Friday of Mar/Jun/Sep/Dec
+// further promoted to "quarterly" — the highest-open-interest, most-watched
+// dates. Real, structural classification, not a hand-picked label.
+function isLastFridayOfMonth(date) {
+  const next = new Date(date);
+  next.setUTCDate(date.getUTCDate() + 7);
+  return next.getUTCMonth() !== date.getUTCMonth();
+}
+function classifyExpiry(date) {
+  if (date.getUTCDay() !== 5 || !isLastFridayOfMonth(date)) return 'weekly';
+  return QUARTER_MONTHS.has(date.getUTCMonth()) ? 'quarterly' : 'monthly';
+}
+
+// If this expiry falls within 4 days after a real FOMC decision (see
+// app/lib/fomc-calendar.js), traders hedging the announcement itself show
+// up as a distinctly elevated put/call ratio on that one date — a real,
+// checkable pattern, not asserted without the data to back it.
+function fomcNote(expiry) {
+  for (const meeting of FOMC_MEETINGS) {
+    const decision = decisionDateTime(meeting);
+    const daysAfter = Math.round((expiry - decision) / 86400000);
+    if (daysAfter >= 0 && daysAfter <= 4) {
+      return { daysAfter, label: `${daysAfter === 0 ? 'Same day as' : `${daysAfter} day${daysAfter === 1 ? '' : 's'} after`} the Fed decision` };
+    }
+  }
+  return null;
+}
+
+function expiryNote(type, expiry) {
+  const fomc = fomcNote(expiry);
+  if (fomc) return fomc.label;
+  if (type === 'quarterly') return 'Quarterly expiry — the big one';
+  if (type === 'monthly') return 'Monthly expiry';
+  return null;
 }
 
 export async function GET() {
@@ -94,16 +134,21 @@ export async function GET() {
     }
 
     const now = new Date();
-    const expiries = [...expiryMap.entries()]
-      .filter(([key]) => new Date(key) >= now)
+    const futureExpiries = [...expiryMap.entries()].filter(([key]) => new Date(key) >= now);
+
+    const expiries = futureExpiries
       .sort((a, b) => new Date(a[0]) - new Date(b[0]))
       .slice(0, 6)
       .map(([key, group]) => {
         const callOI = group.filter((i) => i.type === 'call').reduce((s, i) => s + i.openInterest, 0);
         const putOI = group.filter((i) => i.type === 'put').reduce((s, i) => s + i.openInterest, 0);
+        const expiry = group[0].expiry;
+        const type = classifyExpiry(expiry);
         return {
           date: group[0].expiryLabel,
           expiry: key,
+          type,
+          note: expiryNote(type, expiry),
           putCallRatio: callOI ? Math.round((putOI / callOI) * 100) / 100 : null,
           maxPain: maxPainFor(group),
           callOI: Math.round(callOI * 10) / 10,
@@ -121,6 +166,17 @@ export async function GET() {
         openInterest: Math.round(i.openInterest * 10) / 10,
       }));
 
+    // Call walls: the strikes with the heaviest call open interest — a
+    // cluster of written calls tends to act as resistance/a price magnet.
+    const callWalls = [...new Set(
+      [...instruments].filter((i) => i.type === 'call').sort((a, b) => b.openInterest - a.openInterest).slice(0, 6).map((i) => i.strike)
+    )].sort((a, b) => a - b).slice(0, 2);
+
+    // Downside insurance: the heaviest put open interest below current spot.
+    const downsideInsuranceStrike = [...instruments]
+      .filter((i) => i.type === 'put' && (!price || i.strike < price))
+      .sort((a, b) => b.openInterest - a.openInterest)[0]?.strike ?? null;
+
     return Response.json({
       price,
       totalCallOI: Math.round(totalCallOI * 10) / 10,
@@ -129,12 +185,19 @@ export async function GET() {
       putsPct,
       vol24hCalls: Math.round(vol24hCalls * 10) / 10,
       vol24hPuts: Math.round(vol24hPuts * 10) / 10,
+      totalBookOI: Math.round(totalOI * 10) / 10,
+      totalExpiryCount: futureExpiries.length,
       expiries,
       topPositions,
+      callWalls,
+      downsideInsuranceStrike,
       instrumentCount: instruments.length,
       fetchedAt: new Date().toISOString(),
     });
   } catch (err) {
-    return Response.json({ error: 'Fetch failed', detail: String(err) }, { status: 500 });
+    return Response.json(
+      { error: err.message || 'Fetch failed', detail: err.detail || String(err) },
+      { status: err.status || 500 }
+    );
   }
 }
