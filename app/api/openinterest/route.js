@@ -71,8 +71,9 @@ async function fetchOiForSymbol(symbol, apiKey) {
     .sort((a, b) => b.openInterestUsd - a.openInterestUsd);
 
   if (byExchange.length === 0) {
-    const err = new Error(`Coinglass open interest response for ${symbol} didn't match the expected field shape`);
-    err.detail = JSON.stringify(rows[0]).slice(0, 500);
+    const detail = JSON.stringify(rows[0]).slice(0, 500);
+    const err = new Error(`Coinglass open interest response for ${symbol} didn't match the expected field shape. Raw sample: ${detail}`);
+    err.detail = detail;
     throw err;
   }
 

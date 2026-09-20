@@ -67,8 +67,9 @@ export async function GET() {
     }
 
     if (!rows || rows.length === 0) {
+      const detail = JSON.stringify(json).slice(0, 800);
       return Response.json(
-        { error: "MarginPad's liquidations response didn't match a known shape", detail: JSON.stringify(json).slice(0, 800) },
+        { error: `MarginPad's liquidations response didn't match a known shape. Raw sample: ${detail}`, detail },
         { status: 502 }
       );
     }
@@ -80,11 +81,9 @@ export async function GET() {
       .slice(0, 50);
 
     if (events.length === 0) {
+      const detail = JSON.stringify(rows[0]).slice(0, 500);
       return Response.json(
-        {
-          error: "MarginPad's liquidation events didn't match the expected field shape — needs its parsing adjusted to match the raw sample below",
-          detail: JSON.stringify(rows[0]).slice(0, 500),
-        },
+        { error: `MarginPad's liquidation events didn't match the expected field shape. Raw sample: ${detail}`, detail },
         { status: 502 }
       );
     }

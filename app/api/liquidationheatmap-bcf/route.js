@@ -81,11 +81,9 @@ export async function GET() {
     const json = await res.json();
     const rows = parseRows(json);
     if (!rows || rows.length === 0) {
+      const detail = JSON.stringify(json).slice(0, 800);
       return Response.json(
-        {
-          error: "BitcoinCounterFlow's liquidation-heatmap response didn't match any known field shape — needs its parsing adjusted to match the raw sample below",
-          detail: JSON.stringify(json).slice(0, 800),
-        },
+        { error: `BitcoinCounterFlow's liquidation-heatmap response didn't match any known field shape. Raw sample: ${detail}`, detail },
         { status: 502 }
       );
     }
