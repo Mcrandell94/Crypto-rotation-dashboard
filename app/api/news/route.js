@@ -71,11 +71,9 @@ export async function GET() {
       .filter((a) => a.title && a.link);
 
     if (articles.length === 0) {
+      const detail = JSON.stringify(rows[0]).slice(0, 500);
       return Response.json(
-        {
-          error: "CoinStats news response didn't match any known field shape — the API's exact response fields couldn't be verified from this environment, so parsing needs adjusting to match the raw sample below",
-          detail: JSON.stringify(rows[0]).slice(0, 500),
-        },
+        { error: `CoinStats news response didn't match any known field shape. Raw sample: ${detail}`, detail },
         { status: 502 }
       );
     }
