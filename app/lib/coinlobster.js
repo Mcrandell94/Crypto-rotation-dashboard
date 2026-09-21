@@ -42,17 +42,31 @@ export function pick(obj, keys) {
 }
 
 export async function fetchCoinLobster(tool, params, apiKey, { revalidateSeconds = 300 } = {}) {
+  // Trimmed defensively — a stray trailing newline/space from copy-paste
+  // into Vercel's env var UI would silently break the Authorization header
+  // and produce exactly the generic 401 this API returns for any bad key.
+  const key = (apiKey || '').trim();
   const qs = new URLSearchParams(params).toString();
   const url = `${BASE_URL}/${tool}${qs ? `?${qs}` : ''}`;
 
   const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${apiKey}`, Accept: 'application/json' },
+    headers: { Authorization: `Bearer ${key}`, Accept: 'application/json' },
     next: { revalidate: revalidateSeconds },
   });
 
   if (!res.ok) {
     const detail = await res.text();
-    const err = new Error(`CoinLobster returned ${res.status} for ${tool}. Raw response: ${detail.slice(0, 400)}`);
+    // Never the full key — but on a 401 specifically, its length and a few
+    // characters from each end are safe to surface and let us compare
+    // against what the site shows, to catch a copy-paste mismatch/typo
+    // without needing to see the secret itself.
+    const keyHint =
+      res.status === 401
+        ? key
+          ? ` [key check: length=${key.length}, starts "${key.slice(0, 6)}", ends "${key.slice(-4)}"]`
+          : ' [key check: COINLOBSTER_API_KEY read as EMPTY at request time]'
+        : '';
+    const err = new Error(`CoinLobster returned ${res.status} for ${tool}.${keyHint} Raw response: ${detail.slice(0, 400)}`);
     err.status = res.status;
     err.detail = detail;
     throw err;
