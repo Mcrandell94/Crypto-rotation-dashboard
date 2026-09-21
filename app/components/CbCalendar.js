@@ -57,6 +57,32 @@ function expirySeverity(type) {
 
 const SEVERITY_COLOR = { high: HIGH, medium: MEDIUM, low: LOW };
 
+const HORIZON_OPTIONS = [
+  { key: 3, label: '3 months' },
+  { key: 6, label: '6 months' },
+];
+
+function HorizonPicker({ horizonMonths, setHorizonMonths }) {
+  return (
+    <div style={{ display: 'flex', gap: 4 }}>
+      {HORIZON_OPTIONS.map((o) => (
+        <button
+          key={o.key}
+          onClick={() => setHorizonMonths(o.key)}
+          style={{
+            background: horizonMonths === o.key ? '#1E252A' : CARD_BG,
+            border: `1px solid ${horizonMonths === o.key ? AMBER : CARD_BORDER}`,
+            color: horizonMonths === o.key ? AMBER : TEXT_SECONDARY,
+            borderRadius: 4, padding: '3px 10px', fontSize: 11, cursor: 'pointer',
+          }}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function buildCentralBankEvents(now) {
   const banks = [
     { key: 'fomc', name: 'Fed', full: 'Federal Reserve — FOMC', meetings: FOMC_MEETINGS, decisionDateTime: fomcDecisionDateTime, tz: 'America/New_York', label: (m) => `${m.start}–${m.end}` },
@@ -179,6 +205,7 @@ function EventCard({ ev, now }) {
 
 export default function CbCalendar({ optionsData, fedOddsData, fedOddsError, congressData, congressError }) {
   const [now, setNow] = useState(null);
+  const [horizonMonths, setHorizonMonths] = useState(3);
 
   // Computed on mount rather than during render, so the server-rendered
   // markup can't disagree with the client's clock (hydration mismatch).
@@ -221,19 +248,33 @@ export default function CbCalendar({ optionsData, fedOddsData, fedOddsError, con
   });
 
   events.sort((a, b) => a.date - b.date);
-  // Keep the calendar focused: everything still-upcoming, plus the last
-  // couple of resolved meetings for context.
-  const upcoming = events.filter((e) => !e.resolved);
+
+  // The horizon toggle scopes scheduled events (central bank meetings,
+  // options expiries) to the next N months. Legislative tracking isn't a
+  // scheduled future date — it's a live status check on a bill that may
+  // have last moved months ago — so it stays visible regardless of window.
+  const cutoff = new Date(now);
+  cutoff.setMonth(cutoff.getMonth() + horizonMonths);
+
+  // Keep the calendar focused: everything still-upcoming within the
+  // window, plus the last couple of resolved meetings for context.
+  const upcoming = events.filter(
+    (e) => !e.resolved && (e.category === 'legislative' || e.date <= cutoff)
+  );
   const recentlyResolved = events.filter((e) => e.resolved).slice(-3);
   const shown = [...recentlyResolved, ...upcoming];
 
   return (
     <section style={{ marginTop: 32 }}>
-      <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: TEXT_PRIMARY }}>Critical Dates</h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 8 }}>
+        <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: TEXT_PRIMARY }}>Critical Dates</h2>
+        <HorizonPicker horizonMonths={horizonMonths} setHorizonMonths={setHorizonMonths} />
+      </div>
       <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '4px 0 4px' }}>
         Central bank decisions (Fed, BOE, BOJ — hand-maintained from each bank's own published calendar),
         BTC options expiries (live, mirrors the Options panel on Macro & Seasonality), and crypto
-        market-structure legislation (live, from Congress.gov's own API).
+        market-structure legislation (live, from Congress.gov's own API), scoped to the window above.
+        Legislative tracking always shows regardless of window — it's a live status check, not a scheduled date.
       </p>
       <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '0 0 14px', lineHeight: 1.5 }}>
         Severity is a judgment call, not an official rating — for Fed meetings it's driven by
@@ -267,7 +308,7 @@ export default function CbCalendar({ optionsData, fedOddsData, fedOddsError, con
       )}
 
       {shown.length === 0 ? (
-        <p style={{ fontSize: 12, color: TEXT_MUTED, marginTop: 16 }}>No dates in the hand-maintained schedule.</p>
+        <p style={{ fontSize: 12, color: TEXT_MUTED, marginTop: 16 }}>No dates within the next {horizonMonths} months.</p>
       ) : (
         <div>
           {shown.map((ev) => (
