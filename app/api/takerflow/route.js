@@ -18,31 +18,55 @@
 // tickers (below) that are very likely to actually be listed Coinglass
 // futures markets. It's a watchlist, not this dashboard's full ~70-ticker
 // sector list — fetching all of those on every page load/refresh would
-// mean dozens of extra Coinglass calls per refresh against an unknown
-// per-minute limit on this project's free/trial plan (Coinglass's own
-// rate-limit docs don't publish a number per tier), which risks 429s on
-// everything else this route serves. With `?symbol=XYZ`, fetches just
-// that one ticker on demand across all ranges — used for the "other
-// tickers" picker for anything outside the watchlist. Not every ticker
-// this dashboard tracks elsewhere (small-caps, memes) is necessarily a
-// listed futures market on Coinglass; when it isn't, this fails loudly
-// with Coinglass's own response rather than guessing a value.
+// mean dozens of extra Coinglass calls per refresh against a per-tier
+// limit Coinglass's own docs don't publish a number for (they only say it
+// varies by plan and point to response headers instead). With
+// `?symbol=XYZ`, fetches just that one ticker on demand across all
+// ranges — used for the "other tickers" picker for anything outside the
+// watchlist. Not every ticker this dashboard tracks elsewhere (small-caps,
+// memes) is necessarily a listed futures market on Coinglass; when it
+// isn't, this fails loudly with Coinglass's own response rather than
+// guessing a value.
+//
+// Two mitigations against that unpublished limit, both real rather than
+// guessed:
+// 1. Every response here echoes the `API-KEY-MAX-LIMIT` / `API-KEY-
+//    USE-LIMIT` headers Coinglass's own docs say every call carries, as
+//    `rateLimit` — the actual per-minute ceiling and current usage for
+//    this key, visible in the panel itself, not assumed. Once real
+//    numbers are visible there, the watchlist can be sized to fit them
+//    with evidence instead of a guess.
+// 2. Leaderboard rows cache for 5 minutes (LEADERBOARD_REVALIDATE_SECONDS)
+//    via Next's fetch Data Cache — much longer than the 60s the primary
+//    BTC/ETH/on-demand lookups use, since the leaderboard doesn't need
+//    second-by-second freshness. Repeated page loads/refreshes within
+//    that window reuse the cached result instead of re-hitting Coinglass,
+//    so growing the watchlist doesn't multiply sustained request rate 1:1
+//    with how often the page is opened.
 
 export const dynamic = 'force-dynamic';
 
 const BASE_URL = 'https://open-api-v4.coinglass.com/api';
 const RANGES = ['5m', '1h', '4h', '24h'];
 const LEADERBOARD_RANGE = '1h';
+const LEADERBOARD_REVALIDATE_SECONDS = 300;
 const LEADERBOARD_WATCHLIST = [
   'SOL', 'XRP', 'DOGE', 'ADA', 'AVAX', 'LINK', 'DOT', 'TRX',
   'BNB', 'TON', 'LTC', 'BCH', 'UNI', 'AAVE', 'ARB', 'ATOM',
 ];
 
-async function fetchTakerFlow(symbol, range, apiKey) {
+async function fetchTakerFlow(symbol, range, apiKey, { revalidateSeconds = 60, rateLimitSink } = {}) {
   const res = await fetch(`${BASE_URL}/futures/taker-buy-sell-volume/exchange-list?symbol=${symbol}&range=${range}`, {
     headers: { 'CG-API-KEY': apiKey, Accept: 'application/json' },
-    next: { revalidate: 60 },
+    next: { revalidate: revalidateSeconds },
   });
+
+  if (rateLimitSink) {
+    const max = res.headers.get('api-key-max-limit');
+    const used = res.headers.get('api-key-use-limit');
+    if (max != null) rateLimitSink.max = max;
+    if (used != null) rateLimitSink.used = used;
+  }
 
   if (!res.ok) {
     const detail = await res.text();
@@ -79,8 +103,8 @@ async function fetchTakerFlow(symbol, range, apiKey) {
   };
 }
 
-async function fetchSymbol(symbol, apiKey) {
-  const results = await Promise.all(RANGES.map((r) => fetchTakerFlow(symbol, r, apiKey)));
+async function fetchSymbol(symbol, apiKey, opts) {
+  const results = await Promise.all(RANGES.map((r) => fetchTakerFlow(symbol, r, apiKey, opts)));
   const byRange = {};
   const rangesFailed = [];
   for (const r of results) {
@@ -93,8 +117,8 @@ async function fetchSymbol(symbol, apiKey) {
   return { symbol, byRange, rangesFailed };
 }
 
-async function fetchLeaderboardRow(symbol, apiKey) {
-  const r = await fetchTakerFlow(symbol, LEADERBOARD_RANGE, apiKey);
+async function fetchLeaderboardRow(symbol, apiKey, opts) {
+  const r = await fetchTakerFlow(symbol, LEADERBOARD_RANGE, apiKey, opts);
   if (r.error) return { symbol, error: r.error };
   const { byExchange, ...rest } = r;
   return { symbol, ...rest };
@@ -129,7 +153,8 @@ export async function GET(request) {
 
   try {
     if (requestedSymbol) {
-      const result = await fetchSymbol(requestedSymbol, apiKey);
+      const rateLimitSink = {};
+      const result = await fetchSymbol(requestedSymbol, apiKey, { revalidateSeconds: 60, rateLimitSink });
       if (Object.keys(result.byRange).length === 0) {
         return Response.json(
           {
@@ -139,13 +164,20 @@ export async function GET(request) {
           { status: 502 }
         );
       }
-      return Response.json({ assets: { [requestedSymbol]: result }, fetchedAt: new Date().toISOString() });
+      return Response.json({
+        assets: { [requestedSymbol]: result },
+        rateLimit: rateLimitSink.max != null ? rateLimitSink : null,
+        fetchedAt: new Date().toISOString(),
+      });
     }
 
+    const rateLimitSink = {};
     const [btc, eth, ...watchlistResults] = await Promise.all([
-      fetchSymbol('BTC', apiKey),
-      fetchSymbol('ETH', apiKey),
-      ...LEADERBOARD_WATCHLIST.map((s) => fetchLeaderboardRow(s, apiKey)),
+      fetchSymbol('BTC', apiKey, { revalidateSeconds: 60, rateLimitSink }),
+      fetchSymbol('ETH', apiKey, { revalidateSeconds: 60, rateLimitSink }),
+      ...LEADERBOARD_WATCHLIST.map((s) =>
+        fetchLeaderboardRow(s, apiKey, { revalidateSeconds: LEADERBOARD_REVALIDATE_SECONDS, rateLimitSink })
+      ),
     ]);
 
     if (Object.keys(btc.byRange).length === 0 && Object.keys(eth.byRange).length === 0) {
@@ -175,7 +207,12 @@ export async function GET(request) {
 
     const leaderboard = { ...buildLeaderboard(pool), tickersFailed: leaderboardFailed };
 
-    return Response.json({ assets: { BTC: btc, ETH: eth }, leaderboard, fetchedAt: new Date().toISOString() });
+    return Response.json({
+      assets: { BTC: btc, ETH: eth },
+      leaderboard,
+      rateLimit: rateLimitSink.max != null ? rateLimitSink : null,
+      fetchedAt: new Date().toISOString(),
+    });
   } catch (err) {
     return Response.json({ error: err.message || 'Fetch failed', detail: String(err) }, { status: 500 });
   }

@@ -257,6 +257,14 @@ export default function TakerFlow({ data }) {
           No live data for: {asset.rangesFailed.map((f) => f.range).join(', ')} — skipped.
         </p>
       )}
+
+      {data.rateLimit && (
+        <p style={{ fontSize: 10, color: TEXT_MUTED, marginTop: 14 }}>
+          Coinglass rate limit this key is actually hitting: {data.rateLimit.used}/{data.rateLimit.max} requests —
+          real numbers from Coinglass's own response headers, used to size the watchlist above with evidence
+          instead of a guess.
+        </p>
+      )}
     </section>
   );
 }
