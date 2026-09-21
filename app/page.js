@@ -77,6 +77,10 @@ export default function DashboardHome() {
   const [optionsError, setOptionsError] = useState(null);
   const [fedOddsData, setFedOddsData] = useState(null);
   const [fedOddsError, setFedOddsError] = useState(null);
+  const [congressData, setCongressData] = useState(null);
+  const [congressError, setCongressError] = useState(null);
+  const [cpiData, setCpiData] = useState(null);
+  const [cpiError, setCpiError] = useState(null);
   const [newsData, setNewsData] = useState(null);
   const [newsError, setNewsError] = useState(null);
   const [openInterestData, setOpenInterestData] = useState(null);
@@ -240,6 +244,30 @@ export default function DashboardHome() {
       setFedOddsData(json);
     } catch (e) {
       setFedOddsError(e.message);
+    }
+  }, []);
+
+  const fetchCongressBills = useCallback(async () => {
+    setCongressError(null);
+    try {
+      const res = await fetch('/api/congressbills');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setCongressData(json);
+    } catch (e) {
+      setCongressError(e.message);
+    }
+  }, []);
+
+  const fetchCpi = useCallback(async () => {
+    setCpiError(null);
+    try {
+      const res = await fetch('/api/cpi');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setCpiData(json);
+    } catch (e) {
+      setCpiError(e.message);
     }
   }, []);
 
@@ -410,6 +438,8 @@ export default function DashboardHome() {
     fetchEtfFlows();
     fetchOptions();
     fetchFedOdds();
+    fetchCongressBills();
+    fetchCpi();
     fetchNews();
     fetchOpenInterest();
     fetchLiquidations();
@@ -420,7 +450,7 @@ export default function DashboardHome() {
     fetchLiquidationFeed();
     fetchBtcPrice();
     fetchEthPrice();
-  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality, fetchAltseason, fetchEtfFlows, fetchOptions, fetchFedOdds, fetchNews, fetchOpenInterest, fetchLiquidations, fetchEthEtfFlows, fetchLiquidationHeatmap, fetchLiquidationHeatmapCoinalyze, fetchLiquidationHeatmapBcf, fetchLiquidationFeed, fetchBtcPrice, fetchEthPrice]);
+  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality, fetchAltseason, fetchEtfFlows, fetchOptions, fetchFedOdds, fetchCongressBills, fetchCpi, fetchNews, fetchOpenInterest, fetchLiquidations, fetchEthEtfFlows, fetchLiquidationHeatmap, fetchLiquidationHeatmapCoinalyze, fetchLiquidationHeatmapBcf, fetchLiquidationFeed, fetchBtcPrice, fetchEthPrice]);
 
   return (
     <main style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
@@ -438,6 +468,8 @@ export default function DashboardHome() {
             fetchEtfFlows();
             fetchOptions();
             fetchFedOdds();
+            fetchCongressBills();
+            fetchCpi();
             fetchNews();
             fetchOpenInterest();
             fetchLiquidations();
@@ -624,6 +656,8 @@ export default function DashboardHome() {
             optionsData={optionsData}
             fedOddsData={fedOddsData}
             fedOddsError={fedOddsError}
+            congressData={congressData}
+            congressError={congressError}
           />
         </TabErrorBoundary>
       )}
@@ -644,7 +678,7 @@ export default function DashboardHome() {
               </div>
             </div>
           ) : (
-            <MacroSentiment data={macroData} />
+            <MacroSentiment data={macroData} cpiData={cpiData} cpiError={cpiError} />
           )}
 
           {newsError ? (

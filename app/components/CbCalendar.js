@@ -85,6 +85,23 @@ function buildCentralBankEvents(now) {
   return events;
 }
 
+function buildLegislativeEvents(congressData) {
+  if (!congressData?.bills) return [];
+  return congressData.bills
+    .filter((b) => !b.error && b.latestAction?.date)
+    .map((b) => ({
+      id: `bill-${b.congress}-${b.billType}-${b.billNumber}`,
+      date: new Date(`${b.latestAction.date}T00:00:00Z`),
+      name: b.label,
+      shortName: b.label,
+      category: 'legislative',
+      resolved: false, // ongoing tracking — real enacted/failed status isn't parsed from action text here
+      severity: 'medium',
+      billUrl: b.url,
+      latestActionText: b.latestAction.text,
+    }));
+}
+
 function buildOptionsEvents(optionsData) {
   const btc = optionsData?.assets?.BTC;
   if (!btc?.expiries) return [];
@@ -112,11 +129,25 @@ function EventCard({ ev, now }) {
           <span style={{ fontSize: 11, color: TEXT_MUTED }}>{fmtDateTime(ev.date, ev.tz)}</span>
         </div>
         <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-          <Badge color={ev.category === 'central-bank' ? '#4C7EB8' : '#8B6FB8'}>
-            {ev.category === 'central-bank' ? 'Central bank' : 'Options expiry'}
+          <Badge color={ev.category === 'central-bank' ? '#4C7EB8' : ev.category === 'legislative' ? '#C9A66B' : '#8B6FB8'}>
+            {ev.category === 'central-bank' ? 'Central bank' : ev.category === 'legislative' ? 'Legislative' : 'Options expiry'}
           </Badge>
           {ev.resolved && <Badge color={TEXT_MUTED}>Resolved</Badge>}
         </div>
+
+        {ev.category === 'legislative' && (
+          <div style={{ fontSize: 12, color: TEXT_SECONDARY, marginTop: 8, lineHeight: 1.6 }}>
+            Latest action: {ev.latestActionText}
+            {ev.billUrl && (
+              <>
+                {' — '}
+                <a href={ev.billUrl} target="_blank" rel="noopener noreferrer" style={{ color: AMBER }}>
+                  track on Congress.gov
+                </a>
+              </>
+            )}
+          </div>
+        )}
 
         {ev.category === 'central-bank' && !ev.resolved && ev.marketOutcomes && (
           <div style={{ fontSize: 12, color: TEXT_SECONDARY, marginTop: 8, lineHeight: 1.6 }}>
@@ -146,7 +177,7 @@ function EventCard({ ev, now }) {
   );
 }
 
-export default function CbCalendar({ optionsData, fedOddsData, fedOddsError }) {
+export default function CbCalendar({ optionsData, fedOddsData, fedOddsError, congressData, congressError }) {
   const [now, setNow] = useState(null);
 
   // Computed on mount rather than during render, so the server-rendered
@@ -164,7 +195,7 @@ export default function CbCalendar({ optionsData, fedOddsData, fedOddsError }) {
     );
   }
 
-  let events = [...buildCentralBankEvents(now), ...buildOptionsEvents(optionsData)];
+  let events = [...buildCentralBankEvents(now), ...buildOptionsEvents(optionsData), ...buildLegislativeEvents(congressData)];
 
   // Attach live Polymarket odds to the nearest upcoming Fed meeting only —
   // the market tracks "the next decision," not a specific date.
@@ -183,6 +214,9 @@ export default function CbCalendar({ optionsData, fedOddsData, fedOddsError }) {
       );
       return { ...ev, severity };
     }
+    if (ev.category === 'legislative') {
+      return ev;
+    }
     return { ...ev, severity: expirySeverity(ev.expiry.type) };
   });
 
@@ -197,8 +231,9 @@ export default function CbCalendar({ optionsData, fedOddsData, fedOddsError }) {
     <section style={{ marginTop: 32 }}>
       <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: TEXT_PRIMARY }}>Critical Dates</h2>
       <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '4px 0 4px' }}>
-        Central bank decisions (Fed, BOE, BOJ — hand-maintained from each bank's own published calendar)
-        and BTC options expiries (live, mirrors the Options panel on Macro & Seasonality).
+        Central bank decisions (Fed, BOE, BOJ — hand-maintained from each bank's own published calendar),
+        BTC options expiries (live, mirrors the Options panel on Macro & Seasonality), and crypto
+        market-structure legislation (live, from Congress.gov's own API).
       </p>
       <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '0 0 14px', lineHeight: 1.5 }}>
         Severity is a judgment call, not an official rating — for Fed meetings it's driven by
@@ -223,6 +258,11 @@ export default function CbCalendar({ optionsData, fedOddsData, fedOddsError }) {
       {fedOddsError && (
         <p style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 10 }}>
           Live Fed odds unavailable this refresh: {fedOddsError}
+        </p>
+      )}
+      {congressError && (
+        <p style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 10 }}>
+          Live legislative data unavailable this refresh: {congressError}
         </p>
       )}
 

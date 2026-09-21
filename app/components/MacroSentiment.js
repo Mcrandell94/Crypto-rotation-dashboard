@@ -42,7 +42,7 @@ function StatTile({ label, value, sub, accent }) {
   );
 }
 
-export default function MacroSentiment({ data }) {
+export default function MacroSentiment({ data, cpiData, cpiError }) {
   const [fngSource, setFngSource] = useState('altme');
 
   if (!data) {
@@ -67,7 +67,7 @@ export default function MacroSentiment({ data }) {
       <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '4px 0 16px' }}>
         Fear &amp; Greed from alternative.me{data.fngCoinstats ? ' or CoinStats — independent methodologies, toggle below' : ''} · dominance
         from CoinGecko's global market data · rates from the St. Louis Fed&apos;s FRED and the Bank of
-        England&apos;s own statistical database
+        England&apos;s own statistical database · CPI from the Bureau of Labor Statistics&apos; own API
       </p>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
         {activeFng && (
@@ -108,6 +108,13 @@ export default function MacroSentiment({ data }) {
         />
         {rates?.fedFundsRate && (
           <StatTile label="Fed Funds Rate" value={`${rates.fedFundsRate.value.toFixed(2)}%`} />
+        )}
+        {cpiData?.latest && (
+          <StatTile
+            label={`CPI YoY (${cpiData.latest.periodName} ${cpiData.latest.year})`}
+            value={cpiData.latest.yoyPct != null ? `${cpiData.latest.yoyPct}%` : '—'}
+            sub={cpiData.latest.momPct != null ? `${cpiData.latest.momPct > 0 ? '+' : ''}${cpiData.latest.momPct}% MoM` : undefined}
+          />
         )}
         {rates?.treasury10y && (
           <StatTile label="10Y Treasury Yield" value={`${rates.treasury10y.value.toFixed(2)}%`} />
@@ -151,6 +158,11 @@ export default function MacroSentiment({ data }) {
       {data.ratesFailed?.length > 0 && (
         <p style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 8 }}>
           No live data for: {data.ratesFailed.join(', ')} — skipped.
+        </p>
+      )}
+      {cpiError && (
+        <p style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 8 }}>
+          Live CPI unavailable this refresh: {cpiError}
         </p>
       )}
     </section>
