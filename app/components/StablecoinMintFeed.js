@@ -63,10 +63,13 @@ export default function StablecoinMintFeed({ data }) {
         Stablecoin Mint Feed — Ethereum
       </h2>
       <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '4px 0 16px', maxWidth: 680, lineHeight: 1.5 }}>
-        Real on-chain USDT/USDC mints — an ERC-20 Transfer from the null address to the issuer's
-        treasury, read live from Etherscan. Ethereum only: most USDT actually mints on Tron, so this
-        is real but partial — not the full cross-chain picture. A mint isn't itself a buy signal, just
-        new supply entering the issuer's treasury; it typically moves to exchanges later, if at all.
+        Real on-chain USDT/USDC mints — an ERC-20 Transfer from the null address — read live from
+        Etherscan. Ethereum only: most USDT actually mints on Tron, so this is real but partial, not
+        the full cross-chain picture. USDT's window looks back ~7 days (its mints are rare, treasury-
+        sized events); USDC's looks back only ~3 hours, because most of what shows up as a USDC
+        "mint" here is Circle's CCTP cross-chain bridge minting directly to an end-user's address on
+        arrival, not a treasury re-supply — frequent and usually small, so a wide window would bury
+        recent activity under old bridge traffic. Use the size filter to focus on the bigger ones.
       </p>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
@@ -89,7 +92,7 @@ export default function StablecoinMintFeed({ data }) {
       {mints.length === 0 ? (
         <p style={{ fontSize: 12, color: TEXT_MUTED }}>
           {allMints.length === 0
-            ? 'No USDT/USDC mints in the last ~7 days of Ethereum blocks.'
+            ? 'No USDT/USDC mints in the current lookback window.'
             : `No mints at or above ${MIN_SIZE_OPTIONS.find((o) => o.key === minSize)?.label} in this window.`}
         </p>
       ) : (

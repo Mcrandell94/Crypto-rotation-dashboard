@@ -30,28 +30,34 @@ const ETHERSCAN_BASE = 'https://api.etherscan.io/v2/api';
 const ETHEREUM_CHAIN_ID = 1;
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
 const ZERO_TOPIC = `0x${'0'.repeat(64)}`;
-// ~7 days of Ethereum blocks at a ~12s block time. Bounded so Etherscan's
-// getLogs doesn't have to scan since-genesis history on every call, while
-// still wide enough that the feed isn't empty between mints (USDT/USDC
-// mint irregularly — sometimes daily, sometimes with multi-day gaps).
-const BLOCK_WINDOW = 50_400;
-// How many rows to actually pull from Etherscan per token — deliberately
-// generous (comfortably above the real count of mint events either token
-// sees in a 7-day window), because getLogs' own sort/pagination isn't
-// trustworthy the way it is on Etherscan's account-module endpoints
-// (tokentx, txlist): `sort=desc&offset=N` here can hand back the OLDEST N
-// events in the block range instead of the newest, which is exactly what
-// made this feed show only ~7-day-old mints. Recency is enforced below by
-// sorting everything actually returned ourselves, not by trusting the
-// API to have already handed us the right end of the list.
+// How many rows to actually pull from Etherscan per token in one call —
+// generous, but recency is guaranteed by keeping each token's block
+// window (below) short enough that its real event count comfortably fits
+// under this, not by this number alone. getLogs' own sort/pagination
+// isn't trustworthy the way it is on Etherscan's account-module endpoints
+// (tokentx, txlist): `sort=desc&offset=N` can hand back the OLDEST N
+// events in the range instead of the newest. Recency is enforced below by
+// sorting everything actually returned ourselves, never by trusting the
+// API to have handed us the right end of the list.
 const FETCH_LIMIT = 1000;
 // How many of the most-recent, freshly-sorted rows the feed actually
 // shows, after the panel's own size filter narrows things further.
 const DISPLAY_LIMIT = 30;
 
+// USDT and USDC's null-address Transfer events happen at wildly different
+// real rates, so a one-size block window doesn't work: a window wide
+// enough to catch USDT's rare, large treasury mints (real ones can be
+// days apart) is so oversaturated with USDC's — mostly small, frequent
+// mints from Circle's CCTP cross-chain bridge minting directly to
+// end-user addresses on receipt, not classic treasury re-supply — that
+// FETCH_LIMIT rows never reach anywhere near "now": the feed looked stuck
+// showing only ~7-day-old data because that 7-day window's USDC event
+// count vastly exceeded FETCH_LIMIT even after sorting, so nothing recent
+// was ever actually fetched in the first place. Each token's window here
+// is sized to its own real frequency instead of a shared guess.
 const TOKENS = [
-  { symbol: 'USDT', label: 'Tether', address: '0xdAC17F958D2ee523a2206206994597C13D831ec7', decimals: 6, color: '#26A17B' },
-  { symbol: 'USDC', label: 'USD Coin', address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', decimals: 6, color: '#2775CA' },
+  { symbol: 'USDT', label: 'Tether', address: '0xdAC17F958D2ee523a2206206994597C13D831ec7', decimals: 6, color: '#26A17B', blockWindow: 50_400 }, // ~7 days
+  { symbol: 'USDC', label: 'USD Coin', address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', decimals: 6, color: '#2775CA', blockWindow: 900 }, // ~3 hours
 ];
 
 async function fetchLatestBlock(apiKey) {
@@ -68,7 +74,8 @@ async function fetchLatestBlock(apiKey) {
   return parseInt(json.result, 16);
 }
 
-async function fetchMints(token, apiKey, fromBlock) {
+async function fetchMints(token, apiKey, latestBlock) {
+  const fromBlock = Math.max(0, latestBlock - token.blockWindow);
   const url =
     `${ETHERSCAN_BASE}?chainid=${ETHEREUM_CHAIN_ID}&module=logs&action=getLogs&fromBlock=${fromBlock}&toBlock=latest` +
     `&address=${token.address}&topic0=${TRANSFER_TOPIC}&topic0_1_opr=and&topic1=${ZERO_TOPIC}` +
@@ -128,9 +135,8 @@ export async function GET() {
 
   try {
     const latestBlock = await fetchLatestBlock(apiKey);
-    const fromBlock = Math.max(0, latestBlock - BLOCK_WINDOW);
 
-    const results = await Promise.all(TOKENS.map((t) => fetchMints(t, apiKey, fromBlock)));
+    const results = await Promise.all(TOKENS.map((t) => fetchMints(t, apiKey, latestBlock)));
     const failed = results.filter((r) => r.error);
     const succeeded = results.filter((r) => !r.error);
 
@@ -152,7 +158,7 @@ export async function GET() {
     return Response.json({
       mints,
       tokensFailed: failed.map((f) => ({ symbol: f.symbol, error: f.error })),
-      windowBlocks: BLOCK_WINDOW,
+      windowBlocksBySymbol: Object.fromEntries(TOKENS.map((t) => [t.symbol, t.blockWindow])),
       latestBlock,
       fetchedAt: new Date().toISOString(),
     });
