@@ -13,8 +13,11 @@ const AMBER = '#C9A66B';
 const GAIN = '#7FA37F';
 const LOSS = '#A85D4F';
 
+// Both the moon-phase math and the retrograde dates are UTC instants —
+// format in UTC too, or viewers west of UTC (most US timezones) see every
+// date rolled back by a day.
 function formatDate(date) {
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
 
 function Stat({ label, value }) {
