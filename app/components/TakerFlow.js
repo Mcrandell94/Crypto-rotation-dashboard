@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { SECTORS } from '../lib/sectors';
 
 const TEXT_PRIMARY = '#E7E4DD';
@@ -35,26 +35,39 @@ function SplitBar({ buyPct, height = 16 }) {
 export default function TakerFlow({ data }) {
   const [symbol, setSymbol] = useState('BTC');
   const [range, setRange] = useState('1h');
-  const [otherAssets, setOtherAssets] = useState({}); // symbol -> { loading } | { error } | { symbol, byRange, rangesFailed }
+  // Full-range (all 4 ranges + per-exchange breakdown) data fetched on
+  // demand — the default page load only ever seeds BTC/ETH at one range,
+  // to stay inside this key's real 30 req/min ceiling (see the route's
+  // own comments). Keyed by symbol, whether it's BTC/ETH or a watchlist/
+  // "other ticker" pick: { loading } | { error } | { symbol, byRange, rangesFailed }.
+  const [fullAssets, setFullAssets] = useState({});
+  const requestedRef = useRef(new Set());
 
-  const loadOtherTicker = useCallback(async (sym) => {
-    setOtherAssets((prev) => ({ ...prev, [sym]: { loading: true } }));
+  const loadFull = useCallback(async (sym) => {
+    if (requestedRef.current.has(sym)) return;
+    requestedRef.current.add(sym);
+    setFullAssets((prev) => ({ ...prev, [sym]: { loading: true } }));
     try {
       const res = await fetch(`/api/takerflow?symbol=${encodeURIComponent(sym)}`);
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Unknown error');
-      setOtherAssets((prev) => ({ ...prev, [sym]: json.assets[sym] }));
+      setFullAssets((prev) => ({ ...prev, [sym]: json.assets[sym] }));
     } catch (e) {
-      setOtherAssets((prev) => ({ ...prev, [sym]: { error: e.message } }));
+      setFullAssets((prev) => ({ ...prev, [sym]: { error: e.message } }));
+      requestedRef.current.delete(sym); // allow a retry on the next pick/range click
     }
   }, []);
 
-  const handlePickTicker = (sym) => {
-    setSymbol(sym);
-    if (!PRIMARY_TICKERS.includes(sym) && !otherAssets[sym]) {
-      loadOtherTicker(sym);
-    }
-  };
+  // Fetch a ticker's full range set the moment the viewer asks for a range
+  // the current seed/cache doesn't already cover — once per symbol; after
+  // that, every range for it is already in hand.
+  useEffect(() => {
+    const current = fullAssets[symbol] || data?.assets?.[symbol];
+    if (current && (current.loading || current.error || current.byRange?.[range])) return;
+    if (data) loadFull(symbol);
+  }, [symbol, range, fullAssets, data, loadFull]);
+
+  const handlePickTicker = (sym) => setSymbol(sym);
 
   if (!data) {
     return (
@@ -68,9 +81,8 @@ export default function TakerFlow({ data }) {
   }
 
   const isPrimary = PRIMARY_TICKERS.includes(symbol);
-  const asset = isPrimary ? data.assets[symbol] : otherAssets[symbol];
+  const asset = fullAssets[symbol] || data.assets[symbol];
   const row = asset?.byRange?.[range];
-  const availableRanges = RANGE_ORDER.filter((r) => asset?.byRange?.[r]);
 
   return (
     <section style={{ marginTop: 32 }}>
@@ -132,6 +144,11 @@ export default function TakerFlow({ data }) {
               ))}
             </div>
           </div>
+          {data.leaderboard.tickersFailed?.length > 0 && (
+            <p style={{ fontSize: 10, color: TEXT_MUTED, marginTop: 6 }}>
+              No live data this refresh for: {data.leaderboard.tickersFailed.map((f) => f.symbol).join(', ')}.
+            </p>
+          )}
         </div>
       )}
 
@@ -179,25 +196,20 @@ export default function TakerFlow({ data }) {
       </div>
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
-        {RANGE_ORDER.map((r) => {
-          const has = availableRanges.includes(r);
-          return (
-            <button
-              key={r}
-              onClick={() => has && setRange(r)}
-              disabled={!has}
-              style={{
-                background: range === r ? '#1E252A' : '#171D21',
-                border: `1px solid ${range === r ? AMBER : CARD_BORDER}`,
-                color: !has ? TEXT_MUTED : range === r ? AMBER : TEXT_SECONDARY,
-                borderRadius: 4, padding: '4px 10px', fontSize: 11, cursor: has ? 'pointer' : 'not-allowed',
-                opacity: has ? 1 : 0.5,
-              }}
-            >
-              {RANGE_LABELS[r]}
-            </button>
-          );
-        })}
+        {RANGE_ORDER.map((r) => (
+          <button
+            key={r}
+            onClick={() => setRange(r)}
+            style={{
+              background: range === r ? '#1E252A' : '#171D21',
+              border: `1px solid ${range === r ? AMBER : CARD_BORDER}`,
+              color: range === r ? AMBER : TEXT_SECONDARY,
+              borderRadius: 4, padding: '4px 10px', fontSize: 11, cursor: 'pointer',
+            }}
+          >
+            {RANGE_LABELS[r]}
+          </button>
+        ))}
       </div>
 
       {asset?.loading ? (
@@ -235,20 +247,26 @@ export default function TakerFlow({ data }) {
             </div>
           </div>
 
-          <div style={{ fontSize: 11, color: TEXT_MUTED, marginBottom: 8 }}>By exchange</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {row.byExchange.slice(0, 8).map((e) => (
-              <div key={e.exchange} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontSize: 11, color: TEXT_SECONDARY, width: 70, flexShrink: 0 }}>{e.exchange}</span>
-                <div style={{ flex: 1 }}>
-                  <SplitBar buyPct={e.buyRatio} />
-                </div>
-                <span style={{ fontSize: 11, color: GAIN, width: 42, textAlign: 'right', fontFamily: 'ui-monospace, monospace' }}>
-                  {e.buyRatio?.toFixed(0)}%
-                </span>
+          {row.byExchange ? (
+            <>
+              <div style={{ fontSize: 11, color: TEXT_MUTED, marginBottom: 8 }}>By exchange</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {row.byExchange.slice(0, 8).map((e) => (
+                  <div key={e.exchange} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: 11, color: TEXT_SECONDARY, width: 70, flexShrink: 0 }}>{e.exchange}</span>
+                    <div style={{ flex: 1 }}>
+                      <SplitBar buyPct={e.buyRatio} />
+                    </div>
+                    <span style={{ fontSize: 11, color: GAIN, width: 42, textAlign: 'right', fontFamily: 'ui-monospace, monospace' }}>
+                      {e.buyRatio?.toFixed(0)}%
+                    </span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </>
+          ) : (
+            <p style={{ fontSize: 11, color: TEXT_MUTED }}>Loading exchange breakdown…</p>
+          )}
         </>
       )}
 
