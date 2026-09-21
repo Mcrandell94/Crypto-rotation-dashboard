@@ -93,7 +93,21 @@ export default function DashboardHome() {
   const [liquidationFeedError, setLiquidationFeedError] = useState(null);
   const [btcPriceData, setBtcPriceData] = useState(null);
   const [btcPriceError, setBtcPriceError] = useState(null);
+  const [ethPriceData, setEthPriceData] = useState(null);
+  const [ethPriceError, setEthPriceError] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const fetchEthPrice = useCallback(async () => {
+    setEthPriceError(null);
+    try {
+      const res = await fetch('/api/ethprice');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setEthPriceData(json);
+    } catch (e) {
+      setEthPriceError(e.message);
+    }
+  }, []);
 
   const fetchBtcPrice = useCallback(async () => {
     setBtcPriceError(null);
@@ -390,7 +404,8 @@ export default function DashboardHome() {
     fetchLiquidationHeatmapBcf();
     fetchLiquidationFeed();
     fetchBtcPrice();
-  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality, fetchAltseason, fetchEtfFlows, fetchOptions, fetchNews, fetchOpenInterest, fetchLiquidations, fetchEthEtfFlows, fetchLiquidationHeatmap, fetchLiquidationHeatmapCoinalyze, fetchLiquidationHeatmapBcf, fetchLiquidationFeed, fetchBtcPrice]);
+    fetchEthPrice();
+  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality, fetchAltseason, fetchEtfFlows, fetchOptions, fetchNews, fetchOpenInterest, fetchLiquidations, fetchEthEtfFlows, fetchLiquidationHeatmap, fetchLiquidationHeatmapCoinalyze, fetchLiquidationHeatmapBcf, fetchLiquidationFeed, fetchBtcPrice, fetchEthPrice]);
 
   return (
     <main style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
@@ -416,6 +431,7 @@ export default function DashboardHome() {
             fetchLiquidationHeatmapBcf();
             fetchLiquidationFeed();
             fetchBtcPrice();
+            fetchEthPrice();
             if (rrgMode === 'sectors') fetchRrgSectors(benchmark);
           }}
           disabled={loading}
@@ -732,6 +748,8 @@ export default function DashboardHome() {
           <LiquidationLevelsTracker
             btcPrice={btcPriceData?.price ?? null}
             btcPriceError={btcPriceError}
+            ethPrice={ethPriceData?.price ?? null}
+            ethPriceError={ethPriceError}
           />
 
           {openInterestError ? (

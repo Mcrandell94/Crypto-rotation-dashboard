@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { HORIZONS } from '../lib/liquidationLevels';
+import { LEVELS_BY_ASSET } from '../lib/liquidationLevels';
 
 const TEXT_PRIMARY = '#E7E4DD';
 const TEXT_SECONDARY = '#8B9298';
@@ -12,7 +12,7 @@ const AMBER = '#C9A66B';
 const GAIN = '#7FA37F';
 const LOSS = '#A85D4F';
 
-const HORIZON_LIST = Object.values(HORIZONS);
+const ASSET_LIST = Object.keys(LEVELS_BY_ASSET);
 
 function formatPrice(v) {
   return v == null ? '—' : `$${Math.round(v).toLocaleString()}`;
@@ -25,20 +25,20 @@ function levelId(l) {
 // Once a level is hit it stays hit, even if price later moves back — a
 // liquidation cluster that's been wicked through is spent, and a squeeze
 // zone that's been traded through is no longer "thin." Persisted per
-// browser in localStorage, namespaced by horizon + capturedAt so a fresh
-// screenshot for that horizon (a new capturedAt) starts it unhit again,
-// without touching the other horizon's tracking.
-function readHit(horizonKey, capturedAt, id) {
+// browser in localStorage, namespaced by asset + horizon + capturedAt so a
+// fresh screenshot for that asset/horizon (a new capturedAt) starts it
+// unhit again, without touching any other asset's or horizon's tracking.
+function readHit(asset, horizonKey, capturedAt, id) {
   try {
-    return localStorage.getItem(`liqLevelHit:${horizonKey}:${capturedAt}:${id}`) === '1';
+    return localStorage.getItem(`liqLevelHit:${asset}:${horizonKey}:${capturedAt}:${id}`) === '1';
   } catch {
     return false;
   }
 }
 
-function writeHit(horizonKey, capturedAt, id) {
+function writeHit(asset, horizonKey, capturedAt, id) {
   try {
-    localStorage.setItem(`liqLevelHit:${horizonKey}:${capturedAt}:${id}`, '1');
+    localStorage.setItem(`liqLevelHit:${asset}:${horizonKey}:${capturedAt}:${id}`, '1');
   } catch {
     // localStorage unavailable (private mode, blocked) — hit state just
     // won't persist across reloads; not worth failing the panel over.
@@ -51,10 +51,31 @@ function isNowHit(l, price, spotAtCapture) {
   return l.price < spotAtCapture ? price <= l.price : price >= l.price;
 }
 
-function HorizonPicker({ horizonKey, setHorizonKey }) {
+function AssetPicker({ asset, setAsset }) {
+  return (
+    <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+      {ASSET_LIST.map((a) => (
+        <button
+          key={a}
+          onClick={() => setAsset(a)}
+          style={{
+            background: asset === a ? '#1E252A' : '#171D21',
+            border: `1px solid ${asset === a ? AMBER : CARD_BORDER}`,
+            color: asset === a ? AMBER : TEXT_SECONDARY,
+            borderRadius: 4, padding: '4px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600,
+          }}
+        >
+          {a}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function HorizonPicker({ horizonList, horizonKey, setHorizonKey }) {
   return (
     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
-      {HORIZON_LIST.map((h) => (
+      {horizonList.map((h) => (
         <button
           key={h.key}
           onClick={() => setHorizonKey(h.key)}
@@ -72,42 +93,49 @@ function HorizonPicker({ horizonKey, setHorizonKey }) {
   );
 }
 
-export default function LiquidationLevelsTracker({ btcPrice, btcPriceError }) {
-  const [horizonKey, setHorizonKey] = useState(HORIZON_LIST[0]?.key);
-  const [hitByHorizon, setHitByHorizon] = useState(() => Object.fromEntries(HORIZON_LIST.map((h) => [h.key, new Set()])));
+export default function LiquidationLevelsTracker({ btcPrice, btcPriceError, ethPrice, ethPriceError }) {
+  const [asset, setAsset] = useState('BTC');
+  const [horizonKey, setHorizonKey] = useState(Object.values(LEVELS_BY_ASSET.BTC)[0]?.key);
+  const [hitByAssetHorizon, setHitByAssetHorizon] = useState(() =>
+    Object.fromEntries(ASSET_LIST.map((a) => [a, Object.fromEntries(Object.keys(LEVELS_BY_ASSET[a]).map((k) => [k, new Set()]))]))
+  );
+
+  const price = asset === 'BTC' ? btcPrice : ethPrice;
+  const priceError = asset === 'BTC' ? btcPriceError : ethPriceError;
 
   useEffect(() => {
-    if (btcPrice == null) return;
-    setHitByHorizon((prev) => {
+    if (price == null) return;
+    setHitByAssetHorizon((prev) => {
       let changedAny = false;
-      const next = { ...prev };
-      for (const h of HORIZON_LIST) {
+      const next = { ...prev, [asset]: { ...prev[asset] } };
+      for (const h of Object.values(LEVELS_BY_ASSET[asset])) {
         if (h.levels.length === 0) continue;
-        const set = new Set(next[h.key]);
+        const set = new Set(next[asset][h.key]);
         let changed = false;
         for (const l of h.levels) {
           const id = levelId(l);
-          if (set.has(id) || readHit(h.key, h.capturedAt, id)) {
+          if (set.has(id) || readHit(asset, h.key, h.capturedAt, id)) {
             if (!set.has(id)) set.add(id);
             continue;
           }
-          if (isNowHit(l, btcPrice, h.spotAtCapture)) {
+          if (isNowHit(l, price, h.spotAtCapture)) {
             set.add(id);
-            writeHit(h.key, h.capturedAt, id);
+            writeHit(asset, h.key, h.capturedAt, id);
             changed = true;
           }
         }
         if (changed) {
-          next[h.key] = set;
+          next[asset][h.key] = set;
           changedAny = true;
         }
       }
       return changedAny ? next : prev;
     });
-  }, [btcPrice]);
+  }, [asset, price]);
 
-  const active = HORIZONS[horizonKey];
-  const hitIds = hitByHorizon[horizonKey] || new Set();
+  const horizonList = Object.values(LEVELS_BY_ASSET[asset]);
+  const active = LEVELS_BY_ASSET[asset][horizonKey] || horizonList[0];
+  const hitIds = hitByAssetHorizon[asset]?.[active?.key] || new Set();
 
   if (!active || active.levels.length === 0) {
     return (
@@ -115,10 +143,11 @@ export default function LiquidationLevelsTracker({ btcPrice, btcPriceError }) {
         <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: TEXT_PRIMARY }}>
           Liquidation Levels Tracker
         </h2>
-        <HorizonPicker horizonKey={horizonKey} setHorizonKey={setHorizonKey} />
+        <AssetPicker asset={asset} setAsset={setAsset} />
+        <HorizonPicker horizonList={horizonList} horizonKey={active?.key} setHorizonKey={setHorizonKey} />
         <p style={{ fontSize: 12, color: TEXT_MUTED, maxWidth: 680, lineHeight: 1.5 }}>
-          No liquidation map loaded yet for this horizon. Send a liquidation heatmap screenshot and its
-          squeeze zones and liquidity levels get read off it and tracked here — live price is checked
+          No {asset} liquidation map loaded yet for this horizon. Send a liquidation heatmap screenshot and
+          its squeeze zones and liquidity levels get read off it and tracked here — live price is checked
           against each one, and once it's crossed, that level is marked hit.
         </p>
       </section>
@@ -144,13 +173,14 @@ export default function LiquidationLevelsTracker({ btcPrice, btcPriceError }) {
         {active.capturedAt ? ` Captured ${new Date(active.capturedAt).toLocaleString()}.` : ''}
       </p>
 
-      <HorizonPicker horizonKey={horizonKey} setHorizonKey={setHorizonKey} />
+      <AssetPicker asset={asset} setAsset={setAsset} />
+      <HorizonPicker horizonList={horizonList} horizonKey={active.key} setHorizonKey={setHorizonKey} />
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14, alignItems: 'flex-start' }}>
         <div style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: '10px 12px', flex: '1 1 130px' }}>
           <div style={{ fontSize: 10, color: TEXT_MUTED }}>Live price</div>
           <div style={{ fontSize: 17, fontWeight: 600, color: TEXT_PRIMARY, marginTop: 3, fontFamily: 'ui-monospace, monospace' }}>
-            {btcPriceError ? '—' : formatPrice(btcPrice)}
+            {priceError ? '—' : formatPrice(price)}
           </div>
         </div>
         <div style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: '10px 12px', flex: '1 1 130px' }}>
@@ -161,9 +191,9 @@ export default function LiquidationLevelsTracker({ btcPrice, btcPriceError }) {
         </div>
       </div>
 
-      {btcPriceError && (
+      {priceError && (
         <div style={{ background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 12, color: '#C9A66B', fontSize: 12, marginBottom: 14 }}>
-          Live price failed to load: {btcPriceError}
+          Live price failed to load: {priceError}
         </div>
       )}
 
