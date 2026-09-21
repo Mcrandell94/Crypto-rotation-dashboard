@@ -4,12 +4,17 @@
 // derived signals (unusual-activity radar, hourly buy/sell flow, named
 // Hyperliquid wallets, modeled liquidation zones).
 //
-// REST base and auth verified from CoinLobster's own published extension
-// docs (github.com/CoinLobster/coinlobster-gemini-extension — README.md
-// and GEMINI.md), since coinlobster.com itself is unreachable from this
-// sandbox to confirm directly, same as most providers hit this session:
-// "unlocks the metered REST endpoints at /api/ai/v1/*" and "sent as
-// X-API-Key". Each MCP tool name (whale_trades, whale_radar, ...) is
+// REST base verified from CoinLobster's own published extension docs
+// (github.com/CoinLobster/coinlobster-gemini-extension — README.md and
+// GEMINI.md), since coinlobster.com itself is unreachable from this
+// sandbox to confirm directly: "unlocks the metered REST endpoints at
+// /api/ai/v1/*". Auth is `Authorization: Bearer <key>` — the extension
+// docs said `X-API-Key`, but the live API's own 401 body corrected that
+// directly ("API key required. Pass it as an Authorization: Bearer <key>
+// header. Never put a key in a URL: it is logged by every proxy in the
+// path and leaks through Referer."), so the real error is what's used
+// here, not the secondhand docs. Each MCP tool name (whale_trades,
+// whale_radar, ...) is
 // documented as mirroring a REST endpoint 1:1 — this assumes
 // /api/ai/v1/<tool_name>, which is the direct, documented reading of
 // that relationship, not a guess pulled from nowhere. Exact query
@@ -41,7 +46,7 @@ export async function fetchCoinLobster(tool, params, apiKey, { revalidateSeconds
   const url = `${BASE_URL}/${tool}${qs ? `?${qs}` : ''}`;
 
   const res = await fetch(url, {
-    headers: { 'X-API-Key': apiKey, Accept: 'application/json' },
+    headers: { Authorization: `Bearer ${apiKey}`, Accept: 'application/json' },
     next: { revalidate: revalidateSeconds },
   });
 
