@@ -13,17 +13,30 @@
 // most providers hit this session.
 //
 // With no `symbol` param, returns BTC + ETH across all ranges (the default
-// page load). With `?symbol=XYZ`, fetches just that one ticker on demand —
-// used for the "other tickers" picker, so this route isn't hammering
-// Coinglass with dozens of calls for tickers nobody's looking at. Not
-// every ticker this dashboard tracks elsewhere (small-caps, memes) is
-// necessarily a listed futures market on Coinglass; when it isn't, this
-// fails loudly with Coinglass's own response rather than guessing a value.
+// page load), plus a "leaderboard" — the 2 strongest-buy and 2 strongest-
+// sell tickers, by 1h taker buy ratio, from a curated watchlist of liquid
+// tickers (below) that are very likely to actually be listed Coinglass
+// futures markets. It's a watchlist, not this dashboard's full ~70-ticker
+// sector list — fetching all of those on every page load/refresh would
+// mean dozens of extra Coinglass calls per refresh against an unknown
+// per-minute limit on this project's free/trial plan (Coinglass's own
+// rate-limit docs don't publish a number per tier), which risks 429s on
+// everything else this route serves. With `?symbol=XYZ`, fetches just
+// that one ticker on demand across all ranges — used for the "other
+// tickers" picker for anything outside the watchlist. Not every ticker
+// this dashboard tracks elsewhere (small-caps, memes) is necessarily a
+// listed futures market on Coinglass; when it isn't, this fails loudly
+// with Coinglass's own response rather than guessing a value.
 
 export const dynamic = 'force-dynamic';
 
 const BASE_URL = 'https://open-api-v4.coinglass.com/api';
 const RANGES = ['5m', '1h', '4h', '24h'];
+const LEADERBOARD_RANGE = '1h';
+const LEADERBOARD_WATCHLIST = [
+  'SOL', 'XRP', 'DOGE', 'ADA', 'AVAX', 'LINK', 'DOT', 'TRX',
+  'BNB', 'TON', 'LTC', 'BCH', 'UNI', 'AAVE', 'ARB', 'ATOM',
+];
 
 async function fetchTakerFlow(symbol, range, apiKey) {
   const res = await fetch(`${BASE_URL}/futures/taker-buy-sell-volume/exchange-list?symbol=${symbol}&range=${range}`, {
@@ -80,6 +93,28 @@ async function fetchSymbol(symbol, apiKey) {
   return { symbol, byRange, rangesFailed };
 }
 
+async function fetchLeaderboardRow(symbol, apiKey) {
+  const r = await fetchTakerFlow(symbol, LEADERBOARD_RANGE, apiKey);
+  if (r.error) return { symbol, error: r.error };
+  const { byExchange, ...rest } = r;
+  return { symbol, ...rest };
+}
+
+function buildLeaderboard(pool) {
+  const sorted = [...pool].sort((a, b) => b.buyRatio - a.buyRatio);
+  const topBuys = sorted.slice(0, 2);
+  // Only take the tail as "top sells" once the pool is big enough that it
+  // can't just be re-showing the same tickers already listed as top buys.
+  const topSells = sorted.length > 2 ? sorted.slice(-2).reverse() : [];
+  return {
+    range: LEADERBOARD_RANGE,
+    topBuys,
+    topSells,
+    poolSize: pool.length,
+    watchlistSize: LEADERBOARD_WATCHLIST.length + 2, // + BTC, ETH
+  };
+}
+
 export async function GET(request) {
   const apiKey = process.env.COINGLASS_API_KEY;
   if (!apiKey) {
@@ -107,9 +142,10 @@ export async function GET(request) {
       return Response.json({ assets: { [requestedSymbol]: result }, fetchedAt: new Date().toISOString() });
     }
 
-    const [btc, eth] = await Promise.all([
+    const [btc, eth, ...watchlistResults] = await Promise.all([
       fetchSymbol('BTC', apiKey),
       fetchSymbol('ETH', apiKey),
+      ...LEADERBOARD_WATCHLIST.map((s) => fetchLeaderboardRow(s, apiKey)),
     ]);
 
     if (Object.keys(btc.byRange).length === 0 && Object.keys(eth.byRange).length === 0) {
@@ -122,7 +158,24 @@ export async function GET(request) {
       );
     }
 
-    return Response.json({ assets: { BTC: btc, ETH: eth }, fetchedAt: new Date().toISOString() });
+    const pool = [];
+    const leaderboardFailed = [];
+    for (const r of watchlistResults) {
+      if (r.error) leaderboardFailed.push(r);
+      else pool.push(r);
+    }
+    if (btc.byRange[LEADERBOARD_RANGE]) {
+      const { byExchange, ...rest } = btc.byRange[LEADERBOARD_RANGE];
+      pool.push({ symbol: 'BTC', ...rest });
+    }
+    if (eth.byRange[LEADERBOARD_RANGE]) {
+      const { byExchange, ...rest } = eth.byRange[LEADERBOARD_RANGE];
+      pool.push({ symbol: 'ETH', ...rest });
+    }
+
+    const leaderboard = { ...buildLeaderboard(pool), tickersFailed: leaderboardFailed };
+
+    return Response.json({ assets: { BTC: btc, ETH: eth }, leaderboard, fetchedAt: new Date().toISOString() });
   } catch (err) {
     return Response.json({ error: err.message || 'Fetch failed', detail: String(err) }, { status: 500 });
   }

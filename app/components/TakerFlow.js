@@ -83,6 +83,58 @@ export default function TakerFlow({ data }) {
         (inflow) than selling (outflow) over that window, not the reverse.
       </p>
 
+      {data.leaderboard && (
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 11, color: TEXT_MUTED, marginBottom: 8 }}>
+            Strongest buy/sell pressure, trailing {RANGE_LABELS[data.leaderboard.range]} — ranked across a
+            watchlist of {data.leaderboard.watchlistSize} liquid tickers (BTC, ETH, and major alts), not the
+            full sector list. Click one to load it below.
+          </div>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <div style={{ flex: '1 1 200px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <span style={{ fontSize: 10, color: GAIN, textTransform: 'uppercase', letterSpacing: '0.03em' }}>Strongest buys</span>
+              {data.leaderboard.topBuys.length === 0 && (
+                <span style={{ fontSize: 11, color: TEXT_MUTED }}>No live data this refresh.</span>
+              )}
+              {data.leaderboard.topBuys.map((t) => (
+                <button
+                  key={t.symbol}
+                  onClick={() => handlePickTicker(t.symbol)}
+                  style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6,
+                    padding: '8px 10px', cursor: 'pointer', textAlign: 'left',
+                  }}
+                >
+                  <span style={{ fontSize: 13, fontWeight: 600, color: TEXT_PRIMARY }}>{t.symbol}</span>
+                  <span style={{ fontSize: 12, color: GAIN, fontFamily: 'ui-monospace, monospace' }}>{t.buyRatio?.toFixed(1)}% buy</span>
+                </button>
+              ))}
+            </div>
+            <div style={{ flex: '1 1 200px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <span style={{ fontSize: 10, color: LOSS, textTransform: 'uppercase', letterSpacing: '0.03em' }}>Strongest sells</span>
+              {data.leaderboard.topSells.length === 0 && (
+                <span style={{ fontSize: 11, color: TEXT_MUTED }}>No live data this refresh.</span>
+              )}
+              {data.leaderboard.topSells.map((t) => (
+                <button
+                  key={t.symbol}
+                  onClick={() => handlePickTicker(t.symbol)}
+                  style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6,
+                    padding: '8px 10px', cursor: 'pointer', textAlign: 'left',
+                  }}
+                >
+                  <span style={{ fontSize: 13, fontWeight: 600, color: TEXT_PRIMARY }}>{t.symbol}</span>
+                  <span style={{ fontSize: 12, color: LOSS, fontFamily: 'ui-monospace, monospace' }}>{t.sellRatio?.toFixed(1)}% sell</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
         {PRIMARY_TICKERS.map((s) => (
           <button
