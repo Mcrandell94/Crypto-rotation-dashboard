@@ -17,6 +17,7 @@ import EtfFlows from './components/EtfFlows';
 import OptionsPositioning from './components/OptionsPositioning';
 import MarketNews from './components/MarketNews';
 import OpenInterestPanel from './components/OpenInterestPanel';
+import TakerFlow from './components/TakerFlow';
 import LiquidationsPanel from './components/LiquidationsPanel';
 import LiquidationHeatmap from './components/LiquidationHeatmap';
 import LiveLiquidationFeed from './components/LiveLiquidationFeed';
@@ -85,6 +86,8 @@ export default function DashboardHome() {
   const [newsError, setNewsError] = useState(null);
   const [openInterestData, setOpenInterestData] = useState(null);
   const [openInterestError, setOpenInterestError] = useState(null);
+  const [takerFlowData, setTakerFlowData] = useState(null);
+  const [takerFlowError, setTakerFlowError] = useState(null);
   const [liquidationsData, setLiquidationsData] = useState(null);
   const [liquidationsError, setLiquidationsError] = useState(null);
   const [ethEtfFlowsData, setEthEtfFlowsData] = useState(null);
@@ -220,6 +223,18 @@ export default function DashboardHome() {
       setOpenInterestData(json);
     } catch (e) {
       setOpenInterestError(e.message);
+    }
+  }, []);
+
+  const fetchTakerFlow = useCallback(async () => {
+    setTakerFlowError(null);
+    try {
+      const res = await fetch('/api/takerflow');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setTakerFlowData(json);
+    } catch (e) {
+      setTakerFlowError(e.message);
     }
   }, []);
 
@@ -442,6 +457,7 @@ export default function DashboardHome() {
     fetchCpi();
     fetchNews();
     fetchOpenInterest();
+    fetchTakerFlow();
     fetchLiquidations();
     fetchEthEtfFlows();
     fetchLiquidationHeatmap();
@@ -450,7 +466,7 @@ export default function DashboardHome() {
     fetchLiquidationFeed();
     fetchBtcPrice();
     fetchEthPrice();
-  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality, fetchAltseason, fetchEtfFlows, fetchOptions, fetchFedOdds, fetchCongressBills, fetchCpi, fetchNews, fetchOpenInterest, fetchLiquidations, fetchEthEtfFlows, fetchLiquidationHeatmap, fetchLiquidationHeatmapCoinalyze, fetchLiquidationHeatmapBcf, fetchLiquidationFeed, fetchBtcPrice, fetchEthPrice]);
+  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality, fetchAltseason, fetchEtfFlows, fetchOptions, fetchFedOdds, fetchCongressBills, fetchCpi, fetchNews, fetchOpenInterest, fetchTakerFlow, fetchLiquidations, fetchEthEtfFlows, fetchLiquidationHeatmap, fetchLiquidationHeatmapCoinalyze, fetchLiquidationHeatmapBcf, fetchLiquidationFeed, fetchBtcPrice, fetchEthPrice]);
 
   return (
     <main style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
@@ -472,6 +488,7 @@ export default function DashboardHome() {
             fetchCpi();
             fetchNews();
             fetchOpenInterest();
+            fetchTakerFlow();
             fetchLiquidations();
             fetchEthEtfFlows();
             fetchLiquidationHeatmap();
@@ -815,6 +832,17 @@ export default function DashboardHome() {
             </div>
           ) : (
             <OpenInterestPanel data={openInterestData} />
+          )}
+
+          {takerFlowError ? (
+            <div style={{ marginTop: 20, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+              <strong>Taker buy/sell volume fetch failed:</strong> {takerFlowError}
+              <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
+                Most likely cause: COINGLASS_API_KEY isn't set yet, or the key's plan doesn't include this endpoint.
+              </div>
+            </div>
+          ) : (
+            <TakerFlow data={takerFlowData} />
           )}
 
           {liquidationsError ? (
