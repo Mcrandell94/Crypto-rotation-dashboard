@@ -12,5 +12,5 @@
 // "notice something unusual" cue.
 
 export const RETROGRADES_2026 = [
-  { planet: 'Venus', start: '2026-10-03', end: '2026-11-13' },
+  { planet: 'Venus', start: '2026-10-03', end: '2026-11-14' },
 ];
