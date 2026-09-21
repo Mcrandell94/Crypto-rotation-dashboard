@@ -124,16 +124,62 @@ const BTC_HORIZONS = {
   },
 };
 
-// ETH horizons — same shape as BTC's, empty until real ETH screenshots are
-// read. A Coinfuty ETH heatmap (multiple exchanges combined into one chart,
-// several time windows) was offered but deliberately not read into levels
-// yet — pending confirmation of what exactly it's showing (which exchanges,
-// what the combining method is) before treating it as reliable input, the
-// same bar every other source here has had to clear.
+// ETH horizons — same shape as BTC's. Source: Coinfuty's ETH liquidation
+// heatmap, "All exchanges" view — a genuine aggregate across ~17 venues
+// (Binance, OKX, Bybit, Bitfinex, Bitmex, Kraken, KuCoin, BingX, Coinbase,
+// Crypto.com, MEXC, Gate, Hyperliquid, HTX, Bitget, Lighter, Aster),
+// confirmed via the tool's own exchange picker. This is ONE already-
+// aggregated chart, not several independent per-exchange charts compared
+// against each other the way BCF's BTC reads were — so labeled as an
+// aggregate, not as cross-exchange-confirmed. Eyeballed pixel-intensity
+// read, same as every other heatmap source here — treat exact prices as
+// approximate (±0.5-1%). longTerm left empty: the only 1-year screenshot
+// offered had its exchange dropdown open, covering most of the chart.
+const ETH_SOURCE = "Coinfuty — ETH liquidation heatmap, \"All exchanges\" aggregate across ~17 venues (Binance, OKX, Bybit, Bitfinex, Bitmex, Kraken, KuCoin, BingX, Coinbase, Crypto.com, MEXC, Gate, Hyperliquid, HTX, Bitget, Lighter, Aster)";
+const ETH_SPOT = 2690;
+
 const ETH_HORIZONS = {
-  shortTerm: { key: 'shortTerm', label: 'Near-Term (live leverage map)', capturedAt: null, spotAtCapture: null, source: null, levels: [] },
-  mediumTerm: { key: 'mediumTerm', label: 'Medium-Term (1-week)', capturedAt: null, spotAtCapture: null, source: null, levels: [] },
-  monthTerm: { key: 'monthTerm', label: 'Monthly (1-month)', capturedAt: null, spotAtCapture: null, source: null, levels: [] },
+  shortTerm: {
+    key: 'shortTerm',
+    label: 'Near-Term (live leverage map)',
+    capturedAt: '2026-09-21T01:30:00Z',
+    spotAtCapture: ETH_SPOT,
+    source: ETH_SOURCE,
+    levels: [
+      { kind: 'level', price: 2750, side: 'short', label: 'Bright, solid band just above spot, consistent across both near-term windows shown' },
+      { kind: 'level', price: 2550, side: 'long', label: 'Moderate-to-bright band below spot' },
+      { kind: 'level', price: 2350, side: 'long', label: 'Bright band further below spot' },
+      { kind: 'level', price: 2300, side: 'long', label: 'Very persistent, wide band — recurs at nearly every zoom level in this dataset' },
+    ],
+  },
+  mediumTerm: {
+    key: 'mediumTerm',
+    label: 'Medium-Term (1-week)',
+    capturedAt: '2026-09-21T01:30:00Z',
+    spotAtCapture: ETH_SPOT,
+    source: ETH_SOURCE,
+    levels: [
+      { kind: 'level', price: 2700, side: 'short', label: 'Band tight to spot, upper edge of current consolidation' },
+      { kind: 'level', price: 2660, side: 'long', label: 'Solid band just below spot' },
+      { kind: 'zone', zoneLow: 2400, zoneHigh: 2520, label: 'Thinner, patchier stretch between the near-spot bands and the $2.3K band' },
+      { kind: 'level', price: 2300, side: 'long', label: 'Bright, wide, persistent band — consistent with the near-term and monthly views' },
+    ],
+  },
+  monthTerm: {
+    key: 'monthTerm',
+    label: 'Monthly (1-month)',
+    capturedAt: '2026-09-21T01:30:00Z',
+    spotAtCapture: ETH_SPOT,
+    source: ETH_SOURCE,
+    levels: [
+      { kind: 'level', price: 2980, side: 'short', label: 'Moderate band well above spot, recent period only' },
+      { kind: 'level', price: 2750, side: 'short', label: 'Very bright, dominant band just above spot' },
+      { kind: 'level', price: 2600, side: 'long', label: 'Solid band near/below spot' },
+      { kind: 'zone', zoneLow: 2400, zoneHigh: 2520, label: 'Patchy, thinner stretch between the $2.6K and $2.3K bands' },
+      { kind: 'level', price: 2300, side: 'long', label: 'Bright, wide, persistent band spanning nearly the full month' },
+      { kind: 'level', price: 2200, side: 'long', label: "The single most dominant band in this view — extremely bright and wide, spanning almost the entire chart width, the ETH analog of BTC's $60K/$74.5K super-magnet" },
+    ],
+  },
   longTerm: { key: 'longTerm', label: '1-Year (structural)', capturedAt: null, spotAtCapture: null, source: null, levels: [] },
 };
 
