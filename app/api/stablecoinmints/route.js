@@ -35,7 +35,10 @@ const ZERO_TOPIC = `0x${'0'.repeat(64)}`;
 // still wide enough that the feed isn't empty between mints (USDT/USDC
 // mint irregularly — sometimes daily, sometimes with multi-day gaps).
 const BLOCK_WINDOW = 50_400;
-const MAX_MINTS = 20;
+// Fetched per token, before the panel's own size filter narrows what's
+// shown — kept generous so filtering down to "bigger mints only" still
+// leaves a real list instead of emptying it out.
+const MAX_MINTS = 30;
 
 const TOKENS = [
   { symbol: 'USDT', label: 'Tether', address: '0xdAC17F958D2ee523a2206206994597C13D831ec7', decimals: 6, color: '#26A17B' },

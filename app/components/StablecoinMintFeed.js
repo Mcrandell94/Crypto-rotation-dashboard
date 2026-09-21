@@ -1,11 +1,20 @@
 'use client';
 
+import { useState } from 'react';
+
 const TEXT_PRIMARY = '#E7E4DD';
 const TEXT_SECONDARY = '#8B9298';
 const TEXT_MUTED = '#6E767B';
 const CARD_BG = '#171D21';
 const CARD_BORDER = '#2A3136';
 const AMBER = '#C9A66B';
+
+const MIN_SIZE_OPTIONS = [
+  { key: 0, label: 'All' },
+  { key: 1_000_000, label: '$1M+' },
+  { key: 10_000_000, label: '$10M+' },
+  { key: 50_000_000, label: '$50M+' },
+];
 
 function formatUsd(v) {
   if (v == null || !Number.isFinite(v)) return '—';
@@ -29,6 +38,8 @@ function formatRelative(ts) {
 }
 
 export default function StablecoinMintFeed({ data }) {
+  const [minSize, setMinSize] = useState(0);
+
   if (!data) {
     return (
       <section style={{ marginTop: 32 }}>
@@ -40,7 +51,9 @@ export default function StablecoinMintFeed({ data }) {
     );
   }
 
-  const mints = data.mints || [];
+  const allMints = data.mints || [];
+  const mints = allMints.filter((m) => m.amount == null || m.amount >= minSize);
+  const hiddenCount = allMints.length - mints.length;
 
   return (
     <section style={{ marginTop: 32 }}>
@@ -54,8 +67,29 @@ export default function StablecoinMintFeed({ data }) {
         new supply entering the issuer's treasury; it typically moves to exchanges later, if at all.
       </p>
 
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+        {MIN_SIZE_OPTIONS.map((o) => (
+          <button
+            key={o.key}
+            onClick={() => setMinSize(o.key)}
+            style={{
+              background: minSize === o.key ? '#1E252A' : '#171D21',
+              border: `1px solid ${minSize === o.key ? AMBER : CARD_BORDER}`,
+              color: minSize === o.key ? AMBER : TEXT_SECONDARY,
+              borderRadius: 4, padding: '4px 10px', fontSize: 11, cursor: 'pointer',
+            }}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+
       {mints.length === 0 ? (
-        <p style={{ fontSize: 12, color: TEXT_MUTED }}>No USDT/USDC mints in the last ~7 days of Ethereum blocks.</p>
+        <p style={{ fontSize: 12, color: TEXT_MUTED }}>
+          {allMints.length === 0
+            ? 'No USDT/USDC mints in the last ~7 days of Ethereum blocks.'
+            : `No mints at or above ${MIN_SIZE_OPTIONS.find((o) => o.key === minSize)?.label} in this window.`}
+        </p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {mints.map((m) => (
@@ -102,6 +136,12 @@ export default function StablecoinMintFeed({ data }) {
             </div>
           ))}
         </div>
+      )}
+
+      {hiddenCount > 0 && (
+        <p style={{ fontSize: 10, color: TEXT_MUTED, marginTop: 8 }}>
+          {hiddenCount} smaller mint{hiddenCount === 1 ? '' : 's'} hidden by the size filter above.
+        </p>
       )}
 
       {data.tokensFailed?.length > 0 && (
