@@ -11,6 +11,8 @@ const AMBER = '#C9A66B';
 
 const MIN_SIZE_OPTIONS = [
   { key: 0, label: 'All' },
+  { key: 250_000, label: '$250K+' },
+  { key: 500_000, label: '$500K+' },
   { key: 1_000_000, label: '$1M+' },
   { key: 10_000_000, label: '$10M+' },
   { key: 50_000_000, label: '$50M+' },
