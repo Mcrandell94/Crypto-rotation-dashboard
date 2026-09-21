@@ -11,6 +11,14 @@
 // has — same verification standard as the Open Interest route, and
 // coinglass.com's docs site itself is unreachable from this sandbox like
 // most providers hit this session.
+//
+// With no `symbol` param, returns BTC + ETH across all ranges (the default
+// page load). With `?symbol=XYZ`, fetches just that one ticker on demand —
+// used for the "other tickers" picker, so this route isn't hammering
+// Coinglass with dozens of calls for tickers nobody's looking at. Not
+// every ticker this dashboard tracks elsewhere (small-caps, memes) is
+// necessarily a listed futures market on Coinglass; when it isn't, this
+// fails loudly with Coinglass's own response rather than guessing a value.
 
 export const dynamic = 'force-dynamic';
 
@@ -72,7 +80,7 @@ async function fetchSymbol(symbol, apiKey) {
   return { symbol, byRange, rangesFailed };
 }
 
-export async function GET() {
+export async function GET(request) {
   const apiKey = process.env.COINGLASS_API_KEY;
   if (!apiKey) {
     return Response.json(
@@ -81,7 +89,24 @@ export async function GET() {
     );
   }
 
+  const { searchParams } = new URL(request.url);
+  const requestedSymbol = searchParams.get('symbol')?.trim().toUpperCase();
+
   try {
+    if (requestedSymbol) {
+      const result = await fetchSymbol(requestedSymbol, apiKey);
+      if (Object.keys(result.byRange).length === 0) {
+        return Response.json(
+          {
+            error: `Coinglass has no taker buy/sell data for ${requestedSymbol} — it may not be listed as a futures market there.`,
+            detail: JSON.stringify(result.rangesFailed).slice(0, 800),
+          },
+          { status: 502 }
+        );
+      }
+      return Response.json({ assets: { [requestedSymbol]: result }, fetchedAt: new Date().toISOString() });
+    }
+
     const [btc, eth] = await Promise.all([
       fetchSymbol('BTC', apiKey),
       fetchSymbol('ETH', apiKey),

@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
+import { SECTORS } from '../lib/sectors';
 
 const TEXT_PRIMARY = '#E7E4DD';
 const TEXT_SECONDARY = '#8B9298';
@@ -13,6 +14,7 @@ const LOSS = '#A85D4F';
 
 const RANGE_LABELS = { '5m': '5 min', '1h': '1 hour', '4h': '4 hours', '24h': '24 hours' };
 const RANGE_ORDER = ['5m', '1h', '4h', '24h'];
+const PRIMARY_TICKERS = ['BTC', 'ETH'];
 
 function formatUsd(v) {
   if (v == null || !Number.isFinite(v)) return '—';
@@ -33,6 +35,26 @@ function SplitBar({ buyPct, height = 16 }) {
 export default function TakerFlow({ data }) {
   const [symbol, setSymbol] = useState('BTC');
   const [range, setRange] = useState('1h');
+  const [otherAssets, setOtherAssets] = useState({}); // symbol -> { loading } | { error } | { symbol, byRange, rangesFailed }
+
+  const loadOtherTicker = useCallback(async (sym) => {
+    setOtherAssets((prev) => ({ ...prev, [sym]: { loading: true } }));
+    try {
+      const res = await fetch(`/api/takerflow?symbol=${encodeURIComponent(sym)}`);
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setOtherAssets((prev) => ({ ...prev, [sym]: json.assets[sym] }));
+    } catch (e) {
+      setOtherAssets((prev) => ({ ...prev, [sym]: { error: e.message } }));
+    }
+  }, []);
+
+  const handlePickTicker = (sym) => {
+    setSymbol(sym);
+    if (!PRIMARY_TICKERS.includes(sym) && !otherAssets[sym]) {
+      loadOtherTicker(sym);
+    }
+  };
 
   if (!data) {
     return (
@@ -45,7 +67,8 @@ export default function TakerFlow({ data }) {
     );
   }
 
-  const asset = data.assets[symbol];
+  const isPrimary = PRIMARY_TICKERS.includes(symbol);
+  const asset = isPrimary ? data.assets[symbol] : otherAssets[symbol];
   const row = asset?.byRange?.[range];
   const availableRanges = RANGE_ORDER.filter((r) => asset?.byRange?.[r]);
 
@@ -56,14 +79,15 @@ export default function TakerFlow({ data }) {
       </h2>
       <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '4px 0 16px' }}>
         Live taker (market-order) buy vs. sell volume, aggregated across every exchange Coinglass
-        tracks — who's actually crossing the spread, not just resting orders or open positions.
+        tracks — who's actually crossing the spread. Net &gt; 0 means more real buying pressure
+        (inflow) than selling (outflow) over that window, not the reverse.
       </p>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-        {Object.keys(data.assets).map((s) => (
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
+        {PRIMARY_TICKERS.map((s) => (
           <button
             key={s}
-            onClick={() => setSymbol(s)}
+            onClick={() => handlePickTicker(s)}
             style={{
               background: symbol === s ? '#1E252A' : '#171D21',
               border: `1px solid ${symbol === s ? AMBER : CARD_BORDER}`,
@@ -74,6 +98,32 @@ export default function TakerFlow({ data }) {
             {s}
           </button>
         ))}
+        <select
+          value={isPrimary ? '' : symbol}
+          onChange={(e) => e.target.value && handlePickTicker(e.target.value)}
+          style={{
+            background: !isPrimary ? '#1E252A' : '#171D21',
+            border: `1px solid ${!isPrimary ? AMBER : CARD_BORDER}`,
+            color: !isPrimary ? AMBER : TEXT_SECONDARY,
+            borderRadius: 4, padding: '4px 8px', fontSize: 12, cursor: 'pointer',
+          }}
+        >
+          <option value="">Other ticker…</option>
+          {SECTORS.map((sec) => (
+            <optgroup key={sec.key} label={sec.label}>
+              {sec.tickers
+                .filter((t) => !PRIMARY_TICKERS.includes(t))
+                .map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+            </optgroup>
+          ))}
+        </select>
+        {!isPrimary && (
+          <span style={{ fontSize: 10, color: TEXT_MUTED }}>
+            fetched on demand — not every ticker this dashboard tracks is a listed Coinglass futures market
+          </span>
+        )}
       </div>
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
@@ -98,7 +148,11 @@ export default function TakerFlow({ data }) {
         })}
       </div>
 
-      {!row ? (
+      {asset?.loading ? (
+        <p style={{ fontSize: 12, color: TEXT_MUTED }}>Loading {symbol}…</p>
+      ) : asset?.error ? (
+        <p style={{ fontSize: 12, color: TEXT_MUTED }}>{asset.error}</p>
+      ) : !row ? (
         <p style={{ fontSize: 12, color: TEXT_MUTED }}>
           No live data for {symbol} at this range this refresh
           {asset?.rangesFailed?.find((f) => f.range === range) && `: ${asset.rangesFailed.find((f) => f.range === range).error}`}
@@ -109,7 +163,7 @@ export default function TakerFlow({ data }) {
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: TEXT_MUTED, marginBottom: 8 }}>
               <span>Aggregate {symbol} taker volume, trailing {RANGE_LABELS[row.range].toLowerCase()}</span>
               <span style={{ color: row.netVolUsd >= 0 ? GAIN : LOSS, fontFamily: 'ui-monospace, monospace' }}>
-                Net {row.netVolUsd >= 0 ? '+' : ''}{formatUsd(row.netVolUsd)}
+                Net {row.netVolUsd >= 0 ? '+' : ''}{formatUsd(row.netVolUsd)} {row.netVolUsd >= 0 ? '(inflow)' : '(outflow)'}
               </span>
             </div>
             <SplitBar buyPct={row.buyRatio} height={22} />
