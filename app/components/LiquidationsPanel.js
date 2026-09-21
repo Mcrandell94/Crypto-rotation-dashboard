@@ -1,12 +1,37 @@
 'use client';
 
+import { useState } from 'react';
+
 const TEXT_PRIMARY = '#E7E4DD';
 const TEXT_SECONDARY = '#8B9298';
 const TEXT_MUTED = '#6E767B';
 const CARD_BG = '#171D21';
 const CARD_BORDER = '#2A3136';
+const AMBER = '#C9A66B';
 const GAIN = '#7FA37F';
 const LOSS = '#A85D4F';
+const ASSETS = ['BTC', 'ETH'];
+
+function AssetPicker({ asset, setAsset }) {
+  return (
+    <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+      {ASSETS.map((a) => (
+        <button
+          key={a}
+          onClick={() => setAsset(a)}
+          style={{
+            background: asset === a ? '#1E252A' : '#171D21',
+            border: `1px solid ${asset === a ? AMBER : CARD_BORDER}`,
+            color: asset === a ? AMBER : TEXT_SECONDARY,
+            borderRadius: 4, padding: '4px 10px', fontSize: 11, cursor: 'pointer',
+          }}
+        >
+          {a}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 function formatUsdAbs(v) {
   if (v == null || !Number.isFinite(v)) return '—';
@@ -20,30 +45,50 @@ function formatDate(iso) {
 }
 
 export default function LiquidationsPanel({ data }) {
+  const [asset, setAsset] = useState('BTC');
+
   if (!data) {
     return (
       <section style={{ marginTop: 32 }}>
         <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: TEXT_PRIMARY }}>
-          BTC Liquidations — Long vs Short
+          Liquidations — Long vs Short
         </h2>
         <p style={{ fontSize: 12, color: TEXT_MUTED, marginTop: 16 }}>Waiting for data…</p>
       </section>
     );
   }
 
-  const { days, last24h, last7dLong, last7dShort } = data;
+  const assetData = data.assets?.[asset];
+
+  if (!assetData) {
+    return (
+      <section style={{ marginTop: 32 }}>
+        <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: TEXT_PRIMARY }}>
+          Liquidations — Long vs Short
+        </h2>
+        <AssetPicker asset={asset} setAsset={setAsset} />
+        <p style={{ fontSize: 12, color: TEXT_MUTED, marginTop: 16 }}>
+          No {asset} data — Coinglass didn't return usable liquidation data for this asset this refresh.
+        </p>
+      </section>
+    );
+  }
+
+  const { days, last24h, last7dLong, last7dShort } = assetData;
   const recent = days.slice(-14);
   const maxTotal = Math.max(1, ...recent.map((d) => d.longUsd + d.shortUsd));
 
   return (
     <section style={{ marginTop: 32 }}>
       <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: TEXT_PRIMARY }}>
-        BTC Liquidations — Long vs Short
+        Liquidations — Long vs Short
       </h2>
       <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '4px 0 16px' }}>
         Live forced-liquidation volume across Binance, OKX, Bybit, Bitget, and Gate, via Coinglass —
         long liquidations are forced selling, short liquidations are forced buying
       </p>
+
+      <AssetPicker asset={asset} setAsset={setAsset} />
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
         <div style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: '10px 12px', flex: '1 1 130px' }}>
