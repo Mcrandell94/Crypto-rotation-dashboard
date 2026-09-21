@@ -17,10 +17,17 @@
 // itself is unreachable from this dev sandbox to cross-check directly
 // (same as most providers hit this session) — both external sources
 // agree and link back to the same Etherscan token pages.
+//
+// Uses Etherscan's V2 API (api.etherscan.io/v2/api, chainid=1 for
+// Ethereum mainnet) rather than the legacy per-chain V1 host
+// (api.etherscan.io/api) — Etherscan unified all their per-chain
+// explorers behind one multichain key on V2, and newer API keys are
+// increasingly V2-only, so V1 is the wrong endpoint to build against now.
 
 export const dynamic = 'force-dynamic';
 
-const ETHERSCAN_BASE = 'https://api.etherscan.io/api';
+const ETHERSCAN_BASE = 'https://api.etherscan.io/v2/api';
+const ETHEREUM_CHAIN_ID = 1;
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
 const ZERO_TOPIC = `0x${'0'.repeat(64)}`;
 // ~7 days of Ethereum blocks at a ~12s block time. Bounded so Etherscan's
@@ -36,7 +43,7 @@ const TOKENS = [
 ];
 
 async function fetchLatestBlock(apiKey) {
-  const url = `${ETHERSCAN_BASE}?module=proxy&action=eth_blockNumber&apikey=${apiKey}`;
+  const url = `${ETHERSCAN_BASE}?chainid=${ETHEREUM_CHAIN_ID}&module=proxy&action=eth_blockNumber&apikey=${apiKey}`;
   const res = await fetch(url, { next: { revalidate: 60 } });
   if (!res.ok) {
     const detail = await res.text();
@@ -51,7 +58,7 @@ async function fetchLatestBlock(apiKey) {
 
 async function fetchMints(token, apiKey, fromBlock) {
   const url =
-    `${ETHERSCAN_BASE}?module=logs&action=getLogs&fromBlock=${fromBlock}&toBlock=latest` +
+    `${ETHERSCAN_BASE}?chainid=${ETHEREUM_CHAIN_ID}&module=logs&action=getLogs&fromBlock=${fromBlock}&toBlock=latest` +
     `&address=${token.address}&topic0=${TRANSFER_TOPIC}&topic0_1_opr=and&topic1=${ZERO_TOPIC}` +
     `&page=1&offset=${MAX_MINTS}&sort=desc&apikey=${apiKey}`;
 
@@ -112,8 +119,11 @@ export async function GET() {
     const succeeded = results.filter((r) => !r.error);
 
     if (succeeded.length === 0) {
+      // The reason each token failed goes directly in `error`, not just a
+      // separate `detail` field — the client only ever surfaces `error`.
+      const reasons = failed.map((f) => f.error).join(' | ').slice(0, 700);
       return Response.json(
-        { error: 'Etherscan mint lookup failed for every tracked token.', detail: JSON.stringify(failed).slice(0, 800) },
+        { error: `Etherscan mint lookup failed for every tracked token: ${reasons}`, detail: JSON.stringify(failed).slice(0, 800) },
         { status: 502 }
       );
     }
