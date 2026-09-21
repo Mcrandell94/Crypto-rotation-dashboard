@@ -75,6 +75,8 @@ export default function DashboardHome() {
   const [rrgSectorsError, setRrgSectorsError] = useState(null);
   const [optionsData, setOptionsData] = useState(null);
   const [optionsError, setOptionsError] = useState(null);
+  const [fedOddsData, setFedOddsData] = useState(null);
+  const [fedOddsError, setFedOddsError] = useState(null);
   const [newsData, setNewsData] = useState(null);
   const [newsError, setNewsError] = useState(null);
   const [openInterestData, setOpenInterestData] = useState(null);
@@ -226,6 +228,18 @@ export default function DashboardHome() {
       setOptionsData(json);
     } catch (e) {
       setOptionsError(e.message);
+    }
+  }, []);
+
+  const fetchFedOdds = useCallback(async () => {
+    setFedOddsError(null);
+    try {
+      const res = await fetch('/api/fedodds');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setFedOddsData(json);
+    } catch (e) {
+      setFedOddsError(e.message);
     }
   }, []);
 
@@ -395,6 +409,7 @@ export default function DashboardHome() {
     fetchAltseason();
     fetchEtfFlows();
     fetchOptions();
+    fetchFedOdds();
     fetchNews();
     fetchOpenInterest();
     fetchLiquidations();
@@ -405,7 +420,7 @@ export default function DashboardHome() {
     fetchLiquidationFeed();
     fetchBtcPrice();
     fetchEthPrice();
-  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality, fetchAltseason, fetchEtfFlows, fetchOptions, fetchNews, fetchOpenInterest, fetchLiquidations, fetchEthEtfFlows, fetchLiquidationHeatmap, fetchLiquidationHeatmapCoinalyze, fetchLiquidationHeatmapBcf, fetchLiquidationFeed, fetchBtcPrice, fetchEthPrice]);
+  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality, fetchAltseason, fetchEtfFlows, fetchOptions, fetchFedOdds, fetchNews, fetchOpenInterest, fetchLiquidations, fetchEthEtfFlows, fetchLiquidationHeatmap, fetchLiquidationHeatmapCoinalyze, fetchLiquidationHeatmapBcf, fetchLiquidationFeed, fetchBtcPrice, fetchEthPrice]);
 
   return (
     <main style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
@@ -422,6 +437,7 @@ export default function DashboardHome() {
             fetchAltseason();
             fetchEtfFlows();
             fetchOptions();
+            fetchFedOdds();
             fetchNews();
             fetchOpenInterest();
             fetchLiquidations();
@@ -604,7 +620,11 @@ export default function DashboardHome() {
 
       {activeTab === 'calendar' && (
         <TabErrorBoundary tabName="CB Calendar">
-          <CbCalendar />
+          <CbCalendar
+            optionsData={optionsData}
+            fedOddsData={fedOddsData}
+            fedOddsError={fedOddsError}
+          />
         </TabErrorBoundary>
       )}
 

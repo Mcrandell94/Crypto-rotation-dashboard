@@ -11,143 +11,142 @@ const TEXT_MUTED = '#6E767B';
 const CARD_BG = '#171D21';
 const CARD_BORDER = '#2A3136';
 const AMBER = '#C9A66B';
+const GAIN = '#7FA37F';
+const LOSS = '#A85D4F';
 
+const HIGH = LOSS;
+const MEDIUM = AMBER;
+const LOW = GAIN;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-function fmtDate(iso) {
-  return new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
-}
-function fmtRange(startIso, endIso) {
-  const start = new Date(`${startIso}T00:00:00Z`);
-  const end = new Date(`${endIso}T00:00:00Z`);
-  const startLabel = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
-  const endLabel = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
-  return `${startLabel}–${endLabel}`;
+function fmtDateTime(date, timeZone) {
+  return date.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone });
 }
 
 function Badge({ children, color }) {
   return (
     <span style={{
       fontSize: 10, color, border: `1px solid ${color}`, borderRadius: 3,
-      padding: '1px 6px', whiteSpace: 'nowrap',
+      padding: '1px 6px', whiteSpace: 'nowrap', textTransform: 'uppercase', letterSpacing: '0.02em',
     }}>
       {children}
     </span>
   );
 }
 
-// Each bank's meeting shape/badges differ (FOMC: single decision date + SEP
-// flag; BOE: single decision date + Monetary Policy Report flag; BOJ:
-// 2-day meeting, no equivalent flag) — normalized here so the rest of the
-// panel can render all three the same way.
-const BANKS = [
-  {
-    key: 'fomc',
-    name: 'Federal Reserve — FOMC',
-    source: "the Fed's own published meeting calendar",
-    meetings: FOMC_MEETINGS,
-    decisionDateTime: fomcDecisionDateTime,
-    decisionTimeNote: 'Rate decision 2:00pm ET on the final day',
-    label: (m) => fmtRange(m.start, m.end),
-    badges: (m) => (
-      <>
-        <Badge color={TEXT_SECONDARY}>Press conference</Badge>
-        {m.sep && <Badge color={AMBER}>SEP · Dot plot</Badge>}
-        {m.tentative && <Badge color={TEXT_MUTED}>Tentative</Badge>}
-      </>
-    ),
-  },
-  {
-    key: 'boe',
-    name: 'Bank of England — MPC',
-    source: "the Bank's own published MPC dates",
-    meetings: BOE_MEETINGS,
-    decisionDateTime: boeDecisionDateTime,
-    decisionTimeNote: 'Rate decision 12:00pm London time',
-    label: (m) => fmtDate(m.date),
-    badges: (m) => (
-      <>
-        {m.mpr ? <Badge color={AMBER}>MPR · Press conference</Badge> : <Badge color={TEXT_SECONDARY}>Decision only</Badge>}
-        {m.tentative && <Badge color={TEXT_MUTED}>Provisional</Badge>}
-      </>
-    ),
-  },
-  {
-    key: 'boj',
-    name: 'Bank of Japan — MPM',
-    source: "the BOJ's own published meeting schedule",
-    meetings: BOJ_MEETINGS,
-    decisionDateTime: bojDecisionDateTime,
-    decisionTimeNote: 'Statement timing varies; Governor press conference fixed at 3:30pm JST on the final day',
-    label: (m) => fmtRange(m.start, m.end),
-    badges: (m) => (
-      <>
-        <Badge color={TEXT_SECONDARY}>Press conference</Badge>
-        {m.tentative && <Badge color={TEXT_MUTED}>Tentative</Badge>}
-      </>
-    ),
-  },
-];
+// Central bank meetings get a heuristic severity, same as every other
+// judgment-call field in this app — labeled as one, never presented as a
+// rating. Real market-implied data (Polymarket's Fed decision odds) drives
+// it where available; everything else falls back to a days-until proxy.
+function centralBankSeverity(daysUntil, marketTopPct, isNoChange) {
+  if (daysUntil < 0) return null;
+  if (marketTopPct != null) {
+    if (!isNoChange && marketTopPct >= 55) return 'high'; // a change looks likely
+    if (marketTopPct < 75) return 'medium'; // genuinely contested either way
+    return 'low'; // hold looks solidly likely
+  }
+  if (daysUntil <= 14) return 'medium';
+  return 'low';
+}
 
-function BankSection({ bank, now }) {
-  const upcoming = bank.meetings.filter((m) => bank.decisionDateTime(m) >= now);
-  const next = upcoming[0];
-  const onDeck = upcoming.slice(1, 4);
-  const daysUntil = next ? Math.ceil((bank.decisionDateTime(next) - now) / DAY_MS) : null;
-  const lastMeeting = [...bank.meetings].reverse().find((m) => bank.decisionDateTime(m) < now);
+function expirySeverity(type) {
+  if (type === 'quarterly') return 'high';
+  if (type === 'monthly') return 'medium';
+  return 'low';
+}
+
+const SEVERITY_COLOR = { high: HIGH, medium: MEDIUM, low: LOW };
+
+function buildCentralBankEvents(now) {
+  const banks = [
+    { key: 'fomc', name: 'Fed', full: 'Federal Reserve — FOMC', meetings: FOMC_MEETINGS, decisionDateTime: fomcDecisionDateTime, tz: 'America/New_York', label: (m) => `${m.start}–${m.end}` },
+    { key: 'boe', name: 'BOE', full: 'Bank of England — MPC', meetings: BOE_MEETINGS, decisionDateTime: boeDecisionDateTime, tz: 'Europe/London', label: (m) => m.date },
+    { key: 'boj', name: 'BOJ', full: 'Bank of Japan — MPM', meetings: BOJ_MEETINGS, decisionDateTime: bojDecisionDateTime, tz: 'Asia/Tokyo', label: (m) => `${m.start}–${m.end}` },
+  ];
+
+  const events = [];
+  for (const bank of banks) {
+    for (const m of bank.meetings) {
+      const dt = bank.decisionDateTime(m);
+      const daysUntil = Math.ceil((dt - now) / DAY_MS);
+      events.push({
+        id: `${bank.key}-${bank.label(m)}`,
+        date: dt,
+        name: bank.full,
+        shortName: bank.name,
+        category: 'central-bank',
+        resolved: dt < now,
+        daysUntil,
+        tz: bank.tz,
+        marketOutcomes: null, // filled in for the Fed by the caller, if live data is available
+      });
+    }
+  }
+  return events;
+}
+
+function buildOptionsEvents(optionsData) {
+  const btc = optionsData?.assets?.BTC;
+  if (!btc?.expiries) return [];
+  return btc.expiries.slice(0, 3).map((e) => ({
+    id: `btc-opt-${e.expiry}`,
+    date: new Date(e.expiry),
+    name: 'BTC options expiry',
+    shortName: 'BTC options',
+    category: 'options-expiry',
+    resolved: new Date(e.expiry) < new Date(),
+    expiry: e,
+  }));
+}
+
+function EventCard({ ev, now }) {
+  const severity = ev.severity;
+  const color = SEVERITY_COLOR[severity] || TEXT_MUTED;
 
   return (
-    <div style={{ marginTop: 24 }}>
-      <h3 style={{ fontSize: 13, fontWeight: 600, margin: 0, color: TEXT_PRIMARY }}>{bank.name}</h3>
-      <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '4px 0 12px' }}>
-        Hand-maintained from {bank.source} — no live feed beats reading it directly.
-      </p>
+    <div style={{ display: 'flex', gap: 12, marginTop: 14 }}>
+      <div style={{ width: 3, background: color, borderRadius: 2, flexShrink: 0 }} />
+      <div style={{ flex: 1, paddingBottom: 14, borderBottom: `1px solid ${CARD_BORDER}` }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: TEXT_PRIMARY }}>{ev.shortName}</span>
+          <span style={{ fontSize: 11, color: TEXT_MUTED }}>{fmtDateTime(ev.date, ev.tz)}</span>
+        </div>
+        <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+          <Badge color={ev.category === 'central-bank' ? '#4C7EB8' : '#8B6FB8'}>
+            {ev.category === 'central-bank' ? 'Central bank' : 'Options expiry'}
+          </Badge>
+          {ev.resolved && <Badge color={TEXT_MUTED}>Resolved</Badge>}
+        </div>
 
-      {next ? (
-        <div style={{ background: CARD_BG, border: `1px solid ${AMBER}`, borderRadius: 6, padding: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 8 }}>
-            <span style={{ fontSize: 12, color: TEXT_SECONDARY }}>Next meeting</span>
-            <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, color: AMBER }}>
-              {daysUntil === 0 ? 'Today' : daysUntil === 1 ? 'Tomorrow' : `in ${daysUntil} days`}
-            </span>
+        {ev.category === 'central-bank' && !ev.resolved && ev.marketOutcomes && (
+          <div style={{ fontSize: 12, color: TEXT_SECONDARY, marginTop: 8, lineHeight: 1.6 }}>
+            Market-implied (Polymarket): {ev.marketOutcomes.slice(0, 3).map((o) => `${o.pct}% ${o.label}`).join(', ')}
           </div>
-          <div style={{ fontSize: 20, color: TEXT_PRIMARY, marginTop: 6 }}>{bank.label(next)}</div>
-          <div style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 4 }}>{bank.decisionTimeNote}</div>
-          <div style={{ marginTop: 10 }}>{bank.badges(next)}</div>
-        </div>
-      ) : (
-        <p style={{ fontSize: 12, color: TEXT_MUTED }}>No upcoming meetings in the hand-maintained schedule.</p>
-      )}
+        )}
+        {ev.category === 'central-bank' && !ev.resolved && !ev.marketOutcomes && (
+          <div style={{ fontSize: 12, color: TEXT_MUTED, marginTop: 8 }}>
+            {ev.daysUntil === 0 ? 'Today' : ev.daysUntil === 1 ? 'Tomorrow' : `In ${ev.daysUntil} days`} — no live market found for this meeting.
+          </div>
+        )}
+        {ev.category === 'central-bank' && ev.resolved && (
+          <div style={{ fontSize: 12, color: TEXT_MUTED, marginTop: 8 }}>
+            Meeting has passed — see the bank's own published statement for the outcome.
+          </div>
+        )}
 
-      {onDeck.length > 0 && (
-        <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {onDeck.map((m, i) => (
-            <div
-              key={bank.label(m) + i}
-              style={{
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                padding: '8px 4px', borderBottom: `1px solid ${CARD_BORDER}`, gap: 12, flexWrap: 'wrap',
-              }}
-            >
-              <span style={{ fontSize: 12, color: TEXT_PRIMARY, fontFamily: 'ui-monospace, monospace' }}>
-                {bank.label(m)}
-              </span>
-              {bank.badges(m)}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {lastMeeting && (
-        <p style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 12 }}>
-          Last meeting: {bank.label(lastMeeting)}
-        </p>
-      )}
+        {ev.category === 'options-expiry' && (
+          <div style={{ fontSize: 12, color: TEXT_SECONDARY, marginTop: 8, lineHeight: 1.6 }}>
+            {ev.expiry.type === 'quarterly' ? 'Quarterly expiry' : ev.expiry.type === 'monthly' ? 'Monthly expiry' : 'Weekly expiry'}
+            {ev.expiry.maxPain != null && `, max pain $${Math.round(ev.expiry.maxPain).toLocaleString()}`}
+            {ev.expiry.putCallRatio != null && ` · P/C ${ev.expiry.putCallRatio}`}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
-export default function CbCalendar() {
+export default function CbCalendar({ optionsData, fedOddsData, fedOddsError }) {
   const [now, setNow] = useState(null);
 
   // Computed on mount rather than during render, so the server-rendered
@@ -159,27 +158,83 @@ export default function CbCalendar() {
   if (!now) {
     return (
       <section style={{ marginTop: 32 }}>
-        <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: TEXT_PRIMARY }}>
-          Central Bank Calendar
-        </h2>
+        <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: TEXT_PRIMARY }}>Critical Dates</h2>
         <p style={{ fontSize: 12, color: TEXT_MUTED, marginTop: 16 }}>Loading…</p>
       </section>
     );
   }
 
+  let events = [...buildCentralBankEvents(now), ...buildOptionsEvents(optionsData)];
+
+  // Attach live Polymarket odds to the nearest upcoming Fed meeting only —
+  // the market tracks "the next decision," not a specific date.
+  const nextFomc = events.find((e) => e.shortName === 'Fed' && !e.resolved);
+  if (nextFomc && fedOddsData?.market) {
+    nextFomc.marketOutcomes = fedOddsData.market.outcomes;
+  }
+
+  events = events.map((ev) => {
+    if (ev.category === 'central-bank') {
+      const topOutcome = ev.marketOutcomes?.[0];
+      const severity = centralBankSeverity(
+        ev.daysUntil,
+        topOutcome?.pct ?? null,
+        /no change|hold/i.test(topOutcome?.label || '')
+      );
+      return { ...ev, severity };
+    }
+    return { ...ev, severity: expirySeverity(ev.expiry.type) };
+  });
+
+  events.sort((a, b) => a.date - b.date);
+  // Keep the calendar focused: everything still-upcoming, plus the last
+  // couple of resolved meetings for context.
+  const upcoming = events.filter((e) => !e.resolved);
+  const recentlyResolved = events.filter((e) => e.resolved).slice(-3);
+  const shown = [...recentlyResolved, ...upcoming];
+
   return (
     <section style={{ marginTop: 32 }}>
-      <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: TEXT_PRIMARY }}>
-        Central Bank Calendar — Fed, BOE, BOJ
-      </h2>
-      <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '4px 0 0' }}>
-        The three central banks most likely to move crypto through rate decisions and dollar/yen
-        liquidity — dates only move on rare, widely-reported reschedules.
+      <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: TEXT_PRIMARY }}>Critical Dates</h2>
+      <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '4px 0 4px' }}>
+        Central bank decisions (Fed, BOE, BOJ — hand-maintained from each bank's own published calendar)
+        and BTC options expiries (live, mirrors the Options panel on Macro & Seasonality).
+      </p>
+      <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '0 0 14px', lineHeight: 1.5 }}>
+        Severity is a judgment call, not an official rating — for Fed meetings it's driven by
+        live Polymarket odds where a market exists; otherwise it's a rough days-until proxy.
       </p>
 
-      {BANKS.map((bank) => (
-        <BankSection key={bank.key} bank={bank} now={now} />
-      ))}
+      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 4 }}>
+        <span style={{ fontSize: 11, color: TEXT_SECONDARY, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ width: 8, height: 8, borderRadius: 4, background: HIGH, display: 'inline-block' }} />
+          High — real change likely
+        </span>
+        <span style={{ fontSize: 11, color: TEXT_SECONDARY, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ width: 8, height: 8, borderRadius: 4, background: MEDIUM, display: 'inline-block' }} />
+          Medium — genuinely contested
+        </span>
+        <span style={{ fontSize: 11, color: TEXT_SECONDARY, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ width: 8, height: 8, borderRadius: 4, background: LOW, display: 'inline-block' }} />
+          Low — hold likely, or too far out
+        </span>
+      </div>
+
+      {fedOddsError && (
+        <p style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 10 }}>
+          Live Fed odds unavailable this refresh: {fedOddsError}
+        </p>
+      )}
+
+      {shown.length === 0 ? (
+        <p style={{ fontSize: 12, color: TEXT_MUTED, marginTop: 16 }}>No dates in the hand-maintained schedule.</p>
+      ) : (
+        <div>
+          {shown.map((ev) => (
+            <EventCard key={ev.id} ev={ev} now={now} />
+          ))}
+        </div>
+      )}
     </section>
   );
 }
