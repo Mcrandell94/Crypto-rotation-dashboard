@@ -137,7 +137,7 @@ const BTC_HORIZONS = {
 //
 // Second, cleaner capture — replaces an earlier pass whose screenshots
 // didn't show the timeframe selector clearly. These show it explicitly
-// (1Y, 1M, 1W, 12H, 4H), so shortTerm now blends the 4H and 12H views
+// (1Y, 1M, 1W, 24H, 4H), so shortTerm now blends the 4H and 24H views
 // (near-identical, cross-confirmed) and longTerm is populated for the
 // first time. The standout: ~$2.2K is the dominant band on the 1-year,
 // 1-month, AND 1-week views — nearly unbroken across the whole year,
@@ -152,9 +152,9 @@ const ETH_HORIZONS = {
     label: 'Near-Term (live leverage map)',
     capturedAt: ETH_CAPTURED_AT,
     spotAtCapture: ETH_SPOT,
-    source: ETH_SOURCE + ' — 4H and 12H views, near-identical',
+    source: ETH_SOURCE + ' — 4H and 24H views, near-identical',
     levels: [
-      { kind: 'level', price: 2750, side: 'short', label: 'Thin but consistent line, both 4H and 12H windows' },
+      { kind: 'level', price: 2750, side: 'short', label: 'Thin but consistent line, both 4H and 24H windows' },
       { kind: 'level', price: 2700, side: 'short', label: 'Dominant, wide, solid band right above spot — the most solid feature in both near-term windows' },
       { kind: 'level', price: 2550, side: 'long', label: 'Solid, bright band below spot, both windows' },
       { kind: 'level', price: 2350, side: 'long', label: 'Bright band, both windows' },
