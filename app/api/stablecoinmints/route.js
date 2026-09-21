@@ -35,10 +35,19 @@ const ZERO_TOPIC = `0x${'0'.repeat(64)}`;
 // still wide enough that the feed isn't empty between mints (USDT/USDC
 // mint irregularly — sometimes daily, sometimes with multi-day gaps).
 const BLOCK_WINDOW = 50_400;
-// Fetched per token, before the panel's own size filter narrows what's
-// shown — kept generous so filtering down to "bigger mints only" still
-// leaves a real list instead of emptying it out.
-const MAX_MINTS = 30;
+// How many rows to actually pull from Etherscan per token — deliberately
+// generous (comfortably above the real count of mint events either token
+// sees in a 7-day window), because getLogs' own sort/pagination isn't
+// trustworthy the way it is on Etherscan's account-module endpoints
+// (tokentx, txlist): `sort=desc&offset=N` here can hand back the OLDEST N
+// events in the block range instead of the newest, which is exactly what
+// made this feed show only ~7-day-old mints. Recency is enforced below by
+// sorting everything actually returned ourselves, not by trusting the
+// API to have already handed us the right end of the list.
+const FETCH_LIMIT = 1000;
+// How many of the most-recent, freshly-sorted rows the feed actually
+// shows, after the panel's own size filter narrows things further.
+const DISPLAY_LIMIT = 30;
 
 const TOKENS = [
   { symbol: 'USDT', label: 'Tether', address: '0xdAC17F958D2ee523a2206206994597C13D831ec7', decimals: 6, color: '#26A17B' },
@@ -63,7 +72,7 @@ async function fetchMints(token, apiKey, fromBlock) {
   const url =
     `${ETHERSCAN_BASE}?chainid=${ETHEREUM_CHAIN_ID}&module=logs&action=getLogs&fromBlock=${fromBlock}&toBlock=latest` +
     `&address=${token.address}&topic0=${TRANSFER_TOPIC}&topic0_1_opr=and&topic1=${ZERO_TOPIC}` +
-    `&page=1&offset=${MAX_MINTS}&sort=desc&apikey=${apiKey}`;
+    `&page=1&offset=${FETCH_LIMIT}&sort=desc&apikey=${apiKey}`;
 
   const res = await fetch(url, { next: { revalidate: 60 } });
   if (!res.ok) {
@@ -101,6 +110,10 @@ async function fetchMints(token, apiKey, fromBlock) {
     };
   });
 
+  // Don't trust getLogs' own ordering — sort what actually came back
+  // ourselves so "most recent" is a fact, not an assumption about the API.
+  mints.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
   return { symbol: token.symbol, mints };
 }
 
@@ -134,7 +147,7 @@ export async function GET() {
     const mints = succeeded
       .flatMap((r) => r.mints)
       .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
-      .slice(0, MAX_MINTS);
+      .slice(0, DISPLAY_LIMIT);
 
     return Response.json({
       mints,
