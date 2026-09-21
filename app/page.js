@@ -21,6 +21,7 @@ import TakerFlow from './components/TakerFlow';
 import LiquidationsPanel from './components/LiquidationsPanel';
 import LiquidationHeatmap from './components/LiquidationHeatmap';
 import LiveLiquidationFeed from './components/LiveLiquidationFeed';
+import StablecoinMintFeed from './components/StablecoinMintFeed';
 import LiquidationLevelsTracker from './components/LiquidationLevelsTracker';
 import MarketRead from './components/MarketRead';
 import TabErrorBoundary from './components/TabErrorBoundary';
@@ -100,6 +101,8 @@ export default function DashboardHome() {
   const [liquidationHeatmapBcfError, setLiquidationHeatmapBcfError] = useState(null);
   const [liquidationFeedData, setLiquidationFeedData] = useState(null);
   const [liquidationFeedError, setLiquidationFeedError] = useState(null);
+  const [stablecoinMintsData, setStablecoinMintsData] = useState(null);
+  const [stablecoinMintsError, setStablecoinMintsError] = useState(null);
   const [btcPriceData, setBtcPriceData] = useState(null);
   const [btcPriceError, setBtcPriceError] = useState(null);
   const [ethPriceData, setEthPriceData] = useState(null);
@@ -139,6 +142,18 @@ export default function DashboardHome() {
       setLiquidationFeedData(json);
     } catch (e) {
       setLiquidationFeedError(e.message);
+    }
+  }, []);
+
+  const fetchStablecoinMints = useCallback(async () => {
+    setStablecoinMintsError(null);
+    try {
+      const res = await fetch('/api/stablecoinmints');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setStablecoinMintsData(json);
+    } catch (e) {
+      setStablecoinMintsError(e.message);
     }
   }, []);
 
@@ -464,9 +479,10 @@ export default function DashboardHome() {
     fetchLiquidationHeatmapCoinalyze();
     fetchLiquidationHeatmapBcf();
     fetchLiquidationFeed();
+    fetchStablecoinMints();
     fetchBtcPrice();
     fetchEthPrice();
-  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality, fetchAltseason, fetchEtfFlows, fetchOptions, fetchFedOdds, fetchCongressBills, fetchCpi, fetchNews, fetchOpenInterest, fetchTakerFlow, fetchLiquidations, fetchEthEtfFlows, fetchLiquidationHeatmap, fetchLiquidationHeatmapCoinalyze, fetchLiquidationHeatmapBcf, fetchLiquidationFeed, fetchBtcPrice, fetchEthPrice]);
+  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality, fetchAltseason, fetchEtfFlows, fetchOptions, fetchFedOdds, fetchCongressBills, fetchCpi, fetchNews, fetchOpenInterest, fetchTakerFlow, fetchLiquidations, fetchEthEtfFlows, fetchLiquidationHeatmap, fetchLiquidationHeatmapCoinalyze, fetchLiquidationHeatmapBcf, fetchLiquidationFeed, fetchStablecoinMints, fetchBtcPrice, fetchEthPrice]);
 
   return (
     <main style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
@@ -495,6 +511,7 @@ export default function DashboardHome() {
             fetchLiquidationHeatmapCoinalyze();
             fetchLiquidationHeatmapBcf();
             fetchLiquidationFeed();
+            fetchStablecoinMints();
             fetchBtcPrice();
             fetchEthPrice();
             if (rrgMode === 'sectors') fetchRrgSectors(benchmark);
@@ -865,6 +882,17 @@ export default function DashboardHome() {
             </div>
           ) : (
             <LiveLiquidationFeed data={liquidationFeedData} />
+          )}
+
+          {stablecoinMintsError ? (
+            <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+              <strong>Stablecoin mint feed fetch failed:</strong> {stablecoinMintsError}
+              <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
+                Most likely cause: ETHERSCAN_API_KEY isn't set yet in this environment's variables.
+              </div>
+            </div>
+          ) : (
+            <StablecoinMintFeed data={stablecoinMintsData} />
           )}
 
           {fundingError ? (
