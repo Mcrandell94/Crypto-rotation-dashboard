@@ -37,89 +37,88 @@
 // relationship is what LiquidationLevelsTracker uses to decide whether
 // current price has crossed it.
 
-// shortTerm blends two chart types across five venues: Coinglass's
-// per-price liquidation LEVERAGE distribution (actual numeric x-axis,
-// bar height = leverage volume, from currently-open positions — Binance +
-// Bybit) plus BitcoinCounterFlow's own Heatmap Terminal (24h, numeric
-// price axis — OKX, Bitget, Hyperliquid), which sharpened the near-spot
-// long level from a 5-way cross-check. A bright band right at BCF's
-// chart's top edge was NOT used as a level — it's likely a rendering
-// artifact (heatmaps often bin everything above the visible range into
-// the top row) rather than a genuine standalone cluster.
-// mediumTerm — BitcoinCounterFlow's Heatmap Terminal, 1-week view, across
-// OKX, Bitget, and Hyperliquid — same tool as shortTerm's BCF read, just a
-// wider time window. Its ~$74.5K band is the single brightest feature on
-// all three exchanges' weekly view, strongly reinforcing shortTerm's
-// $74.5K level (previously backed by only one exchange's leverage chart).
-// monthTerm — BitcoinCounterFlow's Heatmap Terminal, 1-month view, same
-// three exchanges. The ~$74.5K band is now the single most robustly
-// confirmed level in this entire dataset — the brightest feature on all
-// three exchanges at all THREE timeframes (24h, 1-week, and 1-month), and
-// wider/more saturated the longer the window gets.
-// longTerm — Coinglass's 1-year liquidation HEATMAP (color intensity
-// over time, Bybit + Binance) — still an eyeballed pixel-intensity read,
-// treat exact prices as approximate (±0.5-1%).
-const CAPTURED_AT = '2026-09-20T19:00:00Z';
-const SPOT_AT_CAPTURE = 81200;
-const MEDIUM_CAPTURED_AT = '2026-09-21T00:27:00Z';
-const MEDIUM_SPOT_AT_CAPTURE = 81220;
-const MONTH_CAPTURED_AT = '2026-09-21T00:30:00Z';
-const MONTH_SPOT_AT_CAPTURE = 81140;
+// BTC horizons — replaced wholesale with a fresh Binance BTC/USDT capture
+// (Coinglass): two chart types per horizon, the per-price liquidation
+// LEVERAGE distribution (bar height = leverage volume from currently-open
+// positions, split into 5x/10x/25x/50x/100x bands, with running cumulative
+// long/short lines) plus Binance's own liquidation HEATMAP (color
+// intensity over time, with its own aggregated per-price side panel).
+// Spot has moved meaningfully since the previous (BCF/multi-exchange)
+// capture — ~$79-81K then, ~$86.5K now — so this is a fresh read, not a
+// diff against the old levels. All four horizons came from Binance
+// specifically this round, not a cross-exchange comparison, so
+// "confirmed" here means "shows up on both the bar chart AND the heatmap
+// for that horizon," not "confirmed across multiple exchanges." $84K and
+// $82K-ish clusters recur across every single horizon (24h through
+// 1-year) — the closest thing to a standout magnet in this dataset.
+// Eyeballed pixel/bar-height read, same as every other source here —
+// treat exact prices as approximate (±0.5-1%). The short (above-spot)
+// side stays thin at the shorter horizons (24h/1-week/1-month) — real
+// short-liquidation clusters only show up once the 1-year view is wide
+// enough to include price action from well above current spot.
+const BTC_CAPTURED_AT = '2026-09-21T19:15:00Z';
+const SHORT_SPOT = 86516;
+const MEDIUM_SPOT = 86533;
+const MONTH_SPOT = 86571;
+const LONG_SPOT = 86533;
 
 const BTC_HORIZONS = {
   shortTerm: {
     key: 'shortTerm',
     label: 'Near-Term (live leverage map)',
-    capturedAt: CAPTURED_AT,
-    spotAtCapture: SPOT_AT_CAPTURE,
-    source: 'Coinglass Binance+Bybit liquidation leverage distribution (numeric axis) plus BitcoinCounterFlow\'s own Heatmap Terminal across OKX, Bitget, and Hyperliquid (24h view) — cross-checked across 5 venues near spot',
+    capturedAt: BTC_CAPTURED_AT,
+    spotAtCapture: SHORT_SPOT,
+    source: "Coinglass Binance BTC/USDT liquidation leverage distribution + Binance's own liquidation heatmap, 24h view",
     levels: [
-      { kind: 'level', price: 84000, side: 'short', label: 'Secondary cluster further above spot — Bybit wide view (~220M)' },
-      { kind: 'level', price: 82400, side: 'short', label: 'Dominant cluster just above spot — tallest or near-tallest bar on both Binance and Bybit' },
-      { kind: 'zone', zoneLow: 80600, zoneHigh: 82000, label: 'Thin gap between spot and the dominant cluster above — confirmed on Binance, Bybit, and BCF\'s OKX/Bitget/Hyperliquid views' },
-      { kind: 'level', price: 78850, side: 'long', label: 'Sharpest, most-confirmed near-term magnet — single hottest line on BCF\'s heatmap across OKX, Bitget, AND Hyperliquid independently, refining the earlier ~$79.7K read' },
-      { kind: 'level', price: 74500, side: 'long', label: "Very large cluster further below spot — largest bar on Bybit's wide view, and now also the single brightest band on the 1-week horizon across OKX, Bitget, AND Hyperliquid" },
-      { kind: 'level', price: 70700, side: 'long', label: 'Large cluster further out, Binance wide view (~170M)' },
+      { kind: 'level', price: 88500, side: 'short', label: 'Only thin/moderate short-side liquidity has built up above spot so far at this timeframe — light 10x-25x bars, no dominant single level yet' },
+      { kind: 'level', price: 86200, side: 'long', label: 'Thin band right below spot, heatmap' },
+      { kind: 'level', price: 84000, side: 'long', label: 'Dominant, brightest cluster — tallest bar on the leverage chart AND the brightest, longest band on the heatmap' },
+      { kind: 'level', price: 82600, side: 'long', label: 'Secondary cluster, heatmap' },
     ],
   },
   mediumTerm: {
     key: 'mediumTerm',
-    label: 'Medium-Term (1-week)',
-    capturedAt: MEDIUM_CAPTURED_AT,
-    spotAtCapture: MEDIUM_SPOT_AT_CAPTURE,
-    source: "BitcoinCounterFlow's Heatmap Terminal, 1-week view, cross-checked across OKX, Bitget, and Hyperliquid",
+    label: 'Medium-Term (7-day)',
+    capturedAt: BTC_CAPTURED_AT,
+    spotAtCapture: MEDIUM_SPOT,
+    source: "Coinglass Binance BTC/USDT liquidation leverage distribution + Binance's own liquidation heatmap, 7-day view",
     levels: [
-      { kind: 'level', price: 83000, side: 'short', label: 'Moderate band above spot, consistent across all three exchanges' },
-      { kind: 'zone', zoneLow: 80300, zoneHigh: 82150, label: 'Thin, dark stretch between spot and the band above — all three exchanges' },
-      { kind: 'level', price: 78300, side: 'long', label: 'Moderate band, all three exchanges — overlaps the near-term horizon\'s $78.85K magnet' },
-      { kind: 'level', price: 74500, side: 'long', label: 'Dominant, brightest cluster on all three exchanges\' weekly view by a wide margin — the single strongest magnet in this whole horizon' },
+      { kind: 'level', price: 84000, side: 'long', label: 'Cross-confirms the near-term horizon\'s dominant $84K cluster — visible on the 7-day heatmap too' },
+      { kind: 'level', price: 83000, side: 'long', label: 'Leverage-chart spike, ~$77M' },
+      { kind: 'level', price: 81000, side: 'long', label: 'Brightest, longest band on the 7-day heatmap — the single strongest feature in this horizon' },
+      { kind: 'level', price: 78300, side: 'long', label: 'Leverage-chart spike (~$82M) overlapping a heatmap band at the same level' },
     ],
   },
   monthTerm: {
     key: 'monthTerm',
     label: 'Monthly (1-month)',
-    capturedAt: MONTH_CAPTURED_AT,
-    spotAtCapture: MONTH_SPOT_AT_CAPTURE,
-    source: "BitcoinCounterFlow's Heatmap Terminal, 1-month view, cross-checked across OKX, Bitget, and Hyperliquid",
+    capturedAt: BTC_CAPTURED_AT,
+    spotAtCapture: MONTH_SPOT,
+    source: "Coinglass Binance BTC/USDT liquidation leverage distribution + Binance's own liquidation heatmap, 1-month view",
     levels: [
-      { kind: 'level', price: 82700, side: 'short', label: 'Consistent moderate band above spot, all three exchanges over the full month' },
-      { kind: 'zone', zoneLow: 76800, zoneHigh: 80600, label: 'Broad thin/dark stretch below spot before the dominant band, all three exchanges' },
-      { kind: 'level', price: 74500, side: 'long', label: 'The most robustly confirmed level in this entire dataset — brightest, widest band on all three exchanges, and it strengthens the longer the window: present and dominant at 24h, 1-week, AND 1-month' },
+      { kind: 'level', price: 84000, side: 'long', label: 'Cross-confirms the shorter horizons\' $84K cluster — still visible a month out, heatmap' },
+      { kind: 'level', price: 82100, side: 'long', label: 'Single tallest spike on the whole 1-month leverage chart, ~$150M — the dominant level at this horizon' },
+      { kind: 'level', price: 81000, side: 'long', label: 'Brightest, longest band on the 1-month heatmap, same level as the 7-day horizon\'s dominant band' },
+      { kind: 'level', price: 78900, side: 'long', label: 'Leverage-chart cluster spanning roughly $78.3K-$79.4K' },
+      { kind: 'level', price: 77300, side: 'long', label: 'Leverage-chart spike, ~$100M+' },
     ],
   },
   longTerm: {
     key: 'longTerm',
     label: '1-Year (structural)',
-    capturedAt: CAPTURED_AT,
-    spotAtCapture: SPOT_AT_CAPTURE,
-    source: 'Coinglass — Bybit + Binance BTC/USDT 1-year liquidation heatmaps, cross-checked (read by eye from screenshot)',
+    capturedAt: BTC_CAPTURED_AT,
+    spotAtCapture: LONG_SPOT,
+    source: "Coinglass Binance BTC/USDT liquidation leverage distribution + Binance's own liquidation heatmap, 1-year view",
     levels: [
-      { kind: 'level', price: 119000, side: 'short', label: "Fading band from last year's highs (Sep-Dec), both exchanges" },
-      { kind: 'level', price: 97500, side: 'short', label: 'Distinct, still-active band running Feb-Sep — sharper on Binance, present on Bybit' },
-      { kind: 'level', price: 83500, side: 'short', label: 'Moderate cluster near recent price action, both exchanges' },
-      { kind: 'level', price: 64000, side: 'long', label: 'Bright recent cluster near the current date, both exchanges' },
-      { kind: 'level', price: 60500, side: 'long', label: 'Dominant, unbroken band spanning the entire year — by far the strongest magnet on either chart' },
-      { kind: 'zone', zoneLow: 65000, zoneHigh: 95000, label: 'Broad, mostly-thin stretch between the $64K cluster and the $97.5K band' },
+      { kind: 'level', price: 100000, side: 'short', label: 'Long-standing, historical band on the 1-year heatmap' },
+      { kind: 'level', price: 96300, side: 'short', label: 'Leverage-chart spike above spot' },
+      { kind: 'level', price: 94600, side: 'short', label: 'Leverage-chart spike above spot' },
+      { kind: 'level', price: 93300, side: 'short', label: 'Leverage-chart spike above spot' },
+      { kind: 'level', price: 90600, side: 'short', label: 'Leverage-chart spike closest to spot on the short side' },
+      { kind: 'level', price: 82300, side: 'long', label: 'Single tallest spike across the ENTIRE dataset, ~$330M on the 1-year leverage chart — by far the most dominant level found at any horizon' },
+      { kind: 'level', price: 80000, side: 'long', label: 'Bright, recent band on the 1-year heatmap' },
+      { kind: 'level', price: 70000, side: 'long', label: 'Leverage-chart cluster spanning roughly $68.9K-$70.8K, older/deeper price action' },
+      { kind: 'level', price: 60000, side: 'long', label: 'Major long-standing support band on the 1-year heatmap, from well before this capture\'s price range' },
     ],
   },
 };
