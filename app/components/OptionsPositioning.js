@@ -1,5 +1,7 @@
 'use client';
 
+import { useState } from 'react';
+
 const TEXT_PRIMARY = '#E7E4DD';
 const TEXT_SECONDARY = '#8B9298';
 const TEXT_MUTED = '#6E767B';
@@ -37,14 +39,55 @@ function readVerdict(callsPct, mpDist) {
   return `${bookLabel}, ${mpDist < 0 ? 'downward' : 'upward'} gravity`;
 }
 
+const ASSETS = ['BTC', 'ETH'];
+
+function AssetPicker({ asset, setAsset }) {
+  return (
+    <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+      {ASSETS.map((a) => (
+        <button
+          key={a}
+          onClick={() => setAsset(a)}
+          style={{
+            background: asset === a ? '#1E252A' : '#171D21',
+            border: `1px solid ${asset === a ? AMBER : CARD_BORDER}`,
+            color: asset === a ? AMBER : TEXT_SECONDARY,
+            borderRadius: 4, padding: '4px 10px', fontSize: 11, cursor: 'pointer',
+          }}
+        >
+          {a}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function OptionsPositioning({ data }) {
+  const [asset, setAsset] = useState('BTC');
+
   if (!data) {
     return (
       <section style={{ marginTop: 32 }}>
         <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: TEXT_PRIMARY }}>
-          BTC Options — Deribit Positioning
+          Options — Deribit Positioning
         </h2>
         <p style={{ fontSize: 12, color: TEXT_MUTED, marginTop: 16 }}>Waiting for data…</p>
+      </section>
+    );
+  }
+
+  const assetData = data.assets?.[asset];
+
+  if (!assetData) {
+    return (
+      <section style={{ marginTop: 32 }}>
+        <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: TEXT_PRIMARY }}>
+          Options — Deribit Positioning
+        </h2>
+        <AssetPicker asset={asset} setAsset={setAsset} />
+        <p style={{ fontSize: 12, color: TEXT_MUTED, marginTop: 16 }}>
+          No {asset} data — Deribit's book for this asset didn't return usable instruments this refresh.
+        </p>
       </section>
     );
   }
@@ -53,7 +96,7 @@ export default function OptionsPositioning({ data }) {
     price, totalCallOI, totalPutOI, callsPct, putsPct,
     vol24hCalls, vol24hPuts, totalBookOI, totalExpiryCount,
     expiries, topPositions, callWalls, downsideInsuranceStrike,
-  } = data;
+  } = assetData;
 
   const headline = headlineExpiry(expiries);
   const mpDist = headline ? pctDist(headline.maxPain, price) : null;
@@ -71,13 +114,15 @@ export default function OptionsPositioning({ data }) {
   return (
     <section style={{ marginTop: 32 }}>
       <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: TEXT_PRIMARY }}>
-        BTC Options — Deribit Positioning
+        Options — Deribit Positioning
       </h2>
       <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '4px 0 16px' }}>
         Live open interest and max pain across {totalExpiryCount} active expiries, computed directly from
         Deribit&apos;s public order book — max pain is calculated here from real open-interest-by-strike
         data, not sourced from a paid aggregator
       </p>
+
+      <AssetPicker asset={asset} setAsset={setAsset} />
 
       <div style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: 16 }}>
         {verdict && (
@@ -109,12 +154,12 @@ export default function OptionsPositioning({ data }) {
               </div>
             )}
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, fontFamily: 'ui-monospace, monospace' }}>
-              <span style={{ color: GAIN }}>{fmtK(totalCallOI)} BTC calls</span>
-              <span style={{ color: LOSS }}>{fmtK(totalPutOI)} BTC puts</span>
+              <span style={{ color: GAIN }}>{fmtK(totalCallOI)} {asset} calls</span>
+              <span style={{ color: LOSS }}>{fmtK(totalPutOI)} {asset} puts</span>
             </div>
             <div style={{ fontSize: 11, color: TEXT_SECONDARY, marginTop: 10, lineHeight: 1.5 }}>
               24h volume leans the same way: {fmtK(vol24hCalls)} calls vs {fmtK(vol24hPuts)} puts. Total book
-              across all {totalExpiryCount} expiries: {fmtK(totalBookOI)} BTC.
+              across all {totalExpiryCount} expiries: {fmtK(totalBookOI)} {asset}.
             </div>
           </div>
 
@@ -155,7 +200,7 @@ export default function OptionsPositioning({ data }) {
             {topPositions.map((p, i) => (
               <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 5 }}>
                 <span style={{ color: p.side === 'call' ? GAIN : LOSS }}>{p.label} · {p.expiry}</span>
-                <span style={{ fontFamily: 'ui-monospace, monospace', color: TEXT_SECONDARY }}>{fmtK(p.openInterest)} BTC</span>
+                <span style={{ fontFamily: 'ui-monospace, monospace', color: TEXT_SECONDARY }}>{fmtK(p.openInterest)} {asset}</span>
               </div>
             ))}
             {(callWalls?.length > 0 || downsideInsuranceStrike != null) && (

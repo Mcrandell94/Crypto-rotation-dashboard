@@ -18,6 +18,50 @@ export const dynamic = 'force-dynamic';
 const BASE_URL = 'https://open-api-v4.coinglass.com/api';
 const EXCHANGES = 'Binance,OKX,Bybit,Bitget,Gate';
 
+async function fetchLiquidationsForSymbol(symbol, apiKey) {
+  const url = `${BASE_URL}/futures/liquidation/aggregated-history?exchange_list=${EXCHANGES}&symbol=${symbol}&interval=1d&limit=30`;
+  const res = await fetch(url, {
+    headers: { 'CG-API-KEY': apiKey, Accept: 'application/json' },
+    next: { revalidate: 900 },
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    const err = new Error(`Coinglass returned ${res.status} for ${symbol}`);
+    err.status = res.status;
+    err.detail = detail;
+    throw err;
+  }
+
+  const json = await res.json();
+  if (json.code !== '0' && json.code !== 0) {
+    const err = new Error(`Coinglass API error for ${symbol}: ${json.msg || 'unknown error'}`);
+    err.detail = JSON.stringify(json).slice(0, 500);
+    throw err;
+  }
+
+  const rows = Array.isArray(json.data) ? json.data : [];
+  if (rows.length === 0) {
+    const err = new Error(`Coinglass returned no liquidation data for ${symbol}`);
+    err.status = 502;
+    throw err;
+  }
+
+  const days = rows
+    .map((r) => ({
+      date: new Date(Number(r.time)).toISOString().slice(0, 10),
+      longUsd: Number(r.aggregated_long_liquidation_usd) || 0,
+      shortUsd: Number(r.aggregated_short_liquidation_usd) || 0,
+    }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const last24h = days[days.length - 1];
+  const last7d = days.slice(-7);
+  const last7dLong = last7d.reduce((s, d) => s + d.longUsd, 0);
+  const last7dShort = last7d.reduce((s, d) => s + d.shortUsd, 0);
+
+  return { days, last24h, last7dLong, last7dShort };
+}
+
 export async function GET() {
   const apiKey = process.env.COINGLASS_API_KEY;
   if (!apiKey) {
@@ -28,43 +72,25 @@ export async function GET() {
   }
 
   try {
-    const url = `${BASE_URL}/futures/liquidation/aggregated-history?exchange_list=${EXCHANGES}&symbol=BTC&interval=1d&limit=30`;
-    const res = await fetch(url, {
-      headers: { 'CG-API-KEY': apiKey, Accept: 'application/json' },
-      next: { revalidate: 900 },
-    });
-    if (!res.ok) {
-      const detail = await res.text();
-      return Response.json({ error: `Coinglass returned ${res.status}`, detail }, { status: res.status });
-    }
+    const [btc, eth] = await Promise.allSettled([
+      fetchLiquidationsForSymbol('BTC', apiKey),
+      fetchLiquidationsForSymbol('ETH', apiKey),
+    ]);
 
-    const json = await res.json();
-    if (json.code !== '0' && json.code !== 0) {
+    const assets = {};
+    const failed = [];
+    if (btc.status === 'fulfilled') assets.BTC = btc.value; else failed.push('BTC');
+    if (eth.status === 'fulfilled') assets.ETH = eth.value; else failed.push('ETH');
+
+    if (Object.keys(assets).length === 0) {
+      const err = btc.status === 'rejected' ? btc.reason : eth.reason;
       return Response.json(
-        { error: `Coinglass API error: ${json.msg || 'unknown error'}`, detail: JSON.stringify(json).slice(0, 500) },
-        { status: 502 }
+        { error: err.message || 'Fetch failed', detail: err.detail || String(err) },
+        { status: err.status || 500 }
       );
     }
 
-    const rows = Array.isArray(json.data) ? json.data : [];
-    if (rows.length === 0) {
-      return Response.json({ error: 'Coinglass returned no liquidation data' }, { status: 502 });
-    }
-
-    const days = rows
-      .map((r) => ({
-        date: new Date(Number(r.time)).toISOString().slice(0, 10),
-        longUsd: Number(r.aggregated_long_liquidation_usd) || 0,
-        shortUsd: Number(r.aggregated_short_liquidation_usd) || 0,
-      }))
-      .sort((a, b) => a.date.localeCompare(b.date));
-
-    const last24h = days[days.length - 1];
-    const last7d = days.slice(-7);
-    const last7dLong = last7d.reduce((s, d) => s + d.longUsd, 0);
-    const last7dShort = last7d.reduce((s, d) => s + d.shortUsd, 0);
-
-    return Response.json({ days, last24h, last7dLong, last7dShort, fetchedAt: new Date().toISOString() });
+    return Response.json({ assets, failed, fetchedAt: new Date().toISOString() });
   } catch (err) {
     return Response.json({ error: 'Fetch failed', detail: String(err) }, { status: 500 });
   }

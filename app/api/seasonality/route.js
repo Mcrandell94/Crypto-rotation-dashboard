@@ -17,51 +17,72 @@ export const dynamic = 'force-dynamic';
 
 const YEARS_SHOWN = 5;
 
+async function seasonalityForPair(pair) {
+  const candles = await fetchCandles(pair, 10080); // weekly
+  const sorted = [...candles].sort((a, b) => a[0] - b[0]);
+
+  // Last weekly close seen for each (year, month), walking chronologically
+  // — a stand-in for "the month's closing price."
+  const lastCloseByMonth = new Map();
+  for (const c of sorted) {
+    const d = new Date(c[0] * 1000);
+    lastCloseByMonth.set(`${d.getUTCFullYear()}-${d.getUTCMonth()}`, parseFloat(c[4]));
+  }
+
+  const now = new Date();
+  const curYear = now.getUTCFullYear();
+  const curMonth = now.getUTCMonth();
+
+  const years = [];
+  for (let i = YEARS_SHOWN - 1; i >= 0; i--) years.push(curYear - i);
+
+  const monthlyReturns = {};
+  for (const year of years) {
+    const row = [];
+    for (let m = 0; m < 12; m++) {
+      if (year === curYear && m > curMonth) {
+        row.push(null);
+        continue;
+      }
+      const thisClose = lastCloseByMonth.get(`${year}-${m}`);
+      const prevYear = m === 0 ? year - 1 : year;
+      const prevMonth = m === 0 ? 11 : m - 1;
+      const prevClose = lastCloseByMonth.get(`${prevYear}-${prevMonth}`);
+      row.push(thisClose != null && prevClose != null ? Math.round((thisClose / prevClose - 1) * 1000) / 10 : null);
+    }
+    monthlyReturns[year] = row;
+  }
+
+  return {
+    years,
+    monthlyReturns,
+    currentYear: curYear,
+    currentMonth: curMonth,
+    historyPoints: sorted.length,
+  };
+}
+
 export async function GET() {
   try {
-    const candles = await fetchCandles(PAIRS.BTC, 10080); // weekly
-    const sorted = [...candles].sort((a, b) => a[0] - b[0]);
+    const [btc, eth] = await Promise.allSettled([
+      seasonalityForPair(PAIRS.BTC),
+      seasonalityForPair(PAIRS.ETH),
+    ]);
 
-    // Last weekly close seen for each (year, month), walking chronologically
-    // — a stand-in for "the month's closing price."
-    const lastCloseByMonth = new Map();
-    for (const c of sorted) {
-      const d = new Date(c[0] * 1000);
-      lastCloseByMonth.set(`${d.getUTCFullYear()}-${d.getUTCMonth()}`, parseFloat(c[4]));
+    const assets = {};
+    const failed = [];
+    if (btc.status === 'fulfilled') assets.BTC = btc.value; else failed.push('BTC');
+    if (eth.status === 'fulfilled') assets.ETH = eth.value; else failed.push('ETH');
+
+    if (Object.keys(assets).length === 0) {
+      const err = btc.status === 'rejected' ? btc.reason : eth.reason;
+      return Response.json(
+        { error: err.message || 'Fetch failed', detail: err.detail || String(err) },
+        { status: err.status || 500 }
+      );
     }
 
-    const now = new Date();
-    const curYear = now.getUTCFullYear();
-    const curMonth = now.getUTCMonth();
-
-    const years = [];
-    for (let i = YEARS_SHOWN - 1; i >= 0; i--) years.push(curYear - i);
-
-    const monthlyReturns = {};
-    for (const year of years) {
-      const row = [];
-      for (let m = 0; m < 12; m++) {
-        if (year === curYear && m > curMonth) {
-          row.push(null);
-          continue;
-        }
-        const thisClose = lastCloseByMonth.get(`${year}-${m}`);
-        const prevYear = m === 0 ? year - 1 : year;
-        const prevMonth = m === 0 ? 11 : m - 1;
-        const prevClose = lastCloseByMonth.get(`${prevYear}-${prevMonth}`);
-        row.push(thisClose != null && prevClose != null ? Math.round((thisClose / prevClose - 1) * 1000) / 10 : null);
-      }
-      monthlyReturns[year] = row;
-    }
-
-    return Response.json({
-      years,
-      monthlyReturns,
-      currentYear: curYear,
-      currentMonth: curMonth,
-      historyPoints: sorted.length,
-      fetchedAt: new Date().toISOString(),
-    });
+    return Response.json({ assets, failed, fetchedAt: new Date().toISOString() });
   } catch (err) {
     return Response.json(
       { error: err.message || 'Fetch failed', detail: err.detail || String(err) },

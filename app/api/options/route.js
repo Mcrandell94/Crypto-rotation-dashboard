@@ -93,18 +93,22 @@ function expiryNote(type, expiry) {
   return null;
 }
 
-export async function GET() {
-  try {
-    const url = `${BASE_URL}/public/get_book_summary_by_currency?currency=BTC&kind=option`;
+async function fetchOptionsForCurrency(currency) {
+    const url = `${BASE_URL}/public/get_book_summary_by_currency?currency=${currency}&kind=option`;
     const res = await fetch(url, { next: { revalidate: 600 } });
     if (!res.ok) {
       const detail = await res.text();
-      return Response.json({ error: `Deribit returned ${res.status}`, detail }, { status: res.status });
+      const err = new Error(`Deribit returned ${res.status} for ${currency}`);
+      err.status = res.status;
+      err.detail = detail;
+      throw err;
     }
     const json = await res.json();
     const rows = json.result || [];
     if (rows.length === 0) {
-      return Response.json({ error: 'Deribit returned no BTC option instruments' }, { status: 502 });
+      const err = new Error(`Deribit returned no ${currency} option instruments`);
+      err.status = 502;
+      throw err;
     }
 
     const instruments = rows
@@ -177,7 +181,7 @@ export async function GET() {
       .filter((i) => i.type === 'put' && (!price || i.strike < price))
       .sort((a, b) => b.openInterest - a.openInterest)[0]?.strike ?? null;
 
-    return Response.json({
+    return {
       price,
       totalCallOI: Math.round(totalCallOI * 10) / 10,
       totalPutOI: Math.round(totalPutOI * 10) / 10,
@@ -192,8 +196,30 @@ export async function GET() {
       callWalls,
       downsideInsuranceStrike,
       instrumentCount: instruments.length,
-      fetchedAt: new Date().toISOString(),
-    });
+    };
+}
+
+export async function GET() {
+  try {
+    const [btc, eth] = await Promise.allSettled([
+      fetchOptionsForCurrency('BTC'),
+      fetchOptionsForCurrency('ETH'),
+    ]);
+
+    const assets = {};
+    const failed = [];
+    if (btc.status === 'fulfilled') assets.BTC = btc.value; else failed.push('BTC');
+    if (eth.status === 'fulfilled') assets.ETH = eth.value; else failed.push('ETH');
+
+    if (Object.keys(assets).length === 0) {
+      const err = btc.status === 'rejected' ? btc.reason : eth.reason;
+      return Response.json(
+        { error: err.message || 'Fetch failed', detail: err.detail || String(err) },
+        { status: err.status || 500 }
+      );
+    }
+
+    return Response.json({ assets, failed, fetchedAt: new Date().toISOString() });
   } catch (err) {
     return Response.json(
       { error: err.message || 'Fetch failed', detail: err.detail || String(err) },

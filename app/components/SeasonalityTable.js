@@ -1,14 +1,18 @@
 'use client';
 
+import { useState } from 'react';
+
 const TEXT_PRIMARY = '#E7E4DD';
 const TEXT_SECONDARY = '#8B9298';
 const TEXT_MUTED = '#6E767B';
 const CARD_BG = '#171D21';
 const CARD_BORDER = '#2A3136';
+const AMBER = '#C9A66B';
 const GAIN = '127, 163, 127';
 const LOSS = '168, 93, 79';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const ASSETS = ['BTC', 'ETH'];
 
 function heatColor(v, maxAbs) {
   if (v == null || !maxAbs) return 'transparent';
@@ -17,17 +21,54 @@ function heatColor(v, maxAbs) {
   return `rgba(${base}, ${(0.12 + intensity * 0.45).toFixed(2)})`;
 }
 
+function AssetPicker({ asset, setAsset }) {
+  return (
+    <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+      {ASSETS.map((a) => (
+        <button
+          key={a}
+          onClick={() => setAsset(a)}
+          style={{
+            background: asset === a ? '#1E252A' : '#171D21',
+            border: `1px solid ${asset === a ? AMBER : CARD_BORDER}`,
+            color: asset === a ? AMBER : TEXT_SECONDARY,
+            borderRadius: 4, padding: '4px 10px', fontSize: 11, cursor: 'pointer',
+          }}
+        >
+          {a}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function SeasonalityTable({ data }) {
+  const [asset, setAsset] = useState('BTC');
+
   if (!data) {
     return (
       <section style={{ marginTop: 20 }}>
-        <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: TEXT_PRIMARY }}>BTC Seasonality</h2>
+        <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: TEXT_PRIMARY }}>Seasonality</h2>
         <p style={{ fontSize: 12, color: TEXT_MUTED, marginTop: 16 }}>Waiting for data…</p>
       </section>
     );
   }
 
-  const { years, monthlyReturns, currentYear, currentMonth } = data;
+  const assetData = data.assets?.[asset];
+
+  if (!assetData) {
+    return (
+      <section style={{ marginTop: 20 }}>
+        <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: TEXT_PRIMARY }}>Seasonality</h2>
+        <AssetPicker asset={asset} setAsset={setAsset} />
+        <p style={{ fontSize: 12, color: TEXT_MUTED, marginTop: 16 }}>
+          No {asset} data — Kraken didn't return usable candles for this asset this refresh.
+        </p>
+      </section>
+    );
+  }
+
+  const { years, monthlyReturns, currentYear, currentMonth } = assetData;
   const allVals = years.flatMap((y) => monthlyReturns[y]).filter((v) => v != null);
   const maxAbs = Math.max(1, ...allVals.map(Math.abs));
 
@@ -42,8 +83,9 @@ export default function SeasonalityTable({ data }) {
 
   return (
     <section style={{ marginTop: 20, background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: '16px 18px' }}>
+      <AssetPicker asset={asset} setAsset={setAsset} />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-        <div style={{ fontSize: 12, color: TEXT_SECONDARY }}>BTC monthly returns, last {years.length} years</div>
+        <div style={{ fontSize: 12, color: TEXT_SECONDARY }}>{asset} monthly returns, last {years.length} years</div>
         <div style={{ fontSize: 11, color: TEXT_MUTED }}>
           Computed live from Kraken weekly closes — month boundaries are approximate to the nearest week
         </div>
