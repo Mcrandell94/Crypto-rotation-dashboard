@@ -7,10 +7,11 @@
 // chasing another provider, price levels get read off a screenshot by eye
 // and entered here directly.
 //
-// Organized as independent horizons, since a hit on a near-term magnet is
-// a today-event and a hit on a 1-year magnet is a much bigger structural
-// move — each is tracked (and its own "map update required" banner)
-// separately in LiquidationLevelsTracker:
+// Organized per-asset (BTC, ETH — LiquidationLevelsTracker has an asset
+// picker), then within each asset as independent horizons, since a hit on
+// a near-term magnet is a today-event and a hit on a 1-year magnet is a
+// much bigger structural move — each is tracked (and its own "map update
+// required" banner) separately in LiquidationLevelsTracker:
 //   shortTerm  — near-term magnets, from currently-open positions
 //   mediumTerm — magnets over the past week
 //   monthTerm  — magnets over the past month
@@ -65,7 +66,7 @@ const MEDIUM_SPOT_AT_CAPTURE = 81220;
 const MONTH_CAPTURED_AT = '2026-09-21T00:30:00Z';
 const MONTH_SPOT_AT_CAPTURE = 81140;
 
-export const HORIZONS = {
+const BTC_HORIZONS = {
   shortTerm: {
     key: 'shortTerm',
     label: 'Near-Term (live leverage map)',
@@ -121,4 +122,22 @@ export const HORIZONS = {
       { kind: 'zone', zoneLow: 65000, zoneHigh: 95000, label: 'Broad, mostly-thin stretch between the $64K cluster and the $97.5K band' },
     ],
   },
+};
+
+// ETH horizons — same shape as BTC's, empty until real ETH screenshots are
+// read. A Coinfuty ETH heatmap (multiple exchanges combined into one chart,
+// several time windows) was offered but deliberately not read into levels
+// yet — pending confirmation of what exactly it's showing (which exchanges,
+// what the combining method is) before treating it as reliable input, the
+// same bar every other source here has had to clear.
+const ETH_HORIZONS = {
+  shortTerm: { key: 'shortTerm', label: 'Near-Term (live leverage map)', capturedAt: null, spotAtCapture: null, source: null, levels: [] },
+  mediumTerm: { key: 'mediumTerm', label: 'Medium-Term (1-week)', capturedAt: null, spotAtCapture: null, source: null, levels: [] },
+  monthTerm: { key: 'monthTerm', label: 'Monthly (1-month)', capturedAt: null, spotAtCapture: null, source: null, levels: [] },
+  longTerm: { key: 'longTerm', label: '1-Year (structural)', capturedAt: null, spotAtCapture: null, source: null, levels: [] },
+};
+
+export const LEVELS_BY_ASSET = {
+  BTC: BTC_HORIZONS,
+  ETH: ETH_HORIZONS,
 };
