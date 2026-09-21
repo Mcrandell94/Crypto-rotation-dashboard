@@ -23,6 +23,12 @@ import LiquidationHeatmap from './components/LiquidationHeatmap';
 import LiveLiquidationFeed from './components/LiveLiquidationFeed';
 import StablecoinMintFeed from './components/StablecoinMintFeed';
 import LiquidationLevelsTracker from './components/LiquidationLevelsTracker';
+import LiquidationZones from './components/LiquidationZones';
+import WhaleTradeFeed from './components/WhaleTradeFeed';
+import WhaleRadar from './components/WhaleRadar';
+import WhaleFlow from './components/WhaleFlow';
+import HyperliquidWhaleBoard from './components/HyperliquidWhaleBoard';
+import OnchainWhaleSwaps from './components/OnchainWhaleSwaps';
 import MarketRead from './components/MarketRead';
 import TabErrorBoundary from './components/TabErrorBoundary';
 import { SECTORS, BENCHMARKS } from './lib/sectors';
@@ -33,6 +39,7 @@ const TABS = [
   { key: 'rotation', label: 'Rotation' },
   { key: 'macro', label: 'Macro & Seasonality' },
   { key: 'levels', label: 'Levels & Liquidations' },
+  { key: 'whale', label: 'Whale Movement' },
   { key: 'calendar', label: 'CB Calendar' },
   { key: 'astro', label: 'Astro Outlook' },
 ];
@@ -103,6 +110,24 @@ export default function DashboardHome() {
   const [liquidationFeedError, setLiquidationFeedError] = useState(null);
   const [stablecoinMintsData, setStablecoinMintsData] = useState(null);
   const [stablecoinMintsError, setStablecoinMintsError] = useState(null);
+  const [liquidationZonesData, setLiquidationZonesData] = useState(null);
+  const [liquidationZonesError, setLiquidationZonesError] = useState(null);
+  // CoinLobster (whale data) is credit-metered, unlike every other source
+  // this dashboard uses — see app/lib/coinlobster.js. These deliberately do
+  // NOT fetch on page mount or on the global "Refresh now" button; they
+  // only load once the Whale Movement tab is actually opened (see the
+  // whaleTabLoaded effect below), plus their own tab-scoped refresh button.
+  const [whaleTabLoaded, setWhaleTabLoaded] = useState(false);
+  const [whaleTradesData, setWhaleTradesData] = useState(null);
+  const [whaleTradesError, setWhaleTradesError] = useState(null);
+  const [whaleRadarData, setWhaleRadarData] = useState(null);
+  const [whaleRadarError, setWhaleRadarError] = useState(null);
+  const [whaleFlowData, setWhaleFlowData] = useState(null);
+  const [whaleFlowError, setWhaleFlowError] = useState(null);
+  const [hyperliquidWhalesData, setHyperliquidWhalesData] = useState(null);
+  const [hyperliquidWhalesError, setHyperliquidWhalesError] = useState(null);
+  const [onchainWhalesData, setOnchainWhalesData] = useState(null);
+  const [onchainWhalesError, setOnchainWhalesError] = useState(null);
   const [btcPriceData, setBtcPriceData] = useState(null);
   const [btcPriceError, setBtcPriceError] = useState(null);
   const [ethPriceData, setEthPriceData] = useState(null);
@@ -156,6 +181,86 @@ export default function DashboardHome() {
       setStablecoinMintsError(e.message);
     }
   }, []);
+
+  const fetchLiquidationZones = useCallback(async () => {
+    setLiquidationZonesError(null);
+    try {
+      const res = await fetch('/api/liquidationzones');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setLiquidationZonesData(json);
+    } catch (e) {
+      setLiquidationZonesError(e.message);
+    }
+  }, []);
+
+  const fetchWhaleTrades = useCallback(async () => {
+    setWhaleTradesError(null);
+    try {
+      const res = await fetch('/api/whaletrades');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setWhaleTradesData(json);
+    } catch (e) {
+      setWhaleTradesError(e.message);
+    }
+  }, []);
+
+  const fetchWhaleRadar = useCallback(async () => {
+    setWhaleRadarError(null);
+    try {
+      const res = await fetch('/api/whaleradar');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setWhaleRadarData(json);
+    } catch (e) {
+      setWhaleRadarError(e.message);
+    }
+  }, []);
+
+  const fetchWhaleFlow = useCallback(async () => {
+    setWhaleFlowError(null);
+    try {
+      const res = await fetch('/api/whaleflow');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setWhaleFlowData(json);
+    } catch (e) {
+      setWhaleFlowError(e.message);
+    }
+  }, []);
+
+  const fetchHyperliquidWhales = useCallback(async () => {
+    setHyperliquidWhalesError(null);
+    try {
+      const res = await fetch('/api/hyperliquidwhales');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setHyperliquidWhalesData(json);
+    } catch (e) {
+      setHyperliquidWhalesError(e.message);
+    }
+  }, []);
+
+  const fetchOnchainWhales = useCallback(async () => {
+    setOnchainWhalesError(null);
+    try {
+      const res = await fetch('/api/onchainwhales');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setOnchainWhalesData(json);
+    } catch (e) {
+      setOnchainWhalesError(e.message);
+    }
+  }, []);
+
+  const fetchAllWhaleData = useCallback(() => {
+    fetchWhaleTrades();
+    fetchWhaleRadar();
+    fetchWhaleFlow();
+    fetchHyperliquidWhales();
+    fetchOnchainWhales();
+  }, [fetchWhaleTrades, fetchWhaleRadar, fetchWhaleFlow, fetchHyperliquidWhales, fetchOnchainWhales]);
 
   const fetchLiquidationHeatmapBcf = useCallback(async () => {
     setLiquidationHeatmapBcfError(null);
@@ -480,9 +585,20 @@ export default function DashboardHome() {
     fetchLiquidationHeatmapBcf();
     fetchLiquidationFeed();
     fetchStablecoinMints();
+    fetchLiquidationZones();
     fetchBtcPrice();
     fetchEthPrice();
-  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality, fetchAltseason, fetchEtfFlows, fetchOptions, fetchFedOdds, fetchCongressBills, fetchCpi, fetchNews, fetchOpenInterest, fetchTakerFlow, fetchLiquidations, fetchEthEtfFlows, fetchLiquidationHeatmap, fetchLiquidationHeatmapCoinalyze, fetchLiquidationHeatmapBcf, fetchLiquidationFeed, fetchStablecoinMints, fetchBtcPrice, fetchEthPrice]);
+  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality, fetchAltseason, fetchEtfFlows, fetchOptions, fetchFedOdds, fetchCongressBills, fetchCpi, fetchNews, fetchOpenInterest, fetchTakerFlow, fetchLiquidations, fetchEthEtfFlows, fetchLiquidationHeatmap, fetchLiquidationHeatmapCoinalyze, fetchLiquidationHeatmapBcf, fetchLiquidationFeed, fetchStablecoinMints, fetchLiquidationZones, fetchBtcPrice, fetchEthPrice]);
+
+  // CoinLobster (whale data) is credit-metered — fetch it only the first
+  // time the viewer actually opens the Whale Movement tab, not on page
+  // mount like everything else above.
+  useEffect(() => {
+    if (activeTab === 'whale' && !whaleTabLoaded) {
+      setWhaleTabLoaded(true);
+      fetchAllWhaleData();
+    }
+  }, [activeTab, whaleTabLoaded, fetchAllWhaleData]);
 
   return (
     <main style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
@@ -512,6 +628,7 @@ export default function DashboardHome() {
             fetchLiquidationHeatmapBcf();
             fetchLiquidationFeed();
             fetchStablecoinMints();
+            fetchLiquidationZones();
             fetchBtcPrice();
             fetchEthPrice();
             if (rrgMode === 'sectors') fetchRrgSectors(benchmark);
@@ -840,6 +957,17 @@ export default function DashboardHome() {
             ethPriceError={ethPriceError}
           />
 
+          {liquidationZonesError ? (
+            <div style={{ marginTop: 20, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+              <strong>Liquidation zones fetch failed:</strong> {liquidationZonesError}
+              <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
+                Most likely cause: COINLOBSTER_API_KEY isn't set yet in this environment's variables.
+              </div>
+            </div>
+          ) : (
+            <LiquidationZones data={liquidationZonesData} />
+          )}
+
           {openInterestError ? (
             <div style={{ marginTop: 20, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
               <strong>Cross-exchange open interest fetch failed:</strong> {openInterestError}
@@ -901,6 +1029,77 @@ export default function DashboardHome() {
             </div>
           ) : (
             <FundingOI data={fundingData} symbols={tracked} />
+          )}
+        </TabErrorBoundary>
+      )}
+
+      {activeTab === 'whale' && (
+        <TabErrorBoundary tabName="Whale Movement">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 20 }}>
+            <p style={{ fontSize: 11, color: '#6E767B', margin: 0, maxWidth: 600, lineHeight: 1.5 }}>
+              Live whale-tracking data from CoinLobster — individual large trades, unusual-activity
+              screening, hourly buy/sell flow, named Hyperliquid accounts, and on-chain DEX swaps.
+              Unlike every other panel here, this data is credit-metered, so it only loads when this
+              tab is opened, not on every page refresh — use the button below to pull fresh data.
+            </p>
+            <button
+              onClick={fetchAllWhaleData}
+              style={{
+                background: '#171D21', border: '1px solid #2A3136', color: '#C9A66B',
+                borderRadius: 6, padding: '6px 14px', fontSize: 12, cursor: 'pointer', flexShrink: 0,
+              }}
+            >
+              Refresh whale data
+            </button>
+          </div>
+
+          {!whaleTabLoaded ? (
+            <p style={{ fontSize: 12, color: '#6E767B', marginTop: 16 }}>Loading…</p>
+          ) : (
+            <>
+              {whaleTradesError ? (
+                <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+                  <strong>Whale trade feed fetch failed:</strong> {whaleTradesError}
+                  <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
+                    Most likely cause: COINLOBSTER_API_KEY isn't set yet, or this key's plan doesn't include this endpoint.
+                  </div>
+                </div>
+              ) : (
+                <WhaleTradeFeed data={whaleTradesData} />
+              )}
+
+              {whaleRadarError ? (
+                <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+                  <strong>Whale radar fetch failed:</strong> {whaleRadarError}
+                </div>
+              ) : (
+                <WhaleRadar data={whaleRadarData} />
+              )}
+
+              {whaleFlowError ? (
+                <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+                  <strong>Whale flow fetch failed:</strong> {whaleFlowError}
+                </div>
+              ) : (
+                <WhaleFlow data={whaleFlowData} />
+              )}
+
+              {hyperliquidWhalesError ? (
+                <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+                  <strong>Hyperliquid whale board fetch failed:</strong> {hyperliquidWhalesError}
+                </div>
+              ) : (
+                <HyperliquidWhaleBoard data={hyperliquidWhalesData} />
+              )}
+
+              {onchainWhalesError ? (
+                <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+                  <strong>On-chain whale swaps fetch failed:</strong> {onchainWhalesError}
+                </div>
+              ) : (
+                <OnchainWhaleSwaps data={onchainWhalesData} />
+              )}
+            </>
           )}
         </TabErrorBoundary>
       )}
