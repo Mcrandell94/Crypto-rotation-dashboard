@@ -52,7 +52,7 @@
 // "try several plausible field names, never assume" helpers shared with
 // CoinLobster and the mint feed's Tron/Solana legs (see
 // app/lib/apiParsing.js) — used by the Solana parser below.
-import { pick as pickField, extractArray as extractRows, normalizeTimeMs as normalizeMs } from '../../lib/apiParsing';
+import { pick as pickField, extractArray as extractRows, normalizeTimeMs as normalizeMs, scaleAmount } from '../../lib/apiParsing';
 
 export const dynamic = 'force-dynamic';
 
@@ -124,12 +124,7 @@ async function fetchEthTokenActivity(wallet, token, apiKey) {
 
   const rows = (Array.isArray(json.result) ? json.result : []).map((tx) => {
     const isOut = tx.from?.toLowerCase() === wallet.address.toLowerCase();
-    let amount = null;
-    try {
-      amount = Number(BigInt(tx.value)) / 10 ** Number(tx.tokenDecimal || token.decimals);
-    } catch {
-      amount = null;
-    }
+    const amount = scaleAmount(tx.value, tx.tokenDecimal || token.decimals);
     return {
       entity: wallet.entity,
       chain: 'Ethereum',
@@ -199,9 +194,8 @@ async function fetchSolanaWalletActivity(wallet, apiKey) {
       const flow = pickField(r, ['flow']);
       const isOut = flow ? flow === 'out' : from === wallet.address;
       const rawAmount = pickField(r, ['amount', 'value']);
-      const decimals = Number(pickField(r, ['token_decimals', 'decimals']) ?? SOLANA_DECIMALS);
-      const n = rawAmount != null ? Number(rawAmount) : null;
-      const amount = Number.isFinite(n) ? n / 10 ** decimals : null;
+      const decimals = pickField(r, ['token_decimals', 'decimals']) ?? SOLANA_DECIMALS;
+      const amount = scaleAmount(rawAmount, decimals);
       return {
         entity: wallet.entity,
         chain: 'Solana',

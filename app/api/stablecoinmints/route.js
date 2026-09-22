@@ -62,7 +62,7 @@
 // "try several plausible field names, never assume" helpers shared with
 // CoinLobster and Notable Wallet Activity's Solana leg (see
 // app/lib/apiParsing.js) — used by the Tron/Solana parsers below.
-import { pick as pickField, extractArray as extractRows, normalizeTimeMs as normalizeMs } from '../../lib/apiParsing';
+import { pick as pickField, extractArray as extractRows, normalizeTimeMs as normalizeMs, scaleAmount } from '../../lib/apiParsing';
 
 export const dynamic = 'force-dynamic';
 
@@ -141,8 +141,7 @@ async function fetchTronMints(apiKey) {
       const from = pickField(r, ['from_address', 'from', 'fromAddress']);
       const to = pickField(r, ['to_address', 'to', 'toAddress']);
       const rawAmount = pickField(r, ['quant', 'amount', 'value']);
-      const n = rawAmount != null ? Number(rawAmount) : null;
-      const amount = Number.isFinite(n) ? n / 10 ** TRON_DECIMALS : null;
+      const amount = scaleAmount(rawAmount, TRON_DECIMALS);
       const timestamp = normalizeMs(pickField(r, ['block_ts', 'timestamp', 'block_timestamp']));
       const txHash = pickField(r, ['transaction_id', 'hash', 'tx_hash', 'transactionHash']);
       return { from, to, amount, timestamp, txHash };
@@ -197,10 +196,8 @@ async function fetchSolanaMints(apiKey) {
   const mints = rows.map((r) => {
     const to = pickField(r, ['to_address', 'to', 'destination']);
     const rawAmount = pickField(r, ['amount', 'value', 'token_amount']);
-    const rawDecimals = pickField(r, ['token_decimals', 'decimals']);
-    const decimals = rawDecimals != null ? Number(rawDecimals) : SOLANA_DECIMALS;
-    const n = rawAmount != null ? Number(rawAmount) : null;
-    const amount = Number.isFinite(n) ? n / 10 ** decimals : null;
+    const decimals = pickField(r, ['token_decimals', 'decimals']) ?? SOLANA_DECIMALS;
+    const amount = scaleAmount(rawAmount, decimals);
     const timestamp = normalizeMs(pickField(r, ['block_time', 'time', 'timestamp']));
     const txHash = pickField(r, ['trans_id', 'signature', 'tx_hash', 'txHash']);
     return {
@@ -257,12 +254,7 @@ async function fetchMints(token, apiKey, latestBlock) {
   const mints = rows.map((log) => {
     const toTopic = log.topics?.[2];
     const to = toTopic ? `0x${toTopic.slice(-40)}` : null;
-    let amount = null;
-    try {
-      amount = Number(BigInt(log.data)) / 10 ** token.decimals;
-    } catch {
-      amount = null;
-    }
+    const amount = scaleAmount(log.data, token.decimals);
     return {
       chain: 'Ethereum',
       symbol: token.symbol,

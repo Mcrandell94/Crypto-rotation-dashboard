@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import RotationChart from './components/RotationChart';
 import RelativeRotationGraph from './components/RelativeRotationGraph';
 import MacroSentiment from './components/MacroSentiment';
@@ -33,6 +33,13 @@ import OnchainWhaleSwaps from './components/OnchainWhaleSwaps';
 import MarketRead from './components/MarketRead';
 import TabErrorBoundary from './components/TabErrorBoundary';
 import { SECTORS, BENCHMARKS } from './lib/sectors';
+import useHeaderData from './hooks/useHeaderData';
+import useRotationData from './hooks/useRotationData';
+import useMacroTabData from './hooks/useMacroTabData';
+import useLevelsTabData from './hooks/useLevelsTabData';
+import useMintsTabData from './hooks/useMintsTabData';
+import useCalendarTabData from './hooks/useCalendarTabData';
+import useWhaleTabData from './hooks/useWhaleTabData';
 
 const EMA_SYMBOLS = ['BTC', 'ETH'];
 
@@ -45,9 +52,9 @@ const TABS = [
   { key: 'astro', label: 'Astro Outlook' },
 ];
 // 'whale' (Whale Movement, CoinLobster) is temporarily off the tab bar —
-// its state, fetchers, and render block below are left intact, just
-// unreachable, so it's a one-line restore (re-add its TABS entry) rather
-// than a rebuild.
+// its hook, useWhaleTabData, and the render block below are left intact,
+// just unreachable, so it's a one-line restore (re-add its TABS entry)
+// rather than a rebuild.
 
 export default function DashboardHome() {
   const [activeTab, setActiveTab] = useState('rotation');
@@ -63,622 +70,22 @@ export default function DashboardHome() {
   if (benchmark !== 'BTC' && !sectorTickers.includes('BTC')) sectorTickers.unshift('BTC');
   const tracked = [benchmark, ...sectorTickers];
 
-  const [data, setData] = useState(null);
-  const [rrgData, setRrgData] = useState(null);
-  const [macroData, setMacroData] = useState(null);
-  const [emaData, setEmaData] = useState(null);
-  const [cotData, setCotData] = useState(null);
-  const [fundingData, setFundingData] = useState(null);
-  const [error, setError] = useState(null);
-  const [rrgError, setRrgError] = useState(null);
-  const [macroError, setMacroError] = useState(null);
-  const [emaError, setEmaError] = useState(null);
-  const [cotError, setCotError] = useState(null);
-  const [fundingError, setFundingError] = useState(null);
-  const [timeframesData, setTimeframesData] = useState(null);
-  const [timeframesError, setTimeframesError] = useState(null);
-  const [polymarketData, setPolymarketData] = useState(null);
-  const [polymarketError, setPolymarketError] = useState(null);
-  const [seasonalityData, setSeasonalityData] = useState(null);
-  const [seasonalityError, setSeasonalityError] = useState(null);
-  const [altseasonData, setAltseasonData] = useState(null);
-  const [altseasonError, setAltseasonError] = useState(null);
-  const [etfFlowsData, setEtfFlowsData] = useState(null);
-  const [etfFlowsError, setEtfFlowsError] = useState(null);
-  const [rrgSectorsData, setRrgSectorsData] = useState(null);
-  const [rrgSectorsError, setRrgSectorsError] = useState(null);
-  const [optionsData, setOptionsData] = useState(null);
-  const [optionsError, setOptionsError] = useState(null);
-  const [fedOddsData, setFedOddsData] = useState(null);
-  const [fedOddsError, setFedOddsError] = useState(null);
-  const [congressData, setCongressData] = useState(null);
-  const [congressError, setCongressError] = useState(null);
-  const [cpiData, setCpiData] = useState(null);
-  const [cpiError, setCpiError] = useState(null);
-  const [newsData, setNewsData] = useState(null);
-  const [newsError, setNewsError] = useState(null);
-  const [openInterestData, setOpenInterestData] = useState(null);
-  const [openInterestError, setOpenInterestError] = useState(null);
-  const [takerFlowData, setTakerFlowData] = useState(null);
-  const [takerFlowError, setTakerFlowError] = useState(null);
-  const [liquidationsData, setLiquidationsData] = useState(null);
-  const [liquidationsError, setLiquidationsError] = useState(null);
-  const [ethEtfFlowsData, setEthEtfFlowsData] = useState(null);
-  const [ethEtfFlowsError, setEthEtfFlowsError] = useState(null);
-  const [liquidationHeatmapData, setLiquidationHeatmapData] = useState(null);
-  const [liquidationHeatmapError, setLiquidationHeatmapError] = useState(null);
-  const [liquidationHeatmapCoinalyzeData, setLiquidationHeatmapCoinalyzeData] = useState(null);
-  const [liquidationHeatmapCoinalyzeError, setLiquidationHeatmapCoinalyzeError] = useState(null);
-  const [liquidationHeatmapBcfData, setLiquidationHeatmapBcfData] = useState(null);
-  const [liquidationHeatmapBcfError, setLiquidationHeatmapBcfError] = useState(null);
-  const [liquidationFeedData, setLiquidationFeedData] = useState(null);
-  const [liquidationFeedError, setLiquidationFeedError] = useState(null);
-  const [stablecoinMintsData, setStablecoinMintsData] = useState(null);
-  const [stablecoinMintsError, setStablecoinMintsError] = useState(null);
-  const [notableWalletActivityData, setNotableWalletActivityData] = useState(null);
-  const [notableWalletActivityError, setNotableWalletActivityError] = useState(null);
-  const [liquidationZonesData, setLiquidationZonesData] = useState(null);
-  const [liquidationZonesError, setLiquidationZonesError] = useState(null);
-  // Only the data MarketRead needs (always visible, regardless of tab)
-  // fetches on mount / global refresh. Everything else here loads lazily,
-  // the first time its own tab is actually opened — same pattern
-  // whaleTabLoaded already used below, extended to every tab. This is
-  // also what keeps API bursts (Etherscan, TronScan, Solscan, Coinglass...)
-  // from all firing on every page load regardless of what's on screen.
-  const [macroTabLoaded, setMacroTabLoaded] = useState(false);
-  const [levelsTabLoaded, setLevelsTabLoaded] = useState(false);
-  const [mintsTabLoaded, setMintsTabLoaded] = useState(false);
-  const [calendarTabLoaded, setCalendarTabLoaded] = useState(false);
-  const [whaleTabLoaded, setWhaleTabLoaded] = useState(false);
-  const [whaleTradesData, setWhaleTradesData] = useState(null);
-  const [whaleTradesError, setWhaleTradesError] = useState(null);
-  const [whaleRadarData, setWhaleRadarData] = useState(null);
-  const [whaleRadarError, setWhaleRadarError] = useState(null);
-  const [whaleFlowData, setWhaleFlowData] = useState(null);
-  const [whaleFlowError, setWhaleFlowError] = useState(null);
-  const [hyperliquidWhalesData, setHyperliquidWhalesData] = useState(null);
-  const [hyperliquidWhalesError, setHyperliquidWhalesError] = useState(null);
-  const [onchainWhalesData, setOnchainWhalesData] = useState(null);
-  const [onchainWhalesError, setOnchainWhalesError] = useState(null);
-  const [btcPriceData, setBtcPriceData] = useState(null);
-  const [btcPriceError, setBtcPriceError] = useState(null);
-  const [ethPriceData, setEthPriceData] = useState(null);
-  const [ethPriceError, setEthPriceError] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  const fetchEthPrice = useCallback(async () => {
-    setEthPriceError(null);
-    try {
-      const res = await fetch('/api/ethprice');
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Unknown error');
-      setEthPriceData(json);
-    } catch (e) {
-      setEthPriceError(e.message);
-    }
-  }, []);
-
-  const fetchBtcPrice = useCallback(async () => {
-    setBtcPriceError(null);
-    try {
-      const res = await fetch('/api/btcprice');
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Unknown error');
-      setBtcPriceData(json);
-    } catch (e) {
-      setBtcPriceError(e.message);
-    }
-  }, []);
-
-  const fetchLiquidationFeed = useCallback(async () => {
-    setLiquidationFeedError(null);
-    try {
-      const res = await fetch('/api/liquidationfeed');
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Unknown error');
-      setLiquidationFeedData(json);
-    } catch (e) {
-      setLiquidationFeedError(e.message);
-    }
-  }, []);
-
-  const fetchStablecoinMints = useCallback(async () => {
-    setStablecoinMintsError(null);
-    try {
-      const res = await fetch('/api/stablecoinmints');
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Unknown error');
-      setStablecoinMintsData(json);
-    } catch (e) {
-      setStablecoinMintsError(e.message);
-    }
-  }, []);
-
-  const fetchNotableWalletActivity = useCallback(async () => {
-    setNotableWalletActivityError(null);
-    try {
-      const res = await fetch('/api/notablewallets');
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Unknown error');
-      setNotableWalletActivityData(json);
-    } catch (e) {
-      setNotableWalletActivityError(e.message);
-    }
-  }, []);
-
-  const fetchLiquidationZones = useCallback(async () => {
-    setLiquidationZonesError(null);
-    try {
-      const res = await fetch('/api/liquidationzones');
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Unknown error');
-      setLiquidationZonesData(json);
-    } catch (e) {
-      setLiquidationZonesError(e.message);
-    }
-  }, []);
-
-  const fetchWhaleTrades = useCallback(async () => {
-    setWhaleTradesError(null);
-    try {
-      const res = await fetch('/api/whaletrades');
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Unknown error');
-      setWhaleTradesData(json);
-    } catch (e) {
-      setWhaleTradesError(e.message);
-    }
-  }, []);
-
-  const fetchWhaleRadar = useCallback(async () => {
-    setWhaleRadarError(null);
-    try {
-      const res = await fetch('/api/whaleradar');
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Unknown error');
-      setWhaleRadarData(json);
-    } catch (e) {
-      setWhaleRadarError(e.message);
-    }
-  }, []);
-
-  const fetchWhaleFlow = useCallback(async () => {
-    setWhaleFlowError(null);
-    try {
-      const res = await fetch('/api/whaleflow');
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Unknown error');
-      setWhaleFlowData(json);
-    } catch (e) {
-      setWhaleFlowError(e.message);
-    }
-  }, []);
-
-  const fetchHyperliquidWhales = useCallback(async () => {
-    setHyperliquidWhalesError(null);
-    try {
-      const res = await fetch('/api/hyperliquidwhales');
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Unknown error');
-      setHyperliquidWhalesData(json);
-    } catch (e) {
-      setHyperliquidWhalesError(e.message);
-    }
-  }, []);
-
-  const fetchOnchainWhales = useCallback(async () => {
-    setOnchainWhalesError(null);
-    try {
-      const res = await fetch('/api/onchainwhales');
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Unknown error');
-      setOnchainWhalesData(json);
-    } catch (e) {
-      setOnchainWhalesError(e.message);
-    }
-  }, []);
-
-  const fetchAllWhaleData = useCallback(() => {
-    fetchWhaleTrades();
-    fetchWhaleRadar();
-    fetchWhaleFlow();
-    fetchHyperliquidWhales();
-    fetchOnchainWhales();
-  }, [fetchWhaleTrades, fetchWhaleRadar, fetchWhaleFlow, fetchHyperliquidWhales, fetchOnchainWhales]);
-
-  const fetchLiquidationHeatmapBcf = useCallback(async () => {
-    setLiquidationHeatmapBcfError(null);
-    try {
-      const res = await fetch('/api/liquidationheatmap-bcf');
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Unknown error');
-      setLiquidationHeatmapBcfData(json);
-    } catch (e) {
-      setLiquidationHeatmapBcfError(e.message);
-    }
-  }, []);
-
-  const fetchLiquidationHeatmap = useCallback(async () => {
-    setLiquidationHeatmapError(null);
-    try {
-      const res = await fetch('/api/liquidationheatmap');
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Unknown error');
-      setLiquidationHeatmapData(json);
-    } catch (e) {
-      setLiquidationHeatmapError(e.message);
-    }
-  }, []);
-
-  const fetchLiquidationHeatmapCoinalyze = useCallback(async () => {
-    setLiquidationHeatmapCoinalyzeError(null);
-    try {
-      const res = await fetch('/api/liquidationheatmap-coinalyze');
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Unknown error');
-      setLiquidationHeatmapCoinalyzeData(json);
-    } catch (e) {
-      setLiquidationHeatmapCoinalyzeError(e.message);
-    }
-  }, []);
-
-  const fetchLiquidations = useCallback(async () => {
-    setLiquidationsError(null);
-    try {
-      const res = await fetch('/api/liquidations');
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Unknown error');
-      setLiquidationsData(json);
-    } catch (e) {
-      setLiquidationsError(e.message);
-    }
-  }, []);
-
-  const fetchEthEtfFlows = useCallback(async () => {
-    setEthEtfFlowsError(null);
-    try {
-      const res = await fetch('/api/etfflows-eth');
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Unknown error');
-      setEthEtfFlowsData(json);
-    } catch (e) {
-      setEthEtfFlowsError(e.message);
-    }
-  }, []);
-
-  const fetchNews = useCallback(async () => {
-    setNewsError(null);
-    try {
-      const res = await fetch('/api/news');
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Unknown error');
-      setNewsData(json);
-    } catch (e) {
-      setNewsError(e.message);
-    }
-  }, []);
-
-  const fetchOpenInterest = useCallback(async () => {
-    setOpenInterestError(null);
-    try {
-      const res = await fetch('/api/openinterest');
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Unknown error');
-      setOpenInterestData(json);
-    } catch (e) {
-      setOpenInterestError(e.message);
-    }
-  }, []);
-
-  const fetchTakerFlow = useCallback(async () => {
-    setTakerFlowError(null);
-    try {
-      const res = await fetch('/api/takerflow');
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Unknown error');
-      setTakerFlowData(json);
-    } catch (e) {
-      setTakerFlowError(e.message);
-    }
-  }, []);
-
-  const fetchOptions = useCallback(async () => {
-    setOptionsError(null);
-    try {
-      const res = await fetch('/api/options');
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Unknown error');
-      setOptionsData(json);
-    } catch (e) {
-      setOptionsError(e.message);
-    }
-  }, []);
-
-  const fetchFedOdds = useCallback(async () => {
-    setFedOddsError(null);
-    try {
-      const res = await fetch('/api/fedodds');
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Unknown error');
-      setFedOddsData(json);
-    } catch (e) {
-      setFedOddsError(e.message);
-    }
-  }, []);
-
-  const fetchCongressBills = useCallback(async () => {
-    setCongressError(null);
-    try {
-      const res = await fetch('/api/congressbills');
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Unknown error');
-      setCongressData(json);
-    } catch (e) {
-      setCongressError(e.message);
-    }
-  }, []);
-
-  const fetchCpi = useCallback(async () => {
-    setCpiError(null);
-    try {
-      const res = await fetch('/api/cpi');
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Unknown error');
-      setCpiData(json);
-    } catch (e) {
-      setCpiError(e.message);
-    }
-  }, []);
-
-  const fetchRrgSectors = useCallback(async (bench) => {
-    setRrgSectorsError(null);
-    try {
-      const res = await fetch(`/api/rrg-sectors?benchmark=${bench}`);
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Unknown error');
-      setRrgSectorsData(json);
-    } catch (e) {
-      setRrgSectorsError(e.message);
-    }
-  }, []);
-
-  const fetchEtfFlows = useCallback(async () => {
-    setEtfFlowsError(null);
-    try {
-      const res = await fetch('/api/etfflows');
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Unknown error');
-      setEtfFlowsData(json);
-    } catch (e) {
-      setEtfFlowsError(e.message);
-    }
-  }, []);
-
-  const fetchSeasonality = useCallback(async () => {
-    setSeasonalityError(null);
-    try {
-      const res = await fetch('/api/seasonality');
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Unknown error');
-      setSeasonalityData(json);
-    } catch (e) {
-      setSeasonalityError(e.message);
-    }
-  }, []);
-
-  const fetchAltseason = useCallback(async () => {
-    setAltseasonError(null);
-    try {
-      const res = await fetch('/api/altseason');
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Unknown error');
-      setAltseasonData(json);
-    } catch (e) {
-      setAltseasonError(e.message);
-    }
-  }, []);
-
-  const fetchPolymarket = useCallback(async () => {
-    setPolymarketError(null);
-    try {
-      const res = await fetch('/api/polymarket');
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Unknown error');
-      setPolymarketData(json);
-    } catch (e) {
-      setPolymarketError(e.message);
-    }
-  }, []);
-
-  const fetchTimeframes = useCallback(async () => {
-    setTimeframesError(null);
-    try {
-      const res = await fetch('/api/timeframes');
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Unknown error');
-      setTimeframesData(json);
-    } catch (e) {
-      setTimeframesError(e.message);
-    }
-  }, []);
-
-  const fetchEma = useCallback(async () => {
-    setEmaError(null);
-    try {
-      const res = await fetch('/api/ema');
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Unknown error');
-      setEmaData(json);
-    } catch (e) {
-      setEmaError(e.message);
-    }
-  }, []);
-
-  const fetchCot = useCallback(async () => {
-    setCotError(null);
-    try {
-      const res = await fetch('/api/cot');
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Unknown error');
-      setCotData(json);
-    } catch (e) {
-      setCotError(e.message);
-    }
-  }, []);
-
-  const fetchData = useCallback(async (symbols, benchmark) => {
-    setLoading(true);
-    setError(null);
-    setRrgError(null);
-    setMacroError(null);
-    setFundingError(null);
-    try {
-      const res = await fetch(`/api/crypto?symbols=${[benchmark, ...symbols].join(',')}`);
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Unknown error');
-      setData(json);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-
-    try {
-      const rrgRes = await fetch(`/api/rrg?benchmark=${benchmark}&symbols=${symbols.join(',')}`);
-      const rrgJson = await rrgRes.json();
-      if (!rrgRes.ok) throw new Error(rrgJson.error || 'Unknown error');
-      setRrgData(rrgJson);
-    } catch (e) {
-      setRrgError(e.message);
-    }
-
-    try {
-      const macroRes = await fetch('/api/macro');
-      const macroJson = await macroRes.json();
-      if (!macroRes.ok) throw new Error(macroJson.error || 'Unknown error');
-      setMacroData(macroJson);
-    } catch (e) {
-      setMacroError(e.message);
-    }
-
-    try {
-      const fundingRes = await fetch(`/api/funding?symbols=${[benchmark, ...symbols].join(',')}`);
-      const fundingJson = await fundingRes.json();
-      if (!fundingRes.ok) throw new Error(fundingJson.error || 'Unknown error');
-      setFundingData(fundingJson);
-    } catch (e) {
-      setFundingError(e.message);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchData(sectorTickers, benchmark);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSector, benchmark]);
-
-  // Sector-composite RRG data is heavier to fetch (representative tickers
-  // across every sector at once) — only fetch it when that view is actually
-  // in use, not alongside the per-sector ticker view.
-  useEffect(() => {
-    if (rrgMode === 'sectors') fetchRrgSectors(benchmark);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rrgMode, benchmark]);
-
-  // EMA, COT, ETF flows, options, and seasonality all feed the always-
-  // visible MarketRead header (shown above the tab bar regardless of
-  // which tab is active) — these are the only non-Rotation sources that
-  // still fetch eagerly on mount / global refresh. Everything else below
-  // is tab-specific and loads lazily instead (see the *TabData groups).
-  useEffect(() => {
-    fetchEma();
-    fetchCot();
-    fetchEtfFlows();
-    fetchOptions();
-    fetchSeasonality();
-  }, [fetchEma, fetchCot, fetchEtfFlows, fetchOptions, fetchSeasonality]);
-
-  // Grouped per tab so each tab's data loads once, the first time it's
-  // actually opened, and the "Refresh now" button can refresh just the
-  // active tab instead of every source in the app. Reuses fetchOptions/
-  // fetchEtfFlows/fetchSeasonality's eager Category-A data where a tab
-  // also happens to use them — no need to re-list those here.
-  const fetchMacroTabData = useCallback(() => {
-    fetchPolymarket();
-    fetchAltseason();
-    fetchCpi();
-    fetchNews();
-    fetchEthEtfFlows();
-  }, [fetchPolymarket, fetchAltseason, fetchCpi, fetchNews, fetchEthEtfFlows]);
-
-  const fetchLevelsTabData = useCallback(() => {
-    fetchTimeframes();
-    fetchOpenInterest();
-    fetchTakerFlow();
-    fetchLiquidations();
-    fetchLiquidationHeatmap();
-    fetchLiquidationHeatmapCoinalyze();
-    fetchLiquidationHeatmapBcf();
-    fetchLiquidationFeed();
-    fetchLiquidationZones();
-    fetchBtcPrice();
-    fetchEthPrice();
-  }, [fetchTimeframes, fetchOpenInterest, fetchTakerFlow, fetchLiquidations, fetchLiquidationHeatmap, fetchLiquidationHeatmapCoinalyze, fetchLiquidationHeatmapBcf, fetchLiquidationFeed, fetchLiquidationZones, fetchBtcPrice, fetchEthPrice]);
-
-  const fetchMintsTabData = useCallback(() => {
-    fetchStablecoinMints();
-    // Staggered behind the mint feed — both hit Etherscan with the same
-    // key, and starting at the same instant is what triggered its "3
-    // calls/sec" rate limit in production.
-    setTimeout(fetchNotableWalletActivity, 1500);
-  }, [fetchStablecoinMints, fetchNotableWalletActivity]);
-
-  const fetchCalendarTabData = useCallback(() => {
-    fetchFedOdds();
-    fetchCongressBills();
-  }, [fetchFedOdds, fetchCongressBills]);
-
-  // Each tab's data loads once, the first time it's opened — not on page
-  // mount, and not while looking at a different tab. Mirrors the same
-  // lazy-load pattern CoinLobster's Whale Movement tab already used
-  // (there, to respect its credit metering; here, so switching between
-  // tabs doesn't fire every third-party API in the app on every load).
-  useEffect(() => {
-    if (activeTab === 'macro' && !macroTabLoaded) {
-      setMacroTabLoaded(true);
-      fetchMacroTabData();
-    }
-  }, [activeTab, macroTabLoaded, fetchMacroTabData]);
-
-  useEffect(() => {
-    if (activeTab === 'levels' && !levelsTabLoaded) {
-      setLevelsTabLoaded(true);
-      fetchLevelsTabData();
-    }
-  }, [activeTab, levelsTabLoaded, fetchLevelsTabData]);
-
-  useEffect(() => {
-    if (activeTab === 'mints' && !mintsTabLoaded) {
-      setMintsTabLoaded(true);
-      fetchMintsTabData();
-    }
-  }, [activeTab, mintsTabLoaded, fetchMintsTabData]);
-
-  useEffect(() => {
-    if (activeTab === 'calendar' && !calendarTabLoaded) {
-      setCalendarTabLoaded(true);
-      fetchCalendarTabData();
-    }
-  }, [activeTab, calendarTabLoaded, fetchCalendarTabData]);
-
-  // CoinLobster (whale data) is credit-metered — fetch it only the first
-  // time the viewer actually opens the Whale Movement tab, not on page
-  // mount like everything else above.
-  useEffect(() => {
-    if (activeTab === 'whale' && !whaleTabLoaded) {
-      setWhaleTabLoaded(true);
-      fetchAllWhaleData();
-    }
-  }, [activeTab, whaleTabLoaded, fetchAllWhaleData]);
+  // Each hook owns one data domain's state + fetchers. header fetches
+  // eagerly (MarketRead is always visible above the tab bar); rotation
+  // is driven by activeSector/benchmark/rrgMode; every *TabData hook
+  // loads lazily, the first time its own tab is opened — see each
+  // hook's file for why. This is what keeps API bursts (Etherscan,
+  // TronScan, Solscan, Coinglass...) from all firing on every page load
+  // regardless of what's actually on screen, and is also why "Refresh
+  // now" below only needs to call header + rotation + whichever tab is
+  // currently active, not thirty separate fetchers.
+  const header = useHeaderData();
+  const rotation = useRotationData(sectorTickers, benchmark, activeSector, rrgMode);
+  const macro = useMacroTabData(activeTab === 'macro');
+  const levels = useLevelsTabData(activeTab === 'levels');
+  const mints = useMintsTabData(activeTab === 'mints');
+  const calendar = useCalendarTabData(activeTab === 'calendar');
+  const whale = useWhaleTabData(activeTab === 'whale');
 
   return (
     <main style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
@@ -688,41 +95,37 @@ export default function DashboardHome() {
           onClick={() => {
             // Always refresh: Rotation's own data, plus everything the
             // always-visible MarketRead header needs.
-            fetchData(sectorTickers, benchmark);
-            fetchEma();
-            fetchCot();
-            fetchEtfFlows();
-            fetchOptions();
-            fetchSeasonality();
-            if (rrgMode === 'sectors') fetchRrgSectors(benchmark);
+            rotation.fetchData(sectorTickers, benchmark);
+            header.refetch();
+            if (rrgMode === 'sectors') rotation.fetchRrgSectors(benchmark);
 
             // Plus whichever tab is actually on screen right now — not
             // every other tab's data too.
-            if (activeTab === 'macro') fetchMacroTabData();
-            else if (activeTab === 'levels') fetchLevelsTabData();
-            else if (activeTab === 'mints') fetchMintsTabData();
-            else if (activeTab === 'calendar') fetchCalendarTabData();
-            else if (activeTab === 'whale') fetchAllWhaleData();
+            if (activeTab === 'macro') macro.refetch();
+            else if (activeTab === 'levels') levels.refetch();
+            else if (activeTab === 'mints') mints.refetch();
+            else if (activeTab === 'calendar') calendar.refetch();
+            else if (activeTab === 'whale') whale.refetch();
           }}
-          disabled={loading}
+          disabled={rotation.loading}
           style={{
             background: '#171D21', border: '1px solid #2A3136', color: '#C9A66B',
-            borderRadius: 4, padding: '6px 14px', fontSize: 12, cursor: loading ? 'default' : 'pointer',
+            borderRadius: 4, padding: '6px 14px', fontSize: 12, cursor: rotation.loading ? 'default' : 'pointer',
           }}
         >
-          {loading ? 'Refreshing…' : 'Refresh now'}
+          {rotation.loading ? 'Refreshing…' : 'Refresh now'}
         </button>
       </div>
 
       <MarketRead
-        btcTicker={data?.tickers?.BTC}
-        macroData={macroData}
-        emaData={emaData}
-        cotData={cotData}
-        optionsData={optionsData}
-        etfFlowsData={etfFlowsData}
-        fundingData={fundingData}
-        seasonalityData={seasonalityData}
+        btcTicker={rotation.data?.tickers?.BTC}
+        macroData={rotation.macroData}
+        emaData={header.emaData}
+        cotData={header.cotData}
+        optionsData={header.optionsData}
+        etfFlowsData={header.etfFlowsData}
+        fundingData={rotation.fundingData}
+        seasonalityData={header.seasonalityData}
       />
 
       <div style={{
@@ -807,14 +210,14 @@ export default function DashboardHome() {
           </div>
 
           <p style={{ fontSize: 12, color: '#6E767B', marginTop: 10 }}>
-            {data?.fetchedAt
-              ? `Live from CoinMarketCap — last fetched ${new Date(data.fetchedAt).toLocaleTimeString()}`
+            {rotation.data?.fetchedAt
+              ? `Live from CoinMarketCap — last fetched ${new Date(rotation.data.fetchedAt).toLocaleTimeString()}`
               : 'Fetching live data…'}
           </p>
 
-          {error && (
+          {rotation.error && (
             <div style={{ marginTop: 20, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-              <strong>Fetch failed:</strong> {error}
+              <strong>Fetch failed:</strong> {rotation.error}
               <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
                 Most likely cause: CMC_API_KEY isn't set yet in this environment's variables.
               </div>
@@ -822,26 +225,26 @@ export default function DashboardHome() {
           )}
 
           {rrgMode === 'tickers' ? (
-            rrgError ? (
+            rotation.rrgError ? (
               <div style={{ marginTop: 24, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-                <strong>RRG fetch failed:</strong> {rrgError}
+                <strong>RRG fetch failed:</strong> {rotation.rrgError}
                 <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
                   Most likely cause: COINGECKO_API_KEY isn't set yet in this environment's variables.
                 </div>
               </div>
             ) : (
               <>
-                <RelativeRotationGraph data={rrgData} symbols={sectorTickers} benchmark={benchmark} />
-                {rrgData?.failed?.length > 0 && (
+                <RelativeRotationGraph data={rotation.rrgData} symbols={sectorTickers} benchmark={benchmark} />
+                {rotation.rrgData?.failed?.length > 0 && (
                   <p style={{ fontSize: 11, color: '#6E767B', marginTop: 8 }}>
-                    No live data for: {rrgData.failed.join(', ')} — skipped.
+                    No live data for: {rotation.rrgData.failed.join(', ')} — skipped.
                   </p>
                 )}
               </>
             )
-          ) : rrgSectorsError ? (
+          ) : rotation.rrgSectorsError ? (
             <div style={{ marginTop: 24, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-              <strong>Sector RRG fetch failed:</strong> {rrgSectorsError}
+              <strong>Sector RRG fetch failed:</strong> {rotation.rrgSectorsError}
               <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
                 Most likely cause: COINGECKO_API_KEY isn't set yet in this environment's variables.
               </div>
@@ -850,37 +253,37 @@ export default function DashboardHome() {
             <>
               <p style={{ fontSize: 11, color: '#6E767B', marginTop: 8, maxWidth: 620 }}>
                 Each sector is an equal-weighted composite of its {' '}
-                {rrgSectorsData?.sectorMembers ? Object.values(rrgSectorsData.sectorMembers)[0]?.length : 4}{' '}
+                {rotation.rrgSectorsData?.sectorMembers ? Object.values(rotation.rrgSectorsData.sectorMembers)[0]?.length : 4}{' '}
                 most prominent tickers, normalized to a common starting index rather than raw price — so a
                 sector&apos;s RS-Ratio/Momentum reflects its overall trend, not any single token&apos;s price level.
               </p>
               <RelativeRotationGraph
-                data={rrgSectorsData}
+                data={rotation.rrgSectorsData}
                 symbols={SECTORS.map((s) => s.label)}
                 benchmark={benchmark}
                 assetLabel="index"
                 assetFormat={(v) => v?.toFixed(3)}
               />
-              {rrgSectorsData?.failed?.length > 0 && (
+              {rotation.rrgSectorsData?.failed?.length > 0 && (
                 <p style={{ fontSize: 11, color: '#6E767B', marginTop: 8 }}>
-                  No live data for: {rrgSectorsData.failed.join(', ')} — skipped.
+                  No live data for: {rotation.rrgSectorsData.failed.join(', ')} — skipped.
                 </p>
               )}
             </>
           )}
 
-          <RotationChart tickers={data?.tickers} symbols={tracked} />
+          <RotationChart tickers={rotation.data?.tickers} symbols={tracked} />
         </TabErrorBoundary>
       )}
 
       {activeTab === 'calendar' && (
         <TabErrorBoundary tabName="CB Calendar">
           <CbCalendar
-            optionsData={optionsData}
-            fedOddsData={fedOddsData}
-            fedOddsError={fedOddsError}
-            congressData={congressData}
-            congressError={congressError}
+            optionsData={header.optionsData}
+            fedOddsData={calendar.fedOddsData}
+            fedOddsError={calendar.fedOddsError}
+            congressData={calendar.congressData}
+            congressError={calendar.congressError}
           />
         </TabErrorBoundary>
       )}
@@ -893,229 +296,229 @@ export default function DashboardHome() {
 
       {activeTab === 'macro' && (
         <TabErrorBoundary tabName="Macro & Seasonality">
-          {macroError ? (
+          {rotation.macroError ? (
             <div style={{ marginTop: 20, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-              <strong>Macro fetch failed:</strong> {macroError}
+              <strong>Macro fetch failed:</strong> {rotation.macroError}
               <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
                 Most likely cause: COINGECKO_API_KEY isn't set yet in this environment's variables.
               </div>
             </div>
           ) : (
-            <MacroSentiment data={macroData} cpiData={cpiData} cpiError={cpiError} />
+            <MacroSentiment data={rotation.macroData} cpiData={macro.cpiData} cpiError={macro.cpiError} />
           )}
 
-          {newsError ? (
+          {macro.newsError ? (
             <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-              <strong>Market news fetch failed:</strong> {newsError}
+              <strong>Market news fetch failed:</strong> {macro.newsError}
               <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
                 Most likely cause: COINSTATS_API_KEY isn't set yet in this environment's variables.
               </div>
             </div>
           ) : (
-            <MarketNews data={newsData} />
+            <MarketNews data={macro.newsData} />
           )}
 
-          {altseasonError ? (
+          {macro.altseasonError ? (
             <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-              <strong>Altcoin Season Index fetch failed:</strong> {altseasonError}
+              <strong>Altcoin Season Index fetch failed:</strong> {macro.altseasonError}
             </div>
           ) : (
-            <AltseasonIndex data={altseasonData} />
+            <AltseasonIndex data={macro.altseasonData} />
           )}
 
-          {etfFlowsError ? (
+          {header.etfFlowsError ? (
             <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-              <strong>ETF flows fetch failed:</strong> {etfFlowsError}
+              <strong>ETF flows fetch failed:</strong> {header.etfFlowsError}
               <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
                 Most likely cause: SOSOVALUE_API_KEY isn't set yet in this environment's variables.
               </div>
             </div>
           ) : (
-            <EtfFlows data={etfFlowsData} />
+            <EtfFlows data={header.etfFlowsData} />
           )}
 
-          {ethEtfFlowsError ? (
+          {macro.ethEtfFlowsError ? (
             <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-              <strong>ETH ETF flows fetch failed:</strong> {ethEtfFlowsError}
+              <strong>ETH ETF flows fetch failed:</strong> {macro.ethEtfFlowsError}
               <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
                 Most likely cause: COINGLASS_API_KEY isn't set yet in this environment's variables.
               </div>
             </div>
           ) : (
             <EtfFlows
-              data={ethEtfFlowsData}
+              data={macro.ethEtfFlowsData}
               title="Spot ETH ETF Flows"
               subtitle="Live daily net flow across US spot Ethereum ETFs, via Coinglass — weekly/monthly views sum the same daily numbers, not a separately reported figure"
             />
           )}
 
-          {optionsError ? (
+          {header.optionsError ? (
             <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-              <strong>Options positioning fetch failed:</strong> {optionsError}
+              <strong>Options positioning fetch failed:</strong> {header.optionsError}
               <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
                 Deribit's public API may be temporarily unavailable — try refreshing.
               </div>
             </div>
           ) : (
-            <OptionsPositioning data={optionsData} />
+            <OptionsPositioning data={header.optionsData} />
           )}
 
-          {polymarketError ? (
+          {macro.polymarketError ? (
             <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-              <strong>Polymarket fetch failed:</strong> {polymarketError}
+              <strong>Polymarket fetch failed:</strong> {macro.polymarketError}
             </div>
           ) : (
-            <PolymarketPredictions data={polymarketData} />
+            <PolymarketPredictions data={macro.polymarketData} />
           )}
 
-          {cotError ? (
+          {header.cotError ? (
             <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-              <strong>COT fetch failed:</strong> {cotError}
+              <strong>COT fetch failed:</strong> {header.cotError}
               <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
                 The CFTC's public reporting site may be temporarily unavailable — try refreshing.
               </div>
             </div>
           ) : (
-            <CotPanel data={cotData} />
+            <CotPanel data={header.cotData} />
           )}
 
-          {seasonalityError ? (
+          {header.seasonalityError ? (
             <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-              <strong>Seasonality fetch failed:</strong> {seasonalityError}
+              <strong>Seasonality fetch failed:</strong> {header.seasonalityError}
               <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
                 Kraken's public OHLC endpoint may be temporarily unavailable — try refreshing.
               </div>
             </div>
           ) : (
-            <SeasonalityTable data={seasonalityData} />
+            <SeasonalityTable data={header.seasonalityData} />
           )}
         </TabErrorBoundary>
       )}
 
       {activeTab === 'levels' && (
         <TabErrorBoundary tabName="Levels & Liquidations">
-          {emaError ? (
+          {header.emaError ? (
             <div style={{ marginTop: 20, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-              <strong>EMA fetch failed:</strong> {emaError}
+              <strong>EMA fetch failed:</strong> {header.emaError}
               <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
                 Kraken's public OHLC endpoint may be temporarily unavailable — try refreshing.
               </div>
             </div>
           ) : (
-            <EmaLevels data={emaData} symbols={EMA_SYMBOLS} />
+            <EmaLevels data={header.emaData} symbols={EMA_SYMBOLS} />
           )}
 
-          {timeframesError ? (
+          {levels.timeframesError ? (
             <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-              <strong>Timeframes fetch failed:</strong> {timeframesError}
+              <strong>Timeframes fetch failed:</strong> {levels.timeframesError}
             </div>
           ) : (
-            <TimeframesPanel data={timeframesData} />
+            <TimeframesPanel data={levels.timeframesData} />
           )}
 
           <LiquidationHeatmap
-            data={liquidationHeatmapData}
-            dataError={liquidationHeatmapError}
-            coinalyzeData={liquidationHeatmapCoinalyzeData}
-            coinalyzeError={liquidationHeatmapCoinalyzeError}
-            bcfData={liquidationHeatmapBcfData}
-            bcfError={liquidationHeatmapBcfError}
+            data={levels.liquidationHeatmapData}
+            dataError={levels.liquidationHeatmapError}
+            coinalyzeData={levels.liquidationHeatmapCoinalyzeData}
+            coinalyzeError={levels.liquidationHeatmapCoinalyzeError}
+            bcfData={levels.liquidationHeatmapBcfData}
+            bcfError={levels.liquidationHeatmapBcfError}
           />
 
           <LiquidationLevelsTracker
-            btcPrice={btcPriceData?.price ?? null}
-            btcPriceError={btcPriceError}
-            ethPrice={ethPriceData?.price ?? null}
-            ethPriceError={ethPriceError}
+            btcPrice={levels.btcPriceData?.price ?? null}
+            btcPriceError={levels.btcPriceError}
+            ethPrice={levels.ethPriceData?.price ?? null}
+            ethPriceError={levels.ethPriceError}
           />
 
-          {liquidationZonesError ? (
+          {levels.liquidationZonesError ? (
             <div style={{ marginTop: 20, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-              <strong>Liquidation zones fetch failed:</strong> {liquidationZonesError}
+              <strong>Liquidation zones fetch failed:</strong> {levels.liquidationZonesError}
               <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
                 Most likely cause: COINLOBSTER_API_KEY isn't set yet in this environment's variables.
               </div>
             </div>
           ) : (
-            <LiquidationZones data={liquidationZonesData} />
+            <LiquidationZones data={levels.liquidationZonesData} />
           )}
 
-          {openInterestError ? (
+          {levels.openInterestError ? (
             <div style={{ marginTop: 20, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-              <strong>Cross-exchange open interest fetch failed:</strong> {openInterestError}
+              <strong>Cross-exchange open interest fetch failed:</strong> {levels.openInterestError}
               <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
                 Most likely cause: COINGLASS_API_KEY isn't set yet, or the key's plan doesn't include this endpoint.
               </div>
             </div>
           ) : (
-            <OpenInterestPanel data={openInterestData} />
+            <OpenInterestPanel data={levels.openInterestData} />
           )}
 
-          {takerFlowError ? (
+          {levels.takerFlowError ? (
             <div style={{ marginTop: 20, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-              <strong>Taker buy/sell volume fetch failed:</strong> {takerFlowError}
+              <strong>Taker buy/sell volume fetch failed:</strong> {levels.takerFlowError}
               <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
                 Most likely cause: COINGLASS_API_KEY isn't set yet, or the key's plan doesn't include this endpoint.
               </div>
             </div>
           ) : (
-            <TakerFlow data={takerFlowData} />
+            <TakerFlow data={levels.takerFlowData} />
           )}
 
-          {liquidationsError ? (
+          {levels.liquidationsError ? (
             <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-              <strong>Liquidations fetch failed:</strong> {liquidationsError}
+              <strong>Liquidations fetch failed:</strong> {levels.liquidationsError}
               <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
                 Most likely cause: COINGLASS_API_KEY isn't set yet in this environment's variables.
               </div>
             </div>
           ) : (
-            <LiquidationsPanel data={liquidationsData} />
+            <LiquidationsPanel data={levels.liquidationsData} />
           )}
 
-          {liquidationFeedError ? (
+          {levels.liquidationFeedError ? (
             <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-              <strong>Live liquidation feed fetch failed:</strong> {liquidationFeedError}
+              <strong>Live liquidation feed fetch failed:</strong> {levels.liquidationFeedError}
               <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
                 MarginPad's public API may be temporarily unavailable — try refreshing.
               </div>
             </div>
           ) : (
-            <LiveLiquidationFeed data={liquidationFeedData} />
+            <LiveLiquidationFeed data={levels.liquidationFeedData} />
           )}
 
-          {fundingError ? (
+          {rotation.fundingError ? (
             <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-              <strong>Funding/OI fetch failed:</strong> {fundingError}
+              <strong>Funding/OI fetch failed:</strong> {rotation.fundingError}
             </div>
           ) : (
-            <FundingOI data={fundingData} symbols={tracked} />
+            <FundingOI data={rotation.fundingData} symbols={tracked} />
           )}
         </TabErrorBoundary>
       )}
 
       {activeTab === 'mints' && (
         <TabErrorBoundary tabName="Printer Watch">
-          {stablecoinMintsError ? (
+          {mints.stablecoinMintsError ? (
             <div style={{ marginTop: 20, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-              <strong>Stablecoin mint feed fetch failed:</strong> {stablecoinMintsError}
+              <strong>Stablecoin mint feed fetch failed:</strong> {mints.stablecoinMintsError}
               <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
                 Most likely cause: ETHERSCAN_API_KEY isn't set yet in this environment's variables.
               </div>
             </div>
           ) : (
-            <StablecoinMintFeed data={stablecoinMintsData} />
+            <StablecoinMintFeed data={mints.stablecoinMintsData} />
           )}
 
-          {notableWalletActivityError ? (
+          {mints.notableWalletActivityError ? (
             <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-              <strong>Notable wallet activity fetch failed:</strong> {notableWalletActivityError}
+              <strong>Notable wallet activity fetch failed:</strong> {mints.notableWalletActivityError}
               <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
                 Most likely cause: ETHERSCAN_API_KEY isn't set yet in this environment's variables.
               </div>
             </div>
           ) : (
-            <NotableWalletActivity data={notableWalletActivityData} />
+            <NotableWalletActivity data={mints.notableWalletActivityData} />
           )}
         </TabErrorBoundary>
       )}
@@ -1130,7 +533,7 @@ export default function DashboardHome() {
               tab is opened, not on every page refresh — use the button below to pull fresh data.
             </p>
             <button
-              onClick={fetchAllWhaleData}
+              onClick={whale.refetch}
               style={{
                 background: '#171D21', border: '1px solid #2A3136', color: '#C9A66B',
                 borderRadius: 6, padding: '6px 14px', fontSize: 12, cursor: 'pointer', flexShrink: 0,
@@ -1140,51 +543,51 @@ export default function DashboardHome() {
             </button>
           </div>
 
-          {!whaleTabLoaded ? (
+          {!whale.loaded ? (
             <p style={{ fontSize: 12, color: '#6E767B', marginTop: 16 }}>Loading…</p>
           ) : (
             <>
-              {whaleTradesError ? (
+              {whale.whaleTradesError ? (
                 <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-                  <strong>Whale trade feed fetch failed:</strong> {whaleTradesError}
+                  <strong>Whale trade feed fetch failed:</strong> {whale.whaleTradesError}
                   <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
                     Most likely cause: COINLOBSTER_API_KEY isn't set yet, or this key's plan doesn't include this endpoint.
                   </div>
                 </div>
               ) : (
-                <WhaleTradeFeed data={whaleTradesData} />
+                <WhaleTradeFeed data={whale.whaleTradesData} />
               )}
 
-              {whaleRadarError ? (
+              {whale.whaleRadarError ? (
                 <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-                  <strong>Whale radar fetch failed:</strong> {whaleRadarError}
+                  <strong>Whale radar fetch failed:</strong> {whale.whaleRadarError}
                 </div>
               ) : (
-                <WhaleRadar data={whaleRadarData} />
+                <WhaleRadar data={whale.whaleRadarData} />
               )}
 
-              {whaleFlowError ? (
+              {whale.whaleFlowError ? (
                 <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-                  <strong>Whale flow fetch failed:</strong> {whaleFlowError}
+                  <strong>Whale flow fetch failed:</strong> {whale.whaleFlowError}
                 </div>
               ) : (
-                <WhaleFlow data={whaleFlowData} />
+                <WhaleFlow data={whale.whaleFlowData} />
               )}
 
-              {hyperliquidWhalesError ? (
+              {whale.hyperliquidWhalesError ? (
                 <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-                  <strong>Hyperliquid whale board fetch failed:</strong> {hyperliquidWhalesError}
+                  <strong>Hyperliquid whale board fetch failed:</strong> {whale.hyperliquidWhalesError}
                 </div>
               ) : (
-                <HyperliquidWhaleBoard data={hyperliquidWhalesData} />
+                <HyperliquidWhaleBoard data={whale.hyperliquidWhalesData} />
               )}
 
-              {onchainWhalesError ? (
+              {whale.onchainWhalesError ? (
                 <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-                  <strong>On-chain whale swaps fetch failed:</strong> {onchainWhalesError}
+                  <strong>On-chain whale swaps fetch failed:</strong> {whale.onchainWhalesError}
                 </div>
               ) : (
-                <OnchainWhaleSwaps data={onchainWhalesData} />
+                <OnchainWhaleSwaps data={whale.onchainWhalesData} />
               )}
             </>
           )}

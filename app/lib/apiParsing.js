@@ -46,3 +46,23 @@ export function normalizeTimeMs(v) {
   const parsed = Date.parse(v);
   return Number.isNaN(parsed) ? null : parsed;
 }
+
+// On-chain token amounts arrive in base units (a raw integer — wei, or
+// USDT/USDC/SOL's own base unit) that need dividing by 10^decimals to get
+// a human amount. The raw value can be a decimal string, a hex string
+// (0x...), or a plain number, and ETH's wei-scale values can exceed
+// Number's safe integer range — BigInt handles all three input shapes and
+// the precision, so it's tried first; a plain Number parse is the
+// fallback for anything BigInt can't parse (e.g. a value that's already
+// a non-integer). Returns null if neither parse works, never NaN/Infinity.
+// Consolidates what used to be five near-identical copies of this exact
+// try/catch across stablecoinmints/route.js and notablewallets/route.js.
+export function scaleAmount(rawValue, decimals) {
+  if (rawValue == null || decimals == null) return null;
+  try {
+    return Number(BigInt(rawValue)) / 10 ** Number(decimals);
+  } catch {
+    const n = Number(rawValue);
+    return Number.isFinite(n) ? n / 10 ** Number(decimals) : null;
+  }
+}
