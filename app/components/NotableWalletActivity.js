@@ -8,14 +8,15 @@ const TEXT_MUTED = '#6E767B';
 const CARD_BG = '#171D21';
 const CARD_BORDER = '#2A3136';
 const AMBER = '#C9A66B';
+const GAIN = '#7FA37F';
+const LOSS = '#A85D4F';
 
 const MIN_SIZE_OPTIONS = [
   { key: 0, label: 'All' },
-  { key: 250_000, label: '$250K+' },
+  { key: 100_000, label: '$100K+' },
   { key: 500_000, label: '$500K+' },
   { key: 1_000_000, label: '$1M+' },
   { key: 10_000_000, label: '$10M+' },
-  { key: 50_000_000, label: '$50M+' },
 ];
 
 function formatUsd(v) {
@@ -30,17 +31,6 @@ function shortAddr(a) {
   return a ? `${a.slice(0, 6)}…${a.slice(-4)}` : '—';
 }
 
-function explorerLinks(chain) {
-  switch (chain) {
-    case 'Tron':
-      return { addr: (a) => `https://tronscan.org/#/address/${a}`, tx: (h) => `https://tronscan.org/#/transaction/${h}` };
-    case 'Solana':
-      return { addr: (a) => `https://solscan.io/account/${a}`, tx: (h) => `https://solscan.io/tx/${h}` };
-    default:
-      return { addr: (a) => `https://etherscan.io/address/${a}`, tx: (h) => `https://etherscan.io/tx/${h}` };
-  }
-}
-
 function formatRelative(ts) {
   if (!ts) return null;
   const sec = (Date.now() - ts) / 1000;
@@ -50,38 +40,41 @@ function formatRelative(ts) {
   return `${Math.round(sec / 86400)}d ago`;
 }
 
-export default function StablecoinMintFeed({ data }) {
+function explorerLinks(chain) {
+  return chain === 'Solana'
+    ? { addr: (a) => `https://solscan.io/account/${a}`, tx: (h) => `https://solscan.io/tx/${h}` }
+    : { addr: (a) => `https://etherscan.io/address/${a}`, tx: (h) => `https://etherscan.io/tx/${h}` };
+}
+
+export default function NotableWalletActivity({ data }) {
   const [minSize, setMinSize] = useState(0);
 
   if (!data) {
     return (
       <section style={{ marginTop: 32 }}>
         <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: TEXT_PRIMARY }}>
-          Stablecoin Mint Feed — Ethereum · Tron
+          Notable Wallet Activity — Exchanges &amp; Market Makers
         </h2>
         <p style={{ fontSize: 12, color: TEXT_MUTED, marginTop: 16 }}>Waiting for data…</p>
       </section>
     );
   }
 
-  const allMints = data.mints || [];
-  const mints = allMints.filter((m) => m.amount == null || m.amount >= minSize);
-  const hiddenCount = allMints.length - mints.length;
+  const allActivity = data.activity || [];
+  const activity = allActivity.filter((a) => a.amount == null || a.amount >= minSize);
+  const hiddenCount = allActivity.length - activity.length;
+  const trackedList = (data.watchedWallets || []).map((w) => `${w.entity} (${w.chain})`).join(', ');
 
   return (
     <section style={{ marginTop: 32 }}>
       <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: TEXT_PRIMARY }}>
-        Stablecoin Mint Feed — Ethereum · Tron
+        Notable Wallet Activity — Exchanges &amp; Market Makers
       </h2>
       <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '4px 0 16px', maxWidth: 680, lineHeight: 1.5 }}>
-        Real on-chain USDT/USDC mints — an ERC-20/TRC20 Transfer from each chain's null/black-hole
-        address — read live from Etherscan and TronScan. Ethereum USDT's window looks back ~7 days
-        (rare, treasury-sized events); Ethereum USDC's looks back only ~3 hours, because most of what
-        shows up as a USDC "mint" there is Circle's CCTP cross-chain bridge minting directly to an
-        end-user's address on arrival, not a treasury re-supply — frequent and usually small, so a
-        wide window would bury recent activity under old bridge traffic. Tron scans the most recent
-        ~300 USDT contract transfers for black-hole activity. Use the size filter to focus on the
-        bigger ones.
+        Real USDT/USDC transfers into and out of a curated set of publicly-labeled exchange and
+        market-maker wallets, read live from Etherscan. Each address was verified against its block
+        explorer's own public entity label, not guessed — currently tracking:{' '}
+        {trackedList || '—'}. Stablecoin flows only, not general token activity.
       </p>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
@@ -101,19 +94,19 @@ export default function StablecoinMintFeed({ data }) {
         ))}
       </div>
 
-      {mints.length === 0 ? (
+      {activity.length === 0 ? (
         <p style={{ fontSize: 12, color: TEXT_MUTED }}>
-          {allMints.length === 0
-            ? 'No USDT/USDC mints in the current lookback window.'
-            : `No mints at or above ${MIN_SIZE_OPTIONS.find((o) => o.key === minSize)?.label} in this window.`}
+          {allActivity.length === 0
+            ? 'No tracked wallet activity in the current window.'
+            : `No activity at or above ${MIN_SIZE_OPTIONS.find((o) => o.key === minSize)?.label} in this window.`}
         </p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {mints.map((m, i) => {
-            const links = explorerLinks(m.chain);
+          {activity.map((a, i) => {
+            const links = explorerLinks(a.chain);
             return (
               <div
-                key={m.txHash || i}
+                key={a.txHash || i}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 10, background: CARD_BG,
                   border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: '8px 10px',
@@ -121,29 +114,41 @@ export default function StablecoinMintFeed({ data }) {
               >
                 <span
                   style={{
-                    fontSize: 10, fontWeight: 700, color: m.color || AMBER, border: `1px solid ${m.color || AMBER}`,
+                    fontSize: 10, fontWeight: 700, color: a.direction === 'out' ? LOSS : GAIN,
+                    border: `1px solid ${a.direction === 'out' ? LOSS : GAIN}`, borderRadius: 3,
+                    padding: '1px 6px', flexShrink: 0, width: 28, textAlign: 'center',
+                  }}
+                >
+                  {a.direction === 'out' ? 'OUT' : 'IN'}
+                </span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: TEXT_PRIMARY, width: 92, flexShrink: 0 }}>
+                  {a.entity}
+                </span>
+                <span style={{ fontSize: 9, color: TEXT_MUTED, width: 52, flexShrink: 0 }}>{a.chain}</span>
+                <span
+                  style={{
+                    fontSize: 10, fontWeight: 700, color: a.color || AMBER, border: `1px solid ${a.color || AMBER}`,
                     borderRadius: 3, padding: '1px 6px', flexShrink: 0,
                   }}
                 >
-                  {m.symbol}
+                  {a.symbol}
                 </span>
-                <span style={{ fontSize: 9, color: TEXT_MUTED, width: 52, flexShrink: 0 }}>{m.chain}</span>
                 <span style={{ fontSize: 13, fontWeight: 600, color: TEXT_PRIMARY, fontFamily: 'ui-monospace, monospace', flexShrink: 0 }}>
-                  {formatUsd(m.amount)}
+                  {formatUsd(a.amount)}
                 </span>
                 <span style={{ fontSize: 11, color: TEXT_SECONDARY, flex: 1 }}>
-                  to{' '}
-                  {m.to ? (
-                    <a href={links.addr(m.to)} target="_blank" rel="noopener noreferrer" style={{ color: TEXT_SECONDARY }}>
-                      {shortAddr(m.to)}
+                  {a.direction === 'out' ? 'to' : 'from'}{' '}
+                  {a.counterparty ? (
+                    <a href={links.addr(a.counterparty)} target="_blank" rel="noopener noreferrer" style={{ color: TEXT_SECONDARY }}>
+                      {shortAddr(a.counterparty)}
                     </a>
                   ) : (
                     '—'
                   )}
                 </span>
-                {m.txHash && (
+                {a.txHash && (
                   <a
-                    href={links.tx(m.txHash)}
+                    href={links.tx(a.txHash)}
                     target="_blank"
                     rel="noopener noreferrer"
                     style={{ fontSize: 10, color: TEXT_MUTED, flexShrink: 0 }}
@@ -152,7 +157,7 @@ export default function StablecoinMintFeed({ data }) {
                   </a>
                 )}
                 <span style={{ fontSize: 10, color: TEXT_MUTED, width: 56, textAlign: 'right', flexShrink: 0 }}>
-                  {formatRelative(m.timestamp)}
+                  {formatRelative(a.timestamp)}
                 </span>
               </div>
             );
@@ -162,23 +167,23 @@ export default function StablecoinMintFeed({ data }) {
 
       {hiddenCount > 0 && (
         <p style={{ fontSize: 10, color: TEXT_MUTED, marginTop: 8 }}>
-          {hiddenCount} smaller mint{hiddenCount === 1 ? '' : 's'} hidden by the size filter above.
+          {hiddenCount} smaller transfer{hiddenCount === 1 ? '' : 's'} hidden by the size filter above.
         </p>
       )}
 
-      {data.tokensFailed?.length > 0 && (
+      {data.walletsFailed?.length > 0 && (
         <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {data.tokensFailed.map((f, i) => (
+          {data.walletsFailed.map((f, i) => (
             <p key={i} style={{ fontSize: 11, color: TEXT_MUTED, margin: 0 }}>
-              <strong style={{ color: TEXT_SECONDARY }}>{f.symbol} ({f.chain})</strong> — skipped: {f.error || 'unknown error'}
+              <strong style={{ color: TEXT_SECONDARY }}>{f.entity} ({f.chain})</strong> — skipped: {f.error || 'unknown error'}
             </p>
           ))}
         </div>
       )}
 
-      {data.chainsSkipped?.length > 0 && (
+      {data.walletsSkipped?.length > 0 && (
         <p style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 4 }}>
-          {data.chainsSkipped.map((s) => `${s.chain} (${s.symbol})`).join(', ')} not configured — add its API key to enable.
+          {data.walletsSkipped.map((s) => `${s.entity} (${s.chain})`).join(', ')} not configured — add its API key to enable.
         </p>
       )}
     </section>
