@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 
 const TEXT_PRIMARY = '#E7E4DD';
 const TEXT_SECONDARY = '#8B9298';
@@ -25,24 +25,6 @@ function formatUsd(v) {
 
 export default function WhaleRadar({ data }) {
   const [window_, setWindow] = useState('4h');
-  const [byWindow, setByWindow] = useState({}); // window -> { loading } | { error } | { window, coins }
-
-  const loadWindow = useCallback(async (w) => {
-    setByWindow((prev) => ({ ...prev, [w]: { loading: true } }));
-    try {
-      const res = await fetch(`/api/whaleradar?window=${w}`);
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Unknown error');
-      setByWindow((prev) => ({ ...prev, [w]: json }));
-    } catch (e) {
-      setByWindow((prev) => ({ ...prev, [w]: { error: e.message } }));
-    }
-  }, []);
-
-  const handlePickWindow = (w) => {
-    setWindow(w);
-    if (w !== data?.window && !byWindow[w]) loadWindow(w);
-  };
 
   if (!data) {
     return (
@@ -53,8 +35,11 @@ export default function WhaleRadar({ data }) {
     );
   }
 
-  const active = window_ === data.window ? data : byWindow[window_];
-  const coins = [...(active?.coins || [])].sort((a, b) => (b.netFlowUsd ?? -Infinity) - (a.netFlowUsd ?? -Infinity));
+  // One CoinLobster call returns all three windows together, so switching
+  // here is instant and free — no extra fetch or credit spend.
+  const coins = [...(data.windows?.[window_] || [])].sort(
+    (a, b) => (b.netUsd ?? -Infinity) - (a.netUsd ?? -Infinity)
+  );
 
   return (
     <section style={{ marginTop: 32 }}>
@@ -62,13 +47,14 @@ export default function WhaleRadar({ data }) {
       <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '4px 0 16px', maxWidth: 680, lineHeight: 1.5 }}>
         Coins showing unusual whale activity right now, via CoinLobster — ranked by net whale flow
         (buy volume minus sell volume) over the selected window.
+        {data.summary ? ` ${data.summary}` : ''}
       </p>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
         {WINDOWS.map((w) => (
           <button
             key={w}
-            onClick={() => handlePickWindow(w)}
+            onClick={() => setWindow(w)}
             style={{
               background: window_ === w ? '#1E252A' : '#171D21',
               border: `1px solid ${window_ === w ? AMBER : CARD_BORDER}`,
@@ -81,11 +67,7 @@ export default function WhaleRadar({ data }) {
         ))}
       </div>
 
-      {active?.loading ? (
-        <p style={{ fontSize: 12, color: TEXT_MUTED }}>Loading {window_} window…</p>
-      ) : active?.error ? (
-        <p style={{ fontSize: 12, color: TEXT_MUTED }}>{active.error}</p>
-      ) : coins.length === 0 ? (
+      {coins.length === 0 ? (
         <p style={{ fontSize: 12, color: TEXT_MUTED }}>No unusual whale activity flagged right now.</p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -103,13 +85,13 @@ export default function WhaleRadar({ data }) {
               <span
                 style={{
                   fontSize: 12, fontWeight: 600, fontFamily: 'ui-monospace, monospace',
-                  color: (c.netFlowUsd ?? 0) >= 0 ? GAIN : LOSS, flex: 1,
+                  color: (c.netUsd ?? 0) >= 0 ? GAIN : LOSS, flex: 1,
                 }}
               >
-                Net {(c.netFlowUsd ?? 0) >= 0 ? '+' : ''}{formatUsd(c.netFlowUsd)}
+                Net {(c.netUsd ?? 0) >= 0 ? '+' : ''}{formatUsd(c.netUsd)}
               </span>
-              {c.score != null && (
-                <span style={{ fontSize: 10, color: TEXT_MUTED }}>score {c.score}</span>
+              {c.multiple != null && (
+                <span style={{ fontSize: 10, color: TEXT_MUTED }}>{c.multiple.toFixed(1)}x normal</span>
               )}
             </div>
           ))}

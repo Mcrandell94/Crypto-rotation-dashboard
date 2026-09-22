@@ -1,7 +1,12 @@
 // Server-side only — requires a CoinLobster API key (coinlobster.com).
 // Real DEX whale swaps on Ethereum, Base, and Arbitrum, with the wallet
-// identified. See app/lib/coinlobster.js for sourcing/verification notes
-// and why fields are read defensively.
+// identified. See app/lib/coinlobster.js for sourcing/verification notes.
+//
+// Response field names below are no longer a guess — confirmed live via
+// a CoinLobster MCP connector this session: {swaps: [{chain, dex,
+// tokenSymbol, quoteSymbol, isBuy, amountUsd, wallet, txHash,
+// timestamp, ...}], ...}. tokenIn/tokenOut aren't sent directly —
+// they're derived here from tokenSymbol/quoteSymbol/isBuy.
 
 export const dynamic = 'force-dynamic';
 
@@ -38,20 +43,24 @@ export async function GET() {
     const swaps = rows.map((s) => {
       const chain = pick(s, ['chain', 'network']);
       const chainKey = (chain || '').toLowerCase();
-      const txHash = pick(s, ['tx_hash', 'hash', 'txid']);
+      const txHash = pick(s, ['tx_hash', 'txHash', 'hash', 'txid']);
+      const wallet = pick(s, ['wallet', 'address', 'trader']);
       const explorerBase = CHAIN_EXPLORERS[chainKey];
+      const isBuy = typeof s.isBuy === 'boolean' ? s.isBuy : null;
+      const tokenSymbol = pick(s, ['tokenSymbol', 'token_in', 'sell_token', 'from_token']);
+      const quoteSymbol = pick(s, ['quoteSymbol', 'token_out', 'buy_token', 'to_token']);
+      const tokenIn = isBuy != null ? (isBuy ? quoteSymbol : tokenSymbol) : pick(s, ['token_in']);
+      const tokenOut = isBuy != null ? (isBuy ? tokenSymbol : quoteSymbol) : pick(s, ['token_out']);
       return {
         chain,
-        wallet: pick(s, ['wallet', 'address', 'trader']),
-        tokenIn: pick(s, ['token_in', 'sell_token', 'from_token']),
-        tokenOut: pick(s, ['token_out', 'buy_token', 'to_token']),
-        usd: Number(pick(s, ['usd', 'amount_usd', 'value_usd'])) || null,
+        wallet,
+        tokenIn,
+        tokenOut,
+        usd: Number(pick(s, ['amountUsd', 'usd', 'amount_usd', 'value_usd'])) || null,
         txHash,
         txUrl: explorerBase && txHash ? `${explorerBase}/tx/${txHash}` : null,
-        walletUrl: explorerBase && pick(s, ['wallet', 'address', 'trader'])
-          ? `${explorerBase}/address/${pick(s, ['wallet', 'address', 'trader'])}`
-          : null,
-        timestamp: normalizeTimeMs(pick(s, ['time', 'timestamp', 'ts', 'created_at'])),
+        walletUrl: explorerBase && wallet ? `${explorerBase}/address/${wallet}` : null,
+        timestamp: normalizeTimeMs(pick(s, ['timestamp', 'time', 'ts', 'created_at'])),
       };
     });
 
