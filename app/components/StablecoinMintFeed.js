@@ -30,6 +30,17 @@ function shortAddr(a) {
   return a ? `${a.slice(0, 6)}…${a.slice(-4)}` : '—';
 }
 
+function explorerLinks(chain) {
+  switch (chain) {
+    case 'Tron':
+      return { addr: (a) => `https://tronscan.org/#/address/${a}`, tx: (h) => `https://tronscan.org/#/transaction/${h}` };
+    case 'Solana':
+      return { addr: (a) => `https://solscan.io/account/${a}`, tx: (h) => `https://solscan.io/tx/${h}` };
+    default:
+      return { addr: (a) => `https://etherscan.io/address/${a}`, tx: (h) => `https://etherscan.io/tx/${h}` };
+  }
+}
+
 function formatRelative(ts) {
   if (!ts) return null;
   const sec = (Date.now() - ts) / 1000;
@@ -46,7 +57,7 @@ export default function StablecoinMintFeed({ data }) {
     return (
       <section style={{ marginTop: 32 }}>
         <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: TEXT_PRIMARY }}>
-          Stablecoin Mint Feed — Ethereum
+          Stablecoin Mint Feed — Ethereum · Tron · Solana
         </h2>
         <p style={{ fontSize: 12, color: TEXT_MUTED, marginTop: 16 }}>Waiting for data…</p>
       </section>
@@ -60,16 +71,18 @@ export default function StablecoinMintFeed({ data }) {
   return (
     <section style={{ marginTop: 32 }}>
       <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: TEXT_PRIMARY }}>
-        Stablecoin Mint Feed — Ethereum
+        Stablecoin Mint Feed — Ethereum · Tron · Solana
       </h2>
       <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '4px 0 16px', maxWidth: 680, lineHeight: 1.5 }}>
-        Real on-chain USDT/USDC mints — an ERC-20 Transfer from the null address — read live from
-        Etherscan. Ethereum only: most USDT actually mints on Tron, so this is real but partial, not
-        the full cross-chain picture. USDT's window looks back ~7 days (its mints are rare, treasury-
-        sized events); USDC's looks back only ~3 hours, because most of what shows up as a USDC
-        "mint" here is Circle's CCTP cross-chain bridge minting directly to an end-user's address on
-        arrival, not a treasury re-supply — frequent and usually small, so a wide window would bury
-        recent activity under old bridge traffic. Use the size filter to focus on the bigger ones.
+        Real on-chain USDT/USDC mints across the three primary venues — an ERC-20/TRC20 Transfer from
+        each chain's null/black-hole address, or Solana's own "mint" activity type, read live from
+        Etherscan, TronScan, and Solscan. Ethereum USDT's window looks back ~7 days (rare, treasury-
+        sized events); Ethereum USDC's looks back only ~3 hours, because most of what shows up as a
+        USDC "mint" there is Circle's CCTP cross-chain bridge minting directly to an end-user's
+        address on arrival, not a treasury re-supply — frequent and usually small, so a wide window
+        would bury recent activity under old bridge traffic. Tron scans the most recent ~300 USDT
+        contract transfers for black-hole activity; Solana pulls the most recent 40 USDC mint events
+        directly. Use the size filter to focus on the bigger ones.
       </p>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
@@ -97,49 +110,54 @@ export default function StablecoinMintFeed({ data }) {
         </p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {mints.map((m) => (
-            <div
-              key={m.txHash}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 10, background: CARD_BG,
-                border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: '8px 10px',
-              }}
-            >
-              <span
+          {mints.map((m, i) => {
+            const links = explorerLinks(m.chain);
+            return (
+              <div
+                key={m.txHash || i}
                 style={{
-                  fontSize: 10, fontWeight: 700, color: m.color || AMBER, border: `1px solid ${m.color || AMBER}`,
-                  borderRadius: 3, padding: '1px 6px', flexShrink: 0,
+                  display: 'flex', alignItems: 'center', gap: 10, background: CARD_BG,
+                  border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: '8px 10px',
                 }}
               >
-                {m.symbol}
-              </span>
-              <span style={{ fontSize: 13, fontWeight: 600, color: TEXT_PRIMARY, fontFamily: 'ui-monospace, monospace', flexShrink: 0 }}>
-                {formatUsd(m.amount)}
-              </span>
-              <span style={{ fontSize: 11, color: TEXT_SECONDARY, flex: 1 }}>
-                to{' '}
-                <a
-                  href={`https://etherscan.io/address/${m.to}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ color: TEXT_SECONDARY }}
+                <span
+                  style={{
+                    fontSize: 10, fontWeight: 700, color: m.color || AMBER, border: `1px solid ${m.color || AMBER}`,
+                    borderRadius: 3, padding: '1px 6px', flexShrink: 0,
+                  }}
                 >
-                  {shortAddr(m.to)}
-                </a>
-              </span>
-              <a
-                href={`https://etherscan.io/tx/${m.txHash}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ fontSize: 10, color: TEXT_MUTED, flexShrink: 0 }}
-              >
-                tx
-              </a>
-              <span style={{ fontSize: 10, color: TEXT_MUTED, width: 56, textAlign: 'right', flexShrink: 0 }}>
-                {formatRelative(m.timestamp)}
-              </span>
-            </div>
-          ))}
+                  {m.symbol}
+                </span>
+                <span style={{ fontSize: 9, color: TEXT_MUTED, width: 52, flexShrink: 0 }}>{m.chain}</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: TEXT_PRIMARY, fontFamily: 'ui-monospace, monospace', flexShrink: 0 }}>
+                  {formatUsd(m.amount)}
+                </span>
+                <span style={{ fontSize: 11, color: TEXT_SECONDARY, flex: 1 }}>
+                  to{' '}
+                  {m.to ? (
+                    <a href={links.addr(m.to)} target="_blank" rel="noopener noreferrer" style={{ color: TEXT_SECONDARY }}>
+                      {shortAddr(m.to)}
+                    </a>
+                  ) : (
+                    '—'
+                  )}
+                </span>
+                {m.txHash && (
+                  <a
+                    href={links.tx(m.txHash)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ fontSize: 10, color: TEXT_MUTED, flexShrink: 0 }}
+                  >
+                    tx
+                  </a>
+                )}
+                <span style={{ fontSize: 10, color: TEXT_MUTED, width: 56, textAlign: 'right', flexShrink: 0 }}>
+                  {formatRelative(m.timestamp)}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -151,7 +169,13 @@ export default function StablecoinMintFeed({ data }) {
 
       {data.tokensFailed?.length > 0 && (
         <p style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 10 }}>
-          No live data for: {data.tokensFailed.map((f) => f.symbol).join(', ')} — skipped.
+          No live data for: {data.tokensFailed.map((f) => `${f.symbol} (${f.chain})`).join(', ')} — skipped.
+        </p>
+      )}
+
+      {data.chainsSkipped?.length > 0 && (
+        <p style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 4 }}>
+          {data.chainsSkipped.map((s) => `${s.chain} (${s.symbol})`).join(', ')} not configured — add its API key to enable.
         </p>
       )}
     </section>
