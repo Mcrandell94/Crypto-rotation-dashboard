@@ -56,17 +56,21 @@ function maxPainFor(instruments) {
   return best ? best.strike : null;
 }
 
-// Deribit lists weekly expiries every Friday, with the last Friday of each
-// month promoted to "monthly", and the last Friday of Mar/Jun/Sep/Dec
+// Deribit lists near-dated options expiring on any day (not just Fridays)
+// alongside its Friday-cadence weekly expiries, with the last Friday of
+// each month promoted to "monthly", and the last Friday of Mar/Jun/Sep/Dec
 // further promoted to "quarterly" — the highest-open-interest, most-watched
-// dates. Real, structural classification, not a hand-picked label.
+// dates. Real, structural classification, not a hand-picked label. A
+// non-Friday expiry is never "weekly" on Deribit — Friday is the only day
+// weekly expiries land on — so it's classified "daily" instead.
 function isLastFridayOfMonth(date) {
   const next = new Date(date);
   next.setUTCDate(date.getUTCDate() + 7);
   return next.getUTCMonth() !== date.getUTCMonth();
 }
 function classifyExpiry(date) {
-  if (date.getUTCDay() !== 5 || !isLastFridayOfMonth(date)) return 'weekly';
+  if (date.getUTCDay() !== 5) return 'daily';
+  if (!isLastFridayOfMonth(date)) return 'weekly';
   return QUARTER_MONTHS.has(date.getUTCMonth()) ? 'quarterly' : 'monthly';
 }
 
