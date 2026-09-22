@@ -22,6 +22,7 @@ import LiquidationsPanel from './components/LiquidationsPanel';
 import LiquidationHeatmap from './components/LiquidationHeatmap';
 import LiveLiquidationFeed from './components/LiveLiquidationFeed';
 import StablecoinMintFeed from './components/StablecoinMintFeed';
+import NotableWalletActivity from './components/NotableWalletActivity';
 import LiquidationLevelsTracker from './components/LiquidationLevelsTracker';
 import LiquidationZones from './components/LiquidationZones';
 import WhaleTradeFeed from './components/WhaleTradeFeed';
@@ -114,6 +115,8 @@ export default function DashboardHome() {
   const [liquidationFeedError, setLiquidationFeedError] = useState(null);
   const [stablecoinMintsData, setStablecoinMintsData] = useState(null);
   const [stablecoinMintsError, setStablecoinMintsError] = useState(null);
+  const [notableWalletActivityData, setNotableWalletActivityData] = useState(null);
+  const [notableWalletActivityError, setNotableWalletActivityError] = useState(null);
   const [liquidationZonesData, setLiquidationZonesData] = useState(null);
   const [liquidationZonesError, setLiquidationZonesError] = useState(null);
   // CoinLobster (whale data) is credit-metered, unlike every other source
@@ -183,6 +186,18 @@ export default function DashboardHome() {
       setStablecoinMintsData(json);
     } catch (e) {
       setStablecoinMintsError(e.message);
+    }
+  }, []);
+
+  const fetchNotableWalletActivity = useCallback(async () => {
+    setNotableWalletActivityError(null);
+    try {
+      const res = await fetch('/api/notablewallets');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setNotableWalletActivityData(json);
+    } catch (e) {
+      setNotableWalletActivityError(e.message);
     }
   }, []);
 
@@ -589,10 +604,11 @@ export default function DashboardHome() {
     fetchLiquidationHeatmapBcf();
     fetchLiquidationFeed();
     fetchStablecoinMints();
+    fetchNotableWalletActivity();
     fetchLiquidationZones();
     fetchBtcPrice();
     fetchEthPrice();
-  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality, fetchAltseason, fetchEtfFlows, fetchOptions, fetchFedOdds, fetchCongressBills, fetchCpi, fetchNews, fetchOpenInterest, fetchTakerFlow, fetchLiquidations, fetchEthEtfFlows, fetchLiquidationHeatmap, fetchLiquidationHeatmapCoinalyze, fetchLiquidationHeatmapBcf, fetchLiquidationFeed, fetchStablecoinMints, fetchLiquidationZones, fetchBtcPrice, fetchEthPrice]);
+  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality, fetchAltseason, fetchEtfFlows, fetchOptions, fetchFedOdds, fetchCongressBills, fetchCpi, fetchNews, fetchOpenInterest, fetchTakerFlow, fetchLiquidations, fetchEthEtfFlows, fetchLiquidationHeatmap, fetchLiquidationHeatmapCoinalyze, fetchLiquidationHeatmapBcf, fetchLiquidationFeed, fetchStablecoinMints, fetchNotableWalletActivity, fetchLiquidationZones, fetchBtcPrice, fetchEthPrice]);
 
   // CoinLobster (whale data) is credit-metered — fetch it only the first
   // time the viewer actually opens the Whale Movement tab, not on page
@@ -632,6 +648,7 @@ export default function DashboardHome() {
             fetchLiquidationHeatmapBcf();
             fetchLiquidationFeed();
             fetchStablecoinMints();
+            fetchNotableWalletActivity();
             fetchLiquidationZones();
             fetchBtcPrice();
             fetchEthPrice();
@@ -1038,6 +1055,17 @@ export default function DashboardHome() {
             </div>
           ) : (
             <StablecoinMintFeed data={stablecoinMintsData} />
+          )}
+
+          {notableWalletActivityError ? (
+            <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+              <strong>Notable wallet activity fetch failed:</strong> {notableWalletActivityError}
+              <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
+                Most likely cause: ETHERSCAN_API_KEY isn't set yet in this environment's variables.
+              </div>
+            </div>
+          ) : (
+            <NotableWalletActivity data={notableWalletActivityData} />
           )}
         </TabErrorBoundary>
       )}
