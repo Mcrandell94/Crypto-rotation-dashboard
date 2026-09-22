@@ -39,7 +39,7 @@ const TABS = [
   { key: 'rotation', label: 'Rotation' },
   { key: 'macro', label: 'Macro & Seasonality' },
   { key: 'levels', label: 'Levels & Liquidations' },
-  { key: 'mints', label: 'Printer Watch' },
+  { key: 'mints', label: 'Printer Watch', icon: '₮' },
   { key: 'calendar', label: 'CB Calendar' },
   { key: 'astro', label: 'Astro Outlook' },
 ];
@@ -673,6 +673,7 @@ export default function DashboardHome() {
               cursor: 'pointer', marginBottom: -1, fontWeight: activeTab === t.key ? 600 : 400,
             }}
           >
+            {t.icon && <span style={{ color: '#26A17B', marginRight: 5 }}>{t.icon}</span>}
             {t.label}
           </button>
         ))}
