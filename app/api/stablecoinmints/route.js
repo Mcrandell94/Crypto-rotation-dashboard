@@ -32,19 +32,26 @@
 // explorers behind one multichain key on V2, and newer API keys are
 // increasingly V2-only, so V1 is the wrong endpoint to build against now.
 //
-// TronScan's and Solscan's exact response field names are NOT confirmed
-// against a live response — both APIs' docs (docs.tronscan.org,
-// pro-api.solscan.io) and both live hosts are unreachable from this
-// sandbox, so unlike the Ethereum leg (which decodes raw getLogs topics,
-// no field-name guessing involved), the Tron and Solana parsers below try
-// several plausible field names defensively (same pattern used for
-// CoinLobster elsewhere in this codebase) and fail loudly with the raw
-// response embedded in the error if the expected array shape isn't found.
+// TronScan's exact response field names are NOT confirmed against a live
+// response — its docs and host are both unreachable from this sandbox, so
+// unlike the Ethereum leg (which decodes raw getLogs topics, no
+// field-name guessing involved), the Tron parser below tries several
+// plausible field names defensively (same pattern used for CoinLobster
+// elsewhere in this codebase) and fails loudly with the raw response
+// embedded in the error if the expected array shape isn't found.
+//
+// Solscan's response shape IS now confirmed, via its full reference page
+// for the sibling /v2.0/account/transfer endpoint (pasted in by the
+// user): {success, data: [{trans_id, block_time, from_address,
+// to_address, token_address, token_decimals, amount, flow}]}, with
+// errors as {success: false, errors: {code, message}}. This route calls
+// /v2.0/token/transfer (a different endpoint in the same API family, not
+// byte-for-byte confirmed itself), so field names below still list a
+// couple of defensive fallbacks, but the primary candidates and the
+// error-envelope handling now come from Solscan's own docs, not a guess.
 // A field-level miss (unknown key) degrades a single value to null rather
 // than failing the whole chain, since the meaningful gate is finding the
-// transfer list at all, not any one field. If this throws a raw-response
-// error in production, that response is the fastest way to correct the
-// mapping — same as how CoinLobster's routes were corrected this session.
+// transfer list at all, not any one field.
 
 export const dynamic = 'force-dynamic';
 
@@ -179,25 +186,29 @@ const SOLANA_PAGE_SIZE = 40;
 async function fetchSolanaMints(apiKey) {
   if (!apiKey) return { chain: 'Solana', symbol: 'USDC', mints: [], skipped: true };
 
-  // activity_type[]=ACTIVITY_SPL_MINT is a direct, documented semantic
+  // activity_type=ACTIVITY_SPL_MINT is a direct, documented semantic
   // filter (per Solscan's published activity-type values) — no need to
-  // reconstruct "mint" from a null-address transfer pattern here.
-  const url = `${SOLANA_BASE}/token/transfer?address=${SOLANA_USDC_MINT}&activity_type[]=ACTIVITY_SPL_MINT&page=1&page_size=${SOLANA_PAGE_SIZE}&sort_by=block_time&sort_order=desc`;
-  const res = await fetch(url, { headers: { token: apiKey }, next: { revalidate: 60 } });
+  // reconstruct "mint" from a null-address transfer pattern here. No `[]`
+  // on the param — Solscan's own documented request example for the
+  // sibling account/transfer endpoint uses the bare name despite the
+  // param being typed as an array.
+  const url = `${SOLANA_BASE}/token/transfer?address=${SOLANA_USDC_MINT}&activity_type=ACTIVITY_SPL_MINT&page=1&page_size=${SOLANA_PAGE_SIZE}&sort_by=block_time&sort_order=desc`;
+  const res = await fetch(url, { headers: { token: apiKey, accept: 'application/json' }, next: { revalidate: 60 } });
 
-  if (!res.ok) {
-    const detail = await res.text();
-    return { chain: 'Solana', symbol: 'USDC', error: `Solscan returned ${res.status} for USDC mint activity. Raw response: ${detail.slice(0, 300)}` };
+  const json = await res.json().catch(() => null);
+  if (!res.ok || json?.success === false) {
+    const apiMessage = json?.errors?.message;
+    const detail = apiMessage || JSON.stringify(json)?.slice(0, 300) || (await res.text().catch(() => '')).slice(0, 300);
+    return { chain: 'Solana', symbol: 'USDC', error: `Solscan returned ${res.status} for USDC mint activity: ${detail}` };
   }
 
-  const json = await res.json();
   const rows = extractRows(json, ['data', 'result', 'transfers', 'items']);
   if (!rows) {
     return { chain: 'Solana', symbol: 'USDC', error: `Solscan's token/transfer response didn't match the expected shape. Raw sample: ${JSON.stringify(json).slice(0, 500)}` };
   }
 
   const mints = rows.map((r) => {
-    const to = pickField(r, ['to_address', 'to', 'destination', 'address']);
+    const to = pickField(r, ['to_address', 'to', 'destination']);
     const rawAmount = pickField(r, ['amount', 'value', 'token_amount']);
     const rawDecimals = pickField(r, ['token_decimals', 'decimals']);
     const decimals = rawDecimals != null ? Number(rawDecimals) : SOLANA_DECIMALS;

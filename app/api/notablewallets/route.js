@@ -28,20 +28,26 @@
 // this, with well-documented response fields (docs.etherscan.io), unlike
 // the getLogs topic-decoding the mint feed needs.
 //
-// Solscan's account/transfer endpoint (confirmed real via its own docs
-// page, docs.solscan.io/api-access/pro-api-endpoints) is the Solana
-// equivalent, but — like the mint feed's Solana leg — its exact response
-// field names aren't confirmed from a live call, so parsing here is
-// defensive (tries several plausible field names) and fails loudly with
-// the raw response embedded in the error if the shape doesn't match.
-//
-// The wallet-address query param for Solscan's account-level endpoints is
-// `account`, not `address` — confirmed via a real curl example straight
-// from Solscan's own docs UI (GET /v2.0/account/transactions?account=...),
-// pasted in by the user. `address` is only correct for Solscan's *token*-
-// centric endpoints (like /v2.0/token/transfer, used by the mint feed,
-// where it names the token mint) — an account-centric endpoint like this
-// one names the wallet `account` instead.
+// Solscan's account/transfer endpoint is the Solana equivalent, and its
+// exact request/response shape is now confirmed from Solscan's own full
+// reference page (pasted in by the user), not guessed:
+//   - wallet param is `address` (required) — NOT `account`. An earlier fix
+//     here changed it to `account` based on a curl example for a
+//     different endpoint, /v2.0/account/transactions (plural) — that
+//     endpoint does use `account`, but /account/transfer (singular, what
+//     this route calls) uses `address`. Solscan is just inconsistent
+//     between the two; this is back to `address`, confirmed correct for
+//     THIS endpoint by its own reference doc.
+//   - page_size only accepts 10/20/30/40/60/100 (default 10) — the 25
+//     this route used before was never a valid value.
+//   - response is {success, data: [{block_id, trans_id, block_time, time,
+//     activity_type, from_address, from_token_account, to_address,
+//     to_token_account, token_address, token_decimals, amount, flow}]}.
+//     `flow` ("in"/"out") is reported directly by the API — used below
+//     instead of deriving direction by comparing addresses ourselves.
+//   - an error response is {success: false, errors: {code, message}} —
+//     surfaced directly when present, for a much clearer message than a
+//     truncated raw body.
 
 export const dynamic = 'force-dynamic';
 
@@ -66,7 +72,9 @@ const WATCHED_WALLETS = [
   { entity: 'GSR', chain: 'Ethereum', address: '0xd8d6ffe342210057bf4dcc31da28d006f253cef0', sourceLabel: 'GSR' },
 ];
 
-const PER_WALLET_FETCH = 25;
+const ETH_PER_WALLET_FETCH = 25;
+// Solscan's page_size only accepts 10/20/30/40/60/100 — 25 isn't valid.
+const SOLANA_PAGE_SIZE = 20;
 const DISPLAY_LIMIT = 40;
 
 function pickField(obj, keys) {
@@ -93,7 +101,7 @@ async function fetchEthWalletActivity(wallet, apiKey) {
   const perToken = await Promise.all(ETH_TOKENS.map(async (token) => {
     const url =
       `${ETHERSCAN_BASE}?chainid=${ETHEREUM_CHAIN_ID}&module=account&action=tokentx` +
-      `&address=${wallet.address}&contractaddress=${token.address}&page=1&offset=${PER_WALLET_FETCH}&sort=desc&apikey=${apiKey}`;
+      `&address=${wallet.address}&contractaddress=${token.address}&page=1&offset=${ETH_PER_WALLET_FETCH}&sort=desc&apikey=${apiKey}`;
     const res = await fetch(url, { next: { revalidate: 60 } });
     if (!res.ok) {
       const detail = await res.text();
@@ -139,24 +147,25 @@ async function fetchSolanaWalletActivity(wallet, apiKey) {
   if (!apiKey) return { entity: wallet.entity, chain: wallet.chain, rows: [], skipped: true };
 
   const url =
-    `${SOLANA_BASE}/account/transfer?account=${wallet.address}&activity_type[]=ACTIVITY_SPL_TRANSFER` +
-    `&token=${SOLANA_USDC_MINT}&page=1&page_size=${PER_WALLET_FETCH}&sort_by=block_time&sort_order=desc`;
+    `${SOLANA_BASE}/account/transfer?address=${wallet.address}&activity_type=ACTIVITY_SPL_TRANSFER` +
+    `&token=${SOLANA_USDC_MINT}&page=1&page_size=${SOLANA_PAGE_SIZE}&sort_by=block_time&sort_order=desc`;
   const res = await fetch(url, { headers: { token: apiKey, accept: 'application/json' }, next: { revalidate: 60 } });
-  if (!res.ok) {
-    const detail = await res.text();
-    return { entity: wallet.entity, chain: wallet.chain, error: `Solscan returned ${res.status} for ${wallet.entity} activity. Raw response: ${detail.slice(0, 300)}` };
+
+  const json = await res.json().catch(() => null);
+  if (!res.ok || json?.success === false) {
+    const apiMessage = json?.errors?.message;
+    const detail = apiMessage || JSON.stringify(json)?.slice(0, 300) || (await res.text().catch(() => '')).slice(0, 300);
+    return { entity: wallet.entity, chain: wallet.chain, error: `Solscan returned ${res.status} for ${wallet.entity} activity: ${detail}` };
   }
 
-  const json = await res.json();
   const rawRows = extractRows(json, ['data', 'result', 'transfers', 'items']);
   if (!rawRows) {
     return { entity: wallet.entity, chain: wallet.chain, error: `Solscan's account/transfer response didn't match the expected shape. Raw sample: ${JSON.stringify(json).slice(0, 500)}` };
   }
 
-  // The `token` query param SHOULD scope results server-side, but since
-  // its exact filtering behavior isn't confirmed from a live call, also
-  // filter client-side against the known USDC mint wherever a token/mint
-  // field is present, rather than trusting the param alone.
+  // The `token` query param scopes results server-side, but also filter
+  // client-side against the known USDC mint as a belt-and-suspenders
+  // check wherever a token field is present.
   const rows = rawRows
     .filter((r) => {
       const mint = pickField(r, ['token_address', 'tokenAddress', 'mint']);
@@ -165,7 +174,10 @@ async function fetchSolanaWalletActivity(wallet, apiKey) {
     .map((r) => {
       const from = pickField(r, ['from_address', 'from']);
       const to = pickField(r, ['to_address', 'to']);
-      const isOut = from === wallet.address;
+      // The API reports direction directly via `flow` ("in"/"out") —
+      // trust that over deriving it ourselves by comparing addresses.
+      const flow = pickField(r, ['flow']);
+      const isOut = flow ? flow === 'out' : from === wallet.address;
       const rawAmount = pickField(r, ['amount', 'value']);
       const decimals = Number(pickField(r, ['token_decimals', 'decimals']) ?? SOLANA_DECIMALS);
       const n = rawAmount != null ? Number(rawAmount) : null;
