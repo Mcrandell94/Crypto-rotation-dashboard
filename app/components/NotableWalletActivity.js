@@ -172,9 +172,13 @@ export default function NotableWalletActivity({ data }) {
       )}
 
       {data.walletsFailed?.length > 0 && (
-        <p style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 10 }}>
-          No live data for: {data.walletsFailed.map((f) => `${f.entity} (${f.chain})`).join(', ')} — skipped.
-        </p>
+        <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {data.walletsFailed.map((f, i) => (
+            <p key={i} style={{ fontSize: 11, color: TEXT_MUTED, margin: 0 }}>
+              <strong style={{ color: TEXT_SECONDARY }}>{f.entity} ({f.chain})</strong> — skipped: {f.error || 'unknown error'}
+            </p>
+          ))}
+        </div>
       )}
 
       {data.walletsSkipped?.length > 0 && (

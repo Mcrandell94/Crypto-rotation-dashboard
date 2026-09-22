@@ -168,9 +168,13 @@ export default function StablecoinMintFeed({ data }) {
       )}
 
       {data.tokensFailed?.length > 0 && (
-        <p style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 10 }}>
-          No live data for: {data.tokensFailed.map((f) => `${f.symbol} (${f.chain})`).join(', ')} — skipped.
-        </p>
+        <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {data.tokensFailed.map((f, i) => (
+            <p key={i} style={{ fontSize: 11, color: TEXT_MUTED, margin: 0 }}>
+              <strong style={{ color: TEXT_SECONDARY }}>{f.symbol} ({f.chain})</strong> — skipped: {f.error || 'unknown error'}
+            </p>
+          ))}
+        </div>
       )}
 
       {data.chainsSkipped?.length > 0 && (
