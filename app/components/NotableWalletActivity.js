@@ -72,8 +72,8 @@ export default function NotableWalletActivity({ data }) {
       </h2>
       <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '4px 0 16px', maxWidth: 680, lineHeight: 1.5 }}>
         Real USDT/USDC transfers into and out of a curated set of publicly-labeled exchange and
-        market-maker wallets, read live from Etherscan and Solscan. Each address was verified
-        against its block explorer's own public entity label, not guessed — currently tracking:{' '}
+        market-maker wallets, read live from Etherscan. Each address was verified against its block
+        explorer's own public entity label, not guessed — currently tracking:{' '}
         {trackedList || '—'}. Stablecoin flows only, not general token activity.
       </p>
 

@@ -64,13 +64,26 @@ const SOLANA_DECIMALS = 6;
 
 // entity/address pairs verified against each explorer's own public label
 // (see header comment) — expand only with the same standard, never a guess.
+//
+// Binance's Solana wallet is deliberately NOT in this list — see
+// DISABLED_WATCHED_WALLETS below for why and how to bring it back.
 const WATCHED_WALLETS = [
   { entity: 'Binance', chain: 'Ethereum', address: '0x28c6c06298d514db089934071355e5743bf21d60', sourceLabel: 'Binance 14' },
-  { entity: 'Binance', chain: 'Solana', address: '5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhUvuAi9', sourceLabel: 'Binance 2' },
   { entity: 'Wintermute', chain: 'Ethereum', address: '0xdbf5e9c5206d0db70a90108bf936da60221dc080', sourceLabel: 'Wintermute' },
   { entity: 'Jump Trading', chain: 'Ethereum', address: '0xf584f8728b874a6a5c7a8d4d387c9aae9172d621', sourceLabel: 'Jump Trading' },
   { entity: 'GSR', chain: 'Ethereum', address: '0xd8d6ffe342210057bf4dcc31da28d006f253cef0', sourceLabel: 'GSR' },
 ];
+
+// Solana (Solscan) is DISABLED for now, not removed — a live 401
+// ("Please upgrade your api key level") confirmed /account/transfer is a
+// PRO-tier Solscan endpoint the current key's plan doesn't cover, an
+// account/billing question, not a code bug. fetchSolanaWalletActivity
+// below is fully intact and ready to go; to re-enable, move this entry
+// back into WATCHED_WALLETS above once the Solscan plan covers it.
+const DISABLED_WATCHED_WALLETS = [
+  { entity: 'Binance', chain: 'Solana', address: '5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhUvuAi9', sourceLabel: 'Binance 2' },
+];
+void DISABLED_WATCHED_WALLETS; // kept for its documentation value, not read anywhere
 
 const ETH_PER_WALLET_FETCH = 25;
 // Solscan's page_size only accepts 10/20/30/40/60/100 — 25 isn't valid.

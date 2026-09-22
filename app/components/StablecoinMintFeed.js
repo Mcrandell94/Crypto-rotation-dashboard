@@ -57,7 +57,7 @@ export default function StablecoinMintFeed({ data }) {
     return (
       <section style={{ marginTop: 32 }}>
         <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: TEXT_PRIMARY }}>
-          Stablecoin Mint Feed — Ethereum · Tron · Solana
+          Stablecoin Mint Feed — Ethereum · Tron
         </h2>
         <p style={{ fontSize: 12, color: TEXT_MUTED, marginTop: 16 }}>Waiting for data…</p>
       </section>
@@ -71,18 +71,17 @@ export default function StablecoinMintFeed({ data }) {
   return (
     <section style={{ marginTop: 32 }}>
       <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: TEXT_PRIMARY }}>
-        Stablecoin Mint Feed — Ethereum · Tron · Solana
+        Stablecoin Mint Feed — Ethereum · Tron
       </h2>
       <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '4px 0 16px', maxWidth: 680, lineHeight: 1.5 }}>
-        Real on-chain USDT/USDC mints across the three primary venues — an ERC-20/TRC20 Transfer from
-        each chain's null/black-hole address, or Solana's own "mint" activity type, read live from
-        Etherscan, TronScan, and Solscan. Ethereum USDT's window looks back ~7 days (rare, treasury-
-        sized events); Ethereum USDC's looks back only ~3 hours, because most of what shows up as a
-        USDC "mint" there is Circle's CCTP cross-chain bridge minting directly to an end-user's
-        address on arrival, not a treasury re-supply — frequent and usually small, so a wide window
-        would bury recent activity under old bridge traffic. Tron scans the most recent ~300 USDT
-        contract transfers for black-hole activity; Solana pulls the most recent 40 USDC mint events
-        directly. Use the size filter to focus on the bigger ones.
+        Real on-chain USDT/USDC mints — an ERC-20/TRC20 Transfer from each chain's null/black-hole
+        address — read live from Etherscan and TronScan. Ethereum USDT's window looks back ~7 days
+        (rare, treasury-sized events); Ethereum USDC's looks back only ~3 hours, because most of what
+        shows up as a USDC "mint" there is Circle's CCTP cross-chain bridge minting directly to an
+        end-user's address on arrival, not a treasury re-supply — frequent and usually small, so a
+        wide window would bury recent activity under old bridge traffic. Tron scans the most recent
+        ~300 USDT contract transfers for black-hole activity. Use the size filter to focus on the
+        bigger ones.
       </p>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>

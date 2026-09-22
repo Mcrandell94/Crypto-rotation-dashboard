@@ -1,17 +1,23 @@
 // Server-side only — requires an Etherscan API key (etherscan.io) for the
-// Ethereum leg; TronScan and Solscan keys (optional) add Tron and Solana
-// coverage. A stablecoin "mint" is, on Ethereum and Tron, an ERC-20/TRC20
-// Transfer from the chain's null/black-hole address to the issuer's
-// treasury or an end wallet — a real on-chain fact read live from each
-// chain's own explorer API, not a guessed or derived signal. On Solana,
-// Solscan's activity_type filter names "mint" directly (ACTIVITY_SPL_MINT)
-// rather than needing that null-address inference.
+// Ethereum leg; a TronScan key (optional) adds Tron coverage. A stablecoin
+// "mint" is, on Ethereum and Tron, an ERC-20/TRC20 Transfer from the
+// chain's null/black-hole address to the issuer's treasury or an end
+// wallet — a real on-chain fact read live from each chain's own explorer
+// API, not a guessed or derived signal.
 //
 // Multi-chain: both USDT and USDC mint on several chains, and most of
 // USDT's supply is actually minted on Tron, not Ethereum — so Ethereum
 // alone (this route's original scope) was real but partial. This now
-// covers the three primary mint venues: Ethereum (USDT+USDC), Tron
-// (USDT), Solana (USDC).
+// covers Ethereum (USDT+USDC) and Tron (USDT).
+//
+// Solana (USDC via Solscan) is DISABLED for now, not removed — Solscan's
+// endpoints turned out to be PRO-tier-gated ("Please upgrade your api key
+// level" from a live 401), which is an account/billing question, not a
+// code bug. fetchSolanaMints, SOLANA_BASE, SOLANA_USDC_MINT, and its
+// confirmed response-shape parsing below are all left fully intact and
+// working — GET() below just doesn't call it. To re-enable once the
+// Solscan plan covers it: add `fetchSolanaMints(process.env.SOLSCAN_API_KEY)`
+// back into GET()'s Promise.all and its result back into allResults.
 //
 // Contract/mint addresses were verified against independent public
 // sources (Etherscan/Uniswap's token list, TronScan's own contract page,
@@ -299,7 +305,6 @@ async function fetchMints(token, apiKey, latestBlock) {
 export async function GET() {
   const etherscanKey = process.env.ETHERSCAN_API_KEY;
   const tronscanKey = process.env.TRONSCAN_API_KEY;
-  const solscanKey = process.env.SOLSCAN_API_KEY;
 
   if (!etherscanKey) {
     return Response.json(
@@ -324,13 +329,16 @@ export async function GET() {
       return results;
     };
 
-    const [ethResults, tronResult, solanaResult] = await Promise.all([
+    const [ethResults, tronResult] = await Promise.all([
       fetchEthSequential(),
       fetchTronMints(tronscanKey),
-      fetchSolanaMints(solscanKey),
+      // Solana (Solscan) is disabled here for now — see header comment.
+      // fetchSolanaMints below is untouched; re-enable by adding
+      // `fetchSolanaMints(process.env.SOLSCAN_API_KEY)` back into this
+      // Promise.all and its result back into allResults below.
     ]);
 
-    const allResults = [...ethResults, tronResult, solanaResult];
+    const allResults = [...ethResults, tronResult];
     const failed = allResults.filter((r) => r.error);
     const skipped = allResults.filter((r) => r.skipped);
     const succeeded = allResults.filter((r) => !r.error && !r.skipped);
