@@ -34,6 +34,14 @@
 // field names aren't confirmed from a live call, so parsing here is
 // defensive (tries several plausible field names) and fails loudly with
 // the raw response embedded in the error if the shape doesn't match.
+//
+// The wallet-address query param for Solscan's account-level endpoints is
+// `account`, not `address` — confirmed via a real curl example straight
+// from Solscan's own docs UI (GET /v2.0/account/transactions?account=...),
+// pasted in by the user. `address` is only correct for Solscan's *token*-
+// centric endpoints (like /v2.0/token/transfer, used by the mint feed,
+// where it names the token mint) — an account-centric endpoint like this
+// one names the wallet `account` instead.
 
 export const dynamic = 'force-dynamic';
 
@@ -131,9 +139,9 @@ async function fetchSolanaWalletActivity(wallet, apiKey) {
   if (!apiKey) return { entity: wallet.entity, chain: wallet.chain, rows: [], skipped: true };
 
   const url =
-    `${SOLANA_BASE}/account/transfer?address=${wallet.address}&activity_type[]=ACTIVITY_SPL_TRANSFER` +
+    `${SOLANA_BASE}/account/transfer?account=${wallet.address}&activity_type[]=ACTIVITY_SPL_TRANSFER` +
     `&token=${SOLANA_USDC_MINT}&page=1&page_size=${PER_WALLET_FETCH}&sort_by=block_time&sort_order=desc`;
-  const res = await fetch(url, { headers: { token: apiKey }, next: { revalidate: 60 } });
+  const res = await fetch(url, { headers: { token: apiKey, accept: 'application/json' }, next: { revalidate: 60 } });
   if (!res.ok) {
     const detail = await res.text();
     return { entity: wallet.entity, chain: wallet.chain, error: `Solscan returned ${res.status} for ${wallet.entity} activity. Raw response: ${detail.slice(0, 300)}` };
