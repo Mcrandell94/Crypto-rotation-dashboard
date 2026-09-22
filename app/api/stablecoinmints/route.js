@@ -311,8 +311,21 @@ export async function GET() {
   try {
     const latestBlock = await fetchLatestBlock(etherscanKey);
 
+    // Etherscan's rate limit is per key and shared with the Notable
+    // Wallet Activity route's own calls, which can fire around the same
+    // moment on page load — sequencing these two getLogs calls (rather
+    // than Promise.all) keeps this route's own burst smaller.
+    const fetchEthSequential = async () => {
+      const results = [];
+      for (const token of TOKENS) {
+        results.push(await fetchMints(token, etherscanKey, latestBlock));
+        await new Promise((resolve) => setTimeout(resolve, 400));
+      }
+      return results;
+    };
+
     const [ethResults, tronResult, solanaResult] = await Promise.all([
-      Promise.all(TOKENS.map((t) => fetchMints(t, etherscanKey, latestBlock))),
+      fetchEthSequential(),
       fetchTronMints(tronscanKey),
       fetchSolanaMints(solscanKey),
     ]);

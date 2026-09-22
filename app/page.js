@@ -604,7 +604,10 @@ export default function DashboardHome() {
     fetchLiquidationHeatmapBcf();
     fetchLiquidationFeed();
     fetchStablecoinMints();
-    fetchNotableWalletActivity();
+    // Staggered behind the mint feed — both hit Etherscan with the same
+    // key, and starting at the same instant is what triggered its "3
+    // calls/sec" rate limit in production.
+    setTimeout(fetchNotableWalletActivity, 1500);
     fetchLiquidationZones();
     fetchBtcPrice();
     fetchEthPrice();
@@ -648,7 +651,7 @@ export default function DashboardHome() {
             fetchLiquidationHeatmapBcf();
             fetchLiquidationFeed();
             fetchStablecoinMints();
-            fetchNotableWalletActivity();
+            setTimeout(fetchNotableWalletActivity, 1500);
             fetchLiquidationZones();
             fetchBtcPrice();
             fetchEthPrice();

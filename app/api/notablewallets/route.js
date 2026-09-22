@@ -97,50 +97,72 @@ function normalizeMs(v) {
   return n < 1e12 ? n * 1000 : n;
 }
 
-async function fetchEthWalletActivity(wallet, apiKey) {
-  const perToken = await Promise.all(ETH_TOKENS.map(async (token) => {
-    const url =
-      `${ETHERSCAN_BASE}?chainid=${ETHEREUM_CHAIN_ID}&module=account&action=tokentx` +
-      `&address=${wallet.address}&contractaddress=${token.address}&page=1&offset=${ETH_PER_WALLET_FETCH}&sort=desc&apikey=${apiKey}`;
-    const res = await fetch(url, { next: { revalidate: 60 } });
-    if (!res.ok) {
-      const detail = await res.text();
-      return { error: `Etherscan returned ${res.status} for ${wallet.entity} ${token.symbol} activity. Raw response: ${detail.slice(0, 300)}` };
-    }
-    const json = await res.json();
-    if (json.status !== '1') {
-      if (json.message === 'No transactions found') return { rows: [] };
-      return { error: `Etherscan API error for ${wallet.entity} ${token.symbol}: ${json.message || 'unknown error'}. Raw sample: ${JSON.stringify(json).slice(0, 300)}` };
-    }
+// Etherscan's free-tier rate limit (observed live: "Max calls per sec
+// rate limit reached (3/sec)") is per API key, shared across every
+// Etherscan call this app makes, including the mint feed's. Firing all
+// 4 ETH wallets x 2 tokens = 8 tokentx calls via Promise.all blew straight
+// through it — every call landed within the same instant. Every ETH call
+// below now runs strictly one at a time, throttled, instead of in
+// parallel; this route only runs once per page load / manual refresh, so
+// trading a few seconds of latency for calls that actually succeed is the
+// right tradeoff.
+const ETHERSCAN_THROTTLE_MS = 400;
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-    const rows = (Array.isArray(json.result) ? json.result : []).map((tx) => {
-      const isOut = tx.from?.toLowerCase() === wallet.address.toLowerCase();
-      let amount = null;
-      try {
-        amount = Number(BigInt(tx.value)) / 10 ** Number(tx.tokenDecimal || token.decimals);
-      } catch {
-        amount = null;
-      }
-      return {
-        entity: wallet.entity,
-        chain: 'Ethereum',
-        symbol: token.symbol,
-        color: token.color,
-        direction: isOut ? 'out' : 'in',
-        amount,
-        counterparty: isOut ? tx.to : tx.from,
-        txHash: tx.hash,
-        timestamp: tx.timeStamp ? Number(tx.timeStamp) * 1000 : null,
-      };
-    });
-    return { rows };
-  }));
-
-  const errors = perToken.filter((r) => r.error);
-  if (errors.length === ETH_TOKENS.length) {
-    return { entity: wallet.entity, chain: wallet.chain, error: errors.map((e) => e.error).join(' | ') };
+async function fetchEthTokenActivity(wallet, token, apiKey) {
+  const url =
+    `${ETHERSCAN_BASE}?chainid=${ETHEREUM_CHAIN_ID}&module=account&action=tokentx` +
+    `&address=${wallet.address}&contractaddress=${token.address}&page=1&offset=${ETH_PER_WALLET_FETCH}&sort=desc&apikey=${apiKey}`;
+  const res = await fetch(url, { next: { revalidate: 60 } });
+  if (!res.ok) {
+    const detail = await res.text();
+    return { error: `Etherscan returned ${res.status} for ${wallet.entity} ${token.symbol} activity. Raw response: ${detail.slice(0, 300)}` };
   }
-  return { entity: wallet.entity, chain: wallet.chain, rows: perToken.flatMap((r) => r.rows || []) };
+  const json = await res.json();
+  if (json.status !== '1') {
+    if (json.message === 'No transactions found') return { rows: [] };
+    return { error: `Etherscan API error for ${wallet.entity} ${token.symbol}: ${json.message || 'unknown error'}. Raw sample: ${JSON.stringify(json).slice(0, 300)}` };
+  }
+
+  const rows = (Array.isArray(json.result) ? json.result : []).map((tx) => {
+    const isOut = tx.from?.toLowerCase() === wallet.address.toLowerCase();
+    let amount = null;
+    try {
+      amount = Number(BigInt(tx.value)) / 10 ** Number(tx.tokenDecimal || token.decimals);
+    } catch {
+      amount = null;
+    }
+    return {
+      entity: wallet.entity,
+      chain: 'Ethereum',
+      symbol: token.symbol,
+      color: token.color,
+      direction: isOut ? 'out' : 'in',
+      amount,
+      counterparty: isOut ? tx.to : tx.from,
+      txHash: tx.hash,
+      timestamp: tx.timeStamp ? Number(tx.timeStamp) * 1000 : null,
+    };
+  });
+  return { rows };
+}
+
+async function fetchAllEthWalletActivity(ethWallets, apiKey) {
+  const results = [];
+  for (const wallet of ethWallets) {
+    const perToken = [];
+    for (const token of ETH_TOKENS) {
+      perToken.push(await fetchEthTokenActivity(wallet, token, apiKey));
+      await sleep(ETHERSCAN_THROTTLE_MS);
+    }
+    const errors = perToken.filter((r) => r.error);
+    if (errors.length === ETH_TOKENS.length) {
+      results.push({ entity: wallet.entity, chain: wallet.chain, error: errors.map((e) => e.error).join(' | ') });
+    } else {
+      results.push({ entity: wallet.entity, chain: wallet.chain, rows: perToken.flatMap((r) => r.rows || []) });
+    }
+  }
+  return results;
 }
 
 async function fetchSolanaWalletActivity(wallet, apiKey) {
@@ -210,11 +232,18 @@ export async function GET() {
   }
 
   try {
-    const results = await Promise.all(
-      WATCHED_WALLETS.map((w) =>
-        w.chain === 'Ethereum' ? fetchEthWalletActivity(w, etherscanKey) : fetchSolanaWalletActivity(w, solscanKey)
-      )
-    );
+    const ethWallets = WATCHED_WALLETS.filter((w) => w.chain === 'Ethereum');
+    const solanaWallets = WATCHED_WALLETS.filter((w) => w.chain === 'Solana');
+
+    // Ethereum wallets are fetched strictly sequentially (see
+    // fetchAllEthWalletActivity) to respect Etherscan's shared per-key
+    // rate limit; Solana wallets are a separate API and can run in
+    // parallel alongside that.
+    const [ethResults, solanaResults] = await Promise.all([
+      fetchAllEthWalletActivity(ethWallets, etherscanKey),
+      Promise.all(solanaWallets.map((w) => fetchSolanaWalletActivity(w, solscanKey))),
+    ]);
+    const results = [...ethResults, ...solanaResults];
 
     const failed = results.filter((r) => r.error);
     const skipped = results.filter((r) => r.skipped);
