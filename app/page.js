@@ -119,11 +119,16 @@ export default function DashboardHome() {
   const [notableWalletActivityError, setNotableWalletActivityError] = useState(null);
   const [liquidationZonesData, setLiquidationZonesData] = useState(null);
   const [liquidationZonesError, setLiquidationZonesError] = useState(null);
-  // CoinLobster (whale data) is credit-metered, unlike every other source
-  // this dashboard uses — see app/lib/coinlobster.js. These deliberately do
-  // NOT fetch on page mount or on the global "Refresh now" button; they
-  // only load once the Whale Movement tab is actually opened (see the
-  // whaleTabLoaded effect below), plus their own tab-scoped refresh button.
+  // Only the data MarketRead needs (always visible, regardless of tab)
+  // fetches on mount / global refresh. Everything else here loads lazily,
+  // the first time its own tab is actually opened — same pattern
+  // whaleTabLoaded already used below, extended to every tab. This is
+  // also what keeps API bursts (Etherscan, TronScan, Solscan, Coinglass...)
+  // from all firing on every page load regardless of what's on screen.
+  const [macroTabLoaded, setMacroTabLoaded] = useState(false);
+  const [levelsTabLoaded, setLevelsTabLoaded] = useState(false);
+  const [mintsTabLoaded, setMintsTabLoaded] = useState(false);
+  const [calendarTabLoaded, setCalendarTabLoaded] = useState(false);
   const [whaleTabLoaded, setWhaleTabLoaded] = useState(false);
   const [whaleTradesData, setWhaleTradesData] = useState(null);
   const [whaleTradesError, setWhaleTradesError] = useState(null);
@@ -579,39 +584,91 @@ export default function DashboardHome() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rrgMode, benchmark]);
 
-  // EMA, COT, Timeframes, and Polymarket all track fixed BTC data, not the
-  // active sector — fetch once on mount, then refresh alongside everything
-  // else on manual refresh.
+  // EMA, COT, ETF flows, options, and seasonality all feed the always-
+  // visible MarketRead header (shown above the tab bar regardless of
+  // which tab is active) — these are the only non-Rotation sources that
+  // still fetch eagerly on mount / global refresh. Everything else below
+  // is tab-specific and loads lazily instead (see the *TabData groups).
   useEffect(() => {
     fetchEma();
     fetchCot();
-    fetchTimeframes();
-    fetchPolymarket();
-    fetchSeasonality();
-    fetchAltseason();
     fetchEtfFlows();
     fetchOptions();
-    fetchFedOdds();
-    fetchCongressBills();
+    fetchSeasonality();
+  }, [fetchEma, fetchCot, fetchEtfFlows, fetchOptions, fetchSeasonality]);
+
+  // Grouped per tab so each tab's data loads once, the first time it's
+  // actually opened, and the "Refresh now" button can refresh just the
+  // active tab instead of every source in the app. Reuses fetchOptions/
+  // fetchEtfFlows/fetchSeasonality's eager Category-A data where a tab
+  // also happens to use them — no need to re-list those here.
+  const fetchMacroTabData = useCallback(() => {
+    fetchPolymarket();
+    fetchAltseason();
     fetchCpi();
     fetchNews();
+    fetchEthEtfFlows();
+  }, [fetchPolymarket, fetchAltseason, fetchCpi, fetchNews, fetchEthEtfFlows]);
+
+  const fetchLevelsTabData = useCallback(() => {
+    fetchTimeframes();
     fetchOpenInterest();
     fetchTakerFlow();
     fetchLiquidations();
-    fetchEthEtfFlows();
     fetchLiquidationHeatmap();
     fetchLiquidationHeatmapCoinalyze();
     fetchLiquidationHeatmapBcf();
     fetchLiquidationFeed();
+    fetchLiquidationZones();
+    fetchBtcPrice();
+    fetchEthPrice();
+  }, [fetchTimeframes, fetchOpenInterest, fetchTakerFlow, fetchLiquidations, fetchLiquidationHeatmap, fetchLiquidationHeatmapCoinalyze, fetchLiquidationHeatmapBcf, fetchLiquidationFeed, fetchLiquidationZones, fetchBtcPrice, fetchEthPrice]);
+
+  const fetchMintsTabData = useCallback(() => {
     fetchStablecoinMints();
     // Staggered behind the mint feed — both hit Etherscan with the same
     // key, and starting at the same instant is what triggered its "3
     // calls/sec" rate limit in production.
     setTimeout(fetchNotableWalletActivity, 1500);
-    fetchLiquidationZones();
-    fetchBtcPrice();
-    fetchEthPrice();
-  }, [fetchEma, fetchCot, fetchTimeframes, fetchPolymarket, fetchSeasonality, fetchAltseason, fetchEtfFlows, fetchOptions, fetchFedOdds, fetchCongressBills, fetchCpi, fetchNews, fetchOpenInterest, fetchTakerFlow, fetchLiquidations, fetchEthEtfFlows, fetchLiquidationHeatmap, fetchLiquidationHeatmapCoinalyze, fetchLiquidationHeatmapBcf, fetchLiquidationFeed, fetchStablecoinMints, fetchNotableWalletActivity, fetchLiquidationZones, fetchBtcPrice, fetchEthPrice]);
+  }, [fetchStablecoinMints, fetchNotableWalletActivity]);
+
+  const fetchCalendarTabData = useCallback(() => {
+    fetchFedOdds();
+    fetchCongressBills();
+  }, [fetchFedOdds, fetchCongressBills]);
+
+  // Each tab's data loads once, the first time it's opened — not on page
+  // mount, and not while looking at a different tab. Mirrors the same
+  // lazy-load pattern CoinLobster's Whale Movement tab already used
+  // (there, to respect its credit metering; here, so switching between
+  // tabs doesn't fire every third-party API in the app on every load).
+  useEffect(() => {
+    if (activeTab === 'macro' && !macroTabLoaded) {
+      setMacroTabLoaded(true);
+      fetchMacroTabData();
+    }
+  }, [activeTab, macroTabLoaded, fetchMacroTabData]);
+
+  useEffect(() => {
+    if (activeTab === 'levels' && !levelsTabLoaded) {
+      setLevelsTabLoaded(true);
+      fetchLevelsTabData();
+    }
+  }, [activeTab, levelsTabLoaded, fetchLevelsTabData]);
+
+  useEffect(() => {
+    if (activeTab === 'mints' && !mintsTabLoaded) {
+      setMintsTabLoaded(true);
+      fetchMintsTabData();
+    }
+  }, [activeTab, mintsTabLoaded, fetchMintsTabData]);
+
+  useEffect(() => {
+    if (activeTab === 'calendar' && !calendarTabLoaded) {
+      setCalendarTabLoaded(true);
+      fetchCalendarTabData();
+    }
+  }, [activeTab, calendarTabLoaded, fetchCalendarTabData]);
 
   // CoinLobster (whale data) is credit-metered — fetch it only the first
   // time the viewer actually opens the Whale Movement tab, not on page
@@ -629,33 +686,23 @@ export default function DashboardHome() {
         <h1 style={{ fontSize: 20, fontWeight: 600, margin: 0 }}>Crypto Rotation Dashboard</h1>
         <button
           onClick={() => {
+            // Always refresh: Rotation's own data, plus everything the
+            // always-visible MarketRead header needs.
             fetchData(sectorTickers, benchmark);
             fetchEma();
             fetchCot();
-            fetchTimeframes();
-            fetchPolymarket();
-            fetchSeasonality();
-            fetchAltseason();
             fetchEtfFlows();
             fetchOptions();
-            fetchFedOdds();
-            fetchCongressBills();
-            fetchCpi();
-            fetchNews();
-            fetchOpenInterest();
-            fetchTakerFlow();
-            fetchLiquidations();
-            fetchEthEtfFlows();
-            fetchLiquidationHeatmap();
-            fetchLiquidationHeatmapCoinalyze();
-            fetchLiquidationHeatmapBcf();
-            fetchLiquidationFeed();
-            fetchStablecoinMints();
-            setTimeout(fetchNotableWalletActivity, 1500);
-            fetchLiquidationZones();
-            fetchBtcPrice();
-            fetchEthPrice();
+            fetchSeasonality();
             if (rrgMode === 'sectors') fetchRrgSectors(benchmark);
+
+            // Plus whichever tab is actually on screen right now — not
+            // every other tab's data too.
+            if (activeTab === 'macro') fetchMacroTabData();
+            else if (activeTab === 'levels') fetchLevelsTabData();
+            else if (activeTab === 'mints') fetchMintsTabData();
+            else if (activeTab === 'calendar') fetchCalendarTabData();
+            else if (activeTab === 'whale') fetchAllWhaleData();
           }}
           disabled={loading}
           style={{

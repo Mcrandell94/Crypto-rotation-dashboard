@@ -32,14 +32,13 @@
 // normal eager on-page-load refresh cycle the way free/cheap APIs are —
 // see the whale-tab routes' own comments for how each one is gated.
 
-const BASE_URL = 'https://coinlobster.com/api/ai/v1';
+// pick/extractArray/normalizeTimeMs used to be defined here and got
+// copy-pasted into other routes as they came up against the same
+// unverified-response-shape problem — now shared from one place; see
+// app/lib/apiParsing.js for what each one does.
+export { pick, extractArray, normalizeTimeMs } from './apiParsing';
 
-export function pick(obj, keys) {
-  for (const k of keys) {
-    if (obj?.[k] != null) return obj[k];
-  }
-  return null;
-}
+const BASE_URL = 'https://coinlobster.com/api/ai/v1';
 
 export async function fetchCoinLobster(tool, params, apiKey, { revalidateSeconds = 300 } = {}) {
   // Trimmed defensively — a stray trailing newline/space from copy-paste
@@ -73,25 +72,4 @@ export async function fetchCoinLobster(tool, params, apiKey, { revalidateSeconds
   }
 
   return res.json();
-}
-
-// CoinLobster's own docs don't show a response envelope example, so this
-// tries the plausible shapes (a bare array, or an array under a handful of
-// likely wrapper keys) rather than assuming one. Returns null if nothing
-// array-shaped is found, so the caller can fail loudly with the raw JSON.
-export function extractArray(json, wrapperKeys) {
-  if (Array.isArray(json)) return json;
-  for (const k of wrapperKeys) {
-    if (Array.isArray(json?.[k])) return json[k];
-  }
-  return null;
-}
-
-// Timestamps of unknown shape (unix seconds, unix ms, or an ISO string) —
-// normalizes to epoch ms, or null if nothing parses.
-export function normalizeTimeMs(v) {
-  if (v == null) return null;
-  if (typeof v === 'number') return v < 1e12 ? v * 1000 : v;
-  const parsed = Date.parse(v);
-  return Number.isNaN(parsed) ? null : parsed;
 }

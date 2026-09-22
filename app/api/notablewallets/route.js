@@ -49,6 +49,11 @@
 //     surfaced directly when present, for a much clearer message than a
 //     truncated raw body.
 
+// "try several plausible field names, never assume" helpers shared with
+// CoinLobster and the mint feed's Tron/Solana legs (see
+// app/lib/apiParsing.js) — used by the Solana parser below.
+import { pick as pickField, extractArray as extractRows, normalizeTimeMs as normalizeMs } from '../../lib/apiParsing';
+
 export const dynamic = 'force-dynamic';
 
 const ETHERSCAN_BASE = 'https://api.etherscan.io/v2/api';
@@ -89,26 +94,6 @@ const ETH_PER_WALLET_FETCH = 25;
 // Solscan's page_size only accepts 10/20/30/40/60/100 — 25 isn't valid.
 const SOLANA_PAGE_SIZE = 20;
 const DISPLAY_LIMIT = 40;
-
-function pickField(obj, keys) {
-  for (const k of keys) {
-    if (obj?.[k] != null) return obj[k];
-  }
-  return null;
-}
-function extractRows(json, wrapperKeys) {
-  if (Array.isArray(json)) return json;
-  for (const k of wrapperKeys) {
-    if (Array.isArray(json?.[k])) return json[k];
-  }
-  return null;
-}
-function normalizeMs(v) {
-  if (v == null) return null;
-  const n = Number(v);
-  if (!Number.isFinite(n)) return null;
-  return n < 1e12 ? n * 1000 : n;
-}
 
 // Etherscan's free-tier rate limit (observed live: "Max calls per sec
 // rate limit reached (3/sec)") is per API key, shared across every

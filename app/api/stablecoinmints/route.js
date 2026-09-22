@@ -59,6 +59,11 @@
 // than failing the whole chain, since the meaningful gate is finding the
 // transfer list at all, not any one field.
 
+// "try several plausible field names, never assume" helpers shared with
+// CoinLobster and Notable Wallet Activity's Solana leg (see
+// app/lib/apiParsing.js) — used by the Tron/Solana parsers below.
+import { pick as pickField, extractArray as extractRows, normalizeTimeMs as normalizeMs } from '../../lib/apiParsing';
+
 export const dynamic = 'force-dynamic';
 
 const ETHERSCAN_BASE = 'https://api.etherscan.io/v2/api';
@@ -95,30 +100,6 @@ const TOKENS = [
   { symbol: 'USDT', label: 'Tether', address: '0xdAC17F958D2ee523a2206206994597C13D831ec7', decimals: 6, color: '#26A17B', blockWindow: 50_400 }, // ~7 days
   { symbol: 'USDC', label: 'USD Coin', address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', decimals: 6, color: '#2775CA', blockWindow: 900 }, // ~3 hours
 ];
-
-// Generic helpers for the Tron/Solana parsers below — same "try several
-// plausible field names, never assume" approach as coinlobster.js, kept
-// local here since these two chains are the only unconfirmed-shape callers
-// in this file.
-function pickField(obj, keys) {
-  for (const k of keys) {
-    if (obj?.[k] != null) return obj[k];
-  }
-  return null;
-}
-function extractRows(json, wrapperKeys) {
-  if (Array.isArray(json)) return json;
-  for (const k of wrapperKeys) {
-    if (Array.isArray(json?.[k])) return json[k];
-  }
-  return null;
-}
-function normalizeMs(v) {
-  if (v == null) return null;
-  const n = Number(v);
-  if (!Number.isFinite(n)) return null;
-  return n < 1e12 ? n * 1000 : n; // seconds vs ms
-}
 
 const TRON_BASE = 'https://apilist.tronscanapi.com/api';
 const TRON_USDT_CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
