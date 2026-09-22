@@ -39,10 +39,14 @@ const TABS = [
   { key: 'rotation', label: 'Rotation' },
   { key: 'macro', label: 'Macro & Seasonality' },
   { key: 'levels', label: 'Levels & Liquidations' },
-  { key: 'whale', label: 'Whale Movement' },
+  { key: 'mints', label: 'Printer Watch' },
   { key: 'calendar', label: 'CB Calendar' },
   { key: 'astro', label: 'Astro Outlook' },
 ];
+// 'whale' (Whale Movement, CoinLobster) is temporarily off the tab bar —
+// its state, fetchers, and render block below are left intact, just
+// unreachable, so it's a one-line restore (re-add its TABS entry) rather
+// than a rebuild.
 
 export default function DashboardHome() {
   const [activeTab, setActiveTab] = useState('rotation');
@@ -1012,8 +1016,20 @@ export default function DashboardHome() {
             <LiveLiquidationFeed data={liquidationFeedData} />
           )}
 
-          {stablecoinMintsError ? (
+          {fundingError ? (
             <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+              <strong>Funding/OI fetch failed:</strong> {fundingError}
+            </div>
+          ) : (
+            <FundingOI data={fundingData} symbols={tracked} />
+          )}
+        </TabErrorBoundary>
+      )}
+
+      {activeTab === 'mints' && (
+        <TabErrorBoundary tabName="Printer Watch">
+          {stablecoinMintsError ? (
+            <div style={{ marginTop: 20, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
               <strong>Stablecoin mint feed fetch failed:</strong> {stablecoinMintsError}
               <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
                 Most likely cause: ETHERSCAN_API_KEY isn't set yet in this environment's variables.
@@ -1021,14 +1037,6 @@ export default function DashboardHome() {
             </div>
           ) : (
             <StablecoinMintFeed data={stablecoinMintsData} />
-          )}
-
-          {fundingError ? (
-            <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-              <strong>Funding/OI fetch failed:</strong> {fundingError}
-            </div>
-          ) : (
-            <FundingOI data={fundingData} symbols={tracked} />
           )}
         </TabErrorBoundary>
       )}
