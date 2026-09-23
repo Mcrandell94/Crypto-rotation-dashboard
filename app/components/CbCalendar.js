@@ -193,7 +193,7 @@ function EventCard({ ev, now }) {
 
         {ev.category === 'options-expiry' && (
           <div style={{ fontSize: 12, color: TEXT_SECONDARY, marginTop: 8, lineHeight: 1.6 }}>
-            {ev.expiry.type === 'quarterly' ? 'Quarterly expiry' : ev.expiry.type === 'monthly' ? 'Monthly expiry' : 'Weekly expiry'}
+            {ev.expiry.type === 'quarterly' ? 'Quarterly expiry' : ev.expiry.type === 'monthly' ? 'Monthly expiry' : ev.expiry.type === 'weekly' ? 'Weekly expiry' : 'Daily expiry'}
             {ev.expiry.maxPain != null && `, max pain $${Math.round(ev.expiry.maxPain).toLocaleString()}`}
             {ev.expiry.putCallRatio != null && ` · P/C ${ev.expiry.putCallRatio}`}
           </div>

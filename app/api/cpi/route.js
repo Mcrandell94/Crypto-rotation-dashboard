@@ -1,8 +1,18 @@
 // Server-side. The Bureau of Labor Statistics' own public Timeseries API
-// (api.bls.gov), keyed via a data.gov registration key — real, historical
-// CPI print data, not a guessed number. Series CUUR0000SA0 is CPI-U, all
-// items, U.S. city average, not seasonally adjusted — the headline
-// year-over-year inflation number most commonly quoted.
+// (api.bls.gov) — real, historical CPI print data, not a guessed number.
+// Series CUUR0000SA0 is CPI-U, all items, U.S. city average, not
+// seasonally adjusted — the headline year-over-year inflation number most
+// commonly quoted.
+//
+// Uses v1 (unregistered, no key) rather than v2 (which needs a BLS-issued
+// registration key from data.bls.gov/registrationEngine/, separate from a
+// generic data.gov key — a source of real confusion this session, twice).
+// v1's unregistered limits (25 queries/day, 25 series/query, up to 20
+// years of data per BLS's own published limits) comfortably cover this
+// route's actual usage: one series, a ~2-year window, cached an hour at a
+// time — nowhere near 25 requests/day even under load. No key to
+// provision, expire, or mismatch means one less thing that can silently
+// break this panel.
 //
 // Deliberately does NOT attempt to show a future release date — BLS
 // publishes its release calendar a year in advance, but this session has
@@ -12,25 +22,18 @@
 // source for the release calendar turns up, that's separate follow-up
 // work, not something to fabricate here.
 //
-// Endpoint shape (POST with a JSON body carrying seriesid/registrationkey,
-// response wraps series under Results.series[].data[]) is from BLS's own
-// published API schema; bls.gov itself is unreachable from this sandbox
-// like most providers hit this session.
+// Endpoint shape (POST with a JSON body carrying seriesid/startyear/
+// endyear, response wraps series under Results.series[].data[], each item
+// carrying year/period/periodName/value/footnotes) is from BLS's own
+// published API schema and sample code; bls.gov itself is unreachable
+// from this sandbox like most providers hit this session.
 
 export const dynamic = 'force-dynamic';
 
-const BASE_URL = 'https://api.bls.gov/publicAPI/v2/timeseries/data/';
+const BASE_URL = 'https://api.bls.gov/publicAPI/v1/timeseries/data/';
 const SERIES_ID = 'CUUR0000SA0';
 
 export async function GET() {
-  const apiKey = process.env.DATAGOV_API_KEY;
-  if (!apiKey) {
-    return Response.json(
-      { error: 'DATAGOV_API_KEY is not set. Add it in Vercel > Project Settings > Environment Variables.' },
-      { status: 500 }
-    );
-  }
-
   try {
     const now = new Date();
     const res = await fetch(BASE_URL, {
@@ -40,7 +43,6 @@ export async function GET() {
         seriesid: [SERIES_ID],
         startyear: String(now.getUTCFullYear() - 1),
         endyear: String(now.getUTCFullYear()),
-        registrationkey: apiKey,
       }),
       next: { revalidate: 3600 },
     });

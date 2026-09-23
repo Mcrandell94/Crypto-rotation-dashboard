@@ -59,6 +59,11 @@
 // than failing the whole chain, since the meaningful gate is finding the
 // transfer list at all, not any one field.
 
+// "try several plausible field names, never assume" helpers shared with
+// CoinLobster and Notable Wallet Activity's Solana leg (see
+// app/lib/apiParsing.js) — used by the Tron/Solana parsers below.
+import { pick as pickField, extractArray as extractRows, normalizeTimeMs as normalizeMs, scaleAmount } from '../../lib/apiParsing';
+
 export const dynamic = 'force-dynamic';
 
 const ETHERSCAN_BASE = 'https://api.etherscan.io/v2/api';
@@ -95,30 +100,6 @@ const TOKENS = [
   { symbol: 'USDT', label: 'Tether', address: '0xdAC17F958D2ee523a2206206994597C13D831ec7', decimals: 6, color: '#26A17B', blockWindow: 50_400 }, // ~7 days
   { symbol: 'USDC', label: 'USD Coin', address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', decimals: 6, color: '#2775CA', blockWindow: 900 }, // ~3 hours
 ];
-
-// Generic helpers for the Tron/Solana parsers below — same "try several
-// plausible field names, never assume" approach as coinlobster.js, kept
-// local here since these two chains are the only unconfirmed-shape callers
-// in this file.
-function pickField(obj, keys) {
-  for (const k of keys) {
-    if (obj?.[k] != null) return obj[k];
-  }
-  return null;
-}
-function extractRows(json, wrapperKeys) {
-  if (Array.isArray(json)) return json;
-  for (const k of wrapperKeys) {
-    if (Array.isArray(json?.[k])) return json[k];
-  }
-  return null;
-}
-function normalizeMs(v) {
-  if (v == null) return null;
-  const n = Number(v);
-  if (!Number.isFinite(n)) return null;
-  return n < 1e12 ? n * 1000 : n; // seconds vs ms
-}
 
 const TRON_BASE = 'https://apilist.tronscanapi.com/api';
 const TRON_USDT_CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
@@ -160,8 +141,7 @@ async function fetchTronMints(apiKey) {
       const from = pickField(r, ['from_address', 'from', 'fromAddress']);
       const to = pickField(r, ['to_address', 'to', 'toAddress']);
       const rawAmount = pickField(r, ['quant', 'amount', 'value']);
-      const n = rawAmount != null ? Number(rawAmount) : null;
-      const amount = Number.isFinite(n) ? n / 10 ** TRON_DECIMALS : null;
+      const amount = scaleAmount(rawAmount, TRON_DECIMALS);
       const timestamp = normalizeMs(pickField(r, ['block_ts', 'timestamp', 'block_timestamp']));
       const txHash = pickField(r, ['transaction_id', 'hash', 'tx_hash', 'transactionHash']);
       return { from, to, amount, timestamp, txHash };
@@ -216,10 +196,8 @@ async function fetchSolanaMints(apiKey) {
   const mints = rows.map((r) => {
     const to = pickField(r, ['to_address', 'to', 'destination']);
     const rawAmount = pickField(r, ['amount', 'value', 'token_amount']);
-    const rawDecimals = pickField(r, ['token_decimals', 'decimals']);
-    const decimals = rawDecimals != null ? Number(rawDecimals) : SOLANA_DECIMALS;
-    const n = rawAmount != null ? Number(rawAmount) : null;
-    const amount = Number.isFinite(n) ? n / 10 ** decimals : null;
+    const decimals = pickField(r, ['token_decimals', 'decimals']) ?? SOLANA_DECIMALS;
+    const amount = scaleAmount(rawAmount, decimals);
     const timestamp = normalizeMs(pickField(r, ['block_time', 'time', 'timestamp']));
     const txHash = pickField(r, ['trans_id', 'signature', 'tx_hash', 'txHash']);
     return {
@@ -276,12 +254,7 @@ async function fetchMints(token, apiKey, latestBlock) {
   const mints = rows.map((log) => {
     const toTopic = log.topics?.[2];
     const to = toTopic ? `0x${toTopic.slice(-40)}` : null;
-    let amount = null;
-    try {
-      amount = Number(BigInt(log.data)) / 10 ** token.decimals;
-    } catch {
-      amount = null;
-    }
+    const amount = scaleAmount(log.data, token.decimals);
     return {
       chain: 'Ethereum',
       symbol: token.symbol,
