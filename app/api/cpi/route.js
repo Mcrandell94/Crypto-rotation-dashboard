@@ -9,7 +9,7 @@
 // generic data.gov key — a source of real confusion this session, twice).
 // v1's unregistered limits (25 queries/day, 25 series/query, up to 20
 // years of data per BLS's own published limits) comfortably cover this
-// route's actual usage: one series, a ~2-year window, cached an hour at a
+// route's actual usage: one series, cached an hour at a
 // time — nowhere near 25 requests/day even under load. No key to
 // provision, expire, or mismatch means one less thing that can silently
 // break this panel.
@@ -22,28 +22,30 @@
 // source for the release calendar turns up, that's separate follow-up
 // work, not something to fabricate here.
 //
-// Endpoint shape (POST with a JSON body carrying seriesid/startyear/
-// endyear, response wraps series under Results.series[].data[], each item
+// Uses BLS's single-series GET endpoint (…/timeseries/data/<series_id>)
+// rather than the multi-series POST. Next.js's fetch cache (the
+// `next: { revalidate }` below) only caches GET requests — with POST, every
+// page load went straight to BLS and could burn through the unregistered
+// 25-queries/day limit, which then broke this panel for the rest of the
+// day. As a GET, BLS is hit at most about once an hour per server region.
+// The GET form takes no year range; BLS returns roughly the past 3 years,
+// which covers the 13 months shown plus the year-ago comparison.
+//
+// Response shape (status/message/Results.series[].data[], each item
 // carrying year/period/periodName/value/footnotes) is from BLS's own
-// published API schema and sample code; bls.gov itself is unreachable
+// published API docs; those docs show `Results` both as an object and as a
+// one-element array, so both are handled. bls.gov itself is unreachable
 // from this sandbox like most providers hit this session.
 
 export const dynamic = 'force-dynamic';
 
-const BASE_URL = 'https://api.bls.gov/publicAPI/v1/timeseries/data/';
 const SERIES_ID = 'CUUR0000SA0';
+const SERIES_URL = `https://api.bls.gov/publicAPI/v1/timeseries/data/${SERIES_ID}`;
 
 export async function GET() {
   try {
-    const now = new Date();
-    const res = await fetch(BASE_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        seriesid: [SERIES_ID],
-        startyear: String(now.getUTCFullYear() - 1),
-        endyear: String(now.getUTCFullYear()),
-      }),
+    const res = await fetch(SERIES_URL, {
+      headers: { Accept: 'application/json' },
       next: { revalidate: 3600 },
     });
 
@@ -61,7 +63,8 @@ export async function GET() {
       );
     }
 
-    const series = json.Results?.series?.[0];
+    const results = Array.isArray(json.Results) ? json.Results[0] : json.Results;
+    const series = results?.series?.[0];
     const points = (series?.data || [])
       .filter((d) => /^M(0[1-9]|1[0-2])$/.test(d.period)) // exclude annual-average M13
       .map((d) => ({
