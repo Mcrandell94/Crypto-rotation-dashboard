@@ -11,19 +11,20 @@
 // bls.gov/schedule/ to keep it going. (Columbus Day, Oct 12, is a
 // federal holiday on BLS's calendar, not a release, so it's left out.)
 //
-// `major` marks the market-moving prints (CPI, jobs, PPI, ECI) for the
-// calendar's heuristic severity.
+// The CB Calendar only shows the releases that move crypto — `critical`:
+// CPI, PPI and the jobs report (Employment Situation). The rest of BLS's
+// calendar is kept here, not shown, in case that list widens later.
 
 export const BLS_RELEASES = [
-  { major: true, at: '2026-10-02T08:30:00-04:00', name: 'Employment Situation for September 2026' },
-  { major: true, at: '2026-10-14T08:30:00-04:00', name: 'Consumer Price Index for September 2026' },
+  { critical: true, at: '2026-10-02T08:30:00-04:00', name: 'Employment Situation for September 2026' },
+  { critical: true, at: '2026-10-14T08:30:00-04:00', name: 'Consumer Price Index for September 2026' },
   { at: '2026-10-14T08:30:00-04:00', name: 'Real Earnings for September 2026' },
-  { major: true, at: '2026-10-15T08:30:00-04:00', name: 'Producer Price Index for September 2026' },
+  { critical: true, at: '2026-10-15T08:30:00-04:00', name: 'Producer Price Index for September 2026' },
   { at: '2026-10-16T08:30:00-04:00', name: 'U.S. Import and Export Price Indexes for September 2026' },
   { at: '2026-10-20T10:00:00-04:00', name: 'State Employment and Unemployment (Monthly) for September 2026' },
   { at: '2026-10-21T10:00:00-04:00', name: 'Usual Weekly Earnings of Wage and Salary Workers for Third Quarter 2026' },
   { at: '2026-10-28T10:00:00-04:00', name: 'Metropolitan Area Employment and Unemployment (Monthly) for September 2026' },
   { at: '2026-10-28T10:00:00-04:00', name: 'Quarterly Data Series on Business Employment Dynamics for First Quarter 2026' },
   { at: '2026-10-29T10:00:00-04:00', name: 'Consumer Expenditures for Annual 2025' },
-  { major: true, at: '2026-10-30T08:30:00-04:00', name: 'Employment Cost Index for Third Quarter 2026' },
+  { at: '2026-10-30T08:30:00-04:00', name: 'Employment Cost Index for Third Quarter 2026' },
 ];
