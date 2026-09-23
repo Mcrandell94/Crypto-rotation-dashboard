@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react';
 import { FOMC_MEETINGS, decisionDateTime as fomcDecisionDateTime } from '../lib/fomc-calendar';
 import { BOE_MEETINGS, decisionDateTime as boeDecisionDateTime } from '../lib/boe-calendar';
 import { BOJ_MEETINGS, decisionDateTime as bojDecisionDateTime } from '../lib/boj-calendar';
+import { BLS_RELEASES } from '../lib/bls-calendar';
+import { usClosures, nyseEarlyCloses } from '../lib/us-closures';
+import { zonedTime } from '../lib/zonedTime';
 
 const TEXT_PRIMARY = '#E7E4DD';
 const TEXT_SECONDARY = '#8B9298';
@@ -111,6 +114,55 @@ function buildCentralBankEvents(now) {
   return events;
 }
 
+// Scheduled U.S. data releases from BLS's own calendar — only the ones
+// that move crypto (CPI, PPI, jobs report), all marked medium: a judgment
+// call, like every other severity here.
+function buildEconomicDataEvents(now) {
+  return BLS_RELEASES.filter((r) => r.critical).map((r) => {
+    const date = new Date(r.at);
+    return {
+      id: `bls-${r.at}-${r.name}`,
+      date,
+      name: r.name,
+      shortName: r.name,
+      category: 'economic-data',
+      resolved: date < now,
+      severity: 'medium',
+      tz: 'America/New_York',
+    };
+  });
+}
+
+// Weekdays U.S. banks and/or the stock market are closed, plus NYSE's
+// 1:00pm early closes. No severity —
+// not a market event, just context (thin liquidity, no ETF flows, fiat
+// rails paused). Dated noon ET so the day can't slip across time zones.
+function buildClosureEvents(now) {
+  const year = now.getFullYear();
+  const earlyCloses = [...nyseEarlyCloses(year), ...nyseEarlyCloses(year + 1)]
+    .map((c) => ({ ...c, earlyClose: true }));
+  return [...usClosures(year), ...usClosures(year + 1), ...earlyCloses].map((c) => {
+    const date = zonedTime(c.date, '12:00:00', 'America/New_York');
+    const endOfDay = zonedTime(c.date, '23:59:59', 'America/New_York');
+    return {
+      id: `closure-${c.date}`,
+      date,
+      name: c.name,
+      shortName: c.name,
+      category: 'closure',
+      resolved: endOfDay < now,
+      tz: 'America/New_York',
+      banksClosed: c.banksClosed,
+      nyseClosed: c.nyseClosed,
+      earlyClose: !!c.earlyClose,
+    };
+  });
+}
+
+function fmtDate(date, timeZone) {
+  return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone });
+}
+
 function buildLegislativeEvents(congressData) {
   if (!congressData?.bills) return [];
   return congressData.bills
@@ -142,6 +194,14 @@ function buildOptionsEvents(optionsData) {
   }));
 }
 
+const CATEGORY_BADGE = {
+  'central-bank': { label: 'Central bank', color: '#4C7EB8' },
+  legislative: { label: 'Legislative', color: '#C9A66B' },
+  'economic-data': { label: 'US data (BLS)', color: '#5E9C98' },
+  closure: { label: 'Closed', color: TEXT_SECONDARY },
+  'options-expiry': { label: 'Options expiry', color: '#8B6FB8' },
+};
+
 function EventCard({ ev, now }) {
   const severity = ev.severity;
   const color = SEVERITY_COLOR[severity] || TEXT_MUTED;
@@ -152,11 +212,13 @@ function EventCard({ ev, now }) {
       <div style={{ flex: 1, paddingBottom: 14, borderBottom: `1px solid ${CARD_BORDER}` }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 14, fontWeight: 600, color: TEXT_PRIMARY }}>{ev.shortName}</span>
-          <span style={{ fontSize: 11, color: TEXT_MUTED }}>{fmtDateTime(ev.date, ev.tz)}</span>
+          <span style={{ fontSize: 11, color: TEXT_MUTED }}>
+            {ev.category === 'closure' ? fmtDate(ev.date, ev.tz) : fmtDateTime(ev.date, ev.tz)}
+          </span>
         </div>
         <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-          <Badge color={ev.category === 'central-bank' ? '#4C7EB8' : ev.category === 'legislative' ? '#C9A66B' : '#8B6FB8'}>
-            {ev.category === 'central-bank' ? 'Central bank' : ev.category === 'legislative' ? 'Legislative' : 'Options expiry'}
+          <Badge color={CATEGORY_BADGE[ev.category].color}>
+            {ev.earlyClose ? 'Early close' : CATEGORY_BADGE[ev.category].label}
           </Badge>
           {ev.resolved && <Badge color={TEXT_MUTED}>Resolved</Badge>}
         </div>
@@ -191,6 +253,18 @@ function EventCard({ ev, now }) {
           </div>
         )}
 
+        {ev.category === 'closure' && (
+          <div style={{ fontSize: 12, color: TEXT_SECONDARY, marginTop: 8, lineHeight: 1.6 }}>
+            {ev.earlyClose
+              ? 'U.S. stock market closes 1:00 PM ET — banks open · no spot ETF trading after 1:00 PM'
+              : ev.banksClosed && ev.nyseClosed
+                ? 'U.S. banks and stock market closed · no spot ETF flows'
+                : ev.nyseClosed
+                  ? 'U.S. stock market closed — banks open · no spot ETF flows'
+                  : 'U.S. banks closed — stock market open'}
+          </div>
+        )}
+
         {ev.category === 'options-expiry' && (
           <div style={{ fontSize: 12, color: TEXT_SECONDARY, marginTop: 8, lineHeight: 1.6 }}>
             {ev.expiry.type === 'quarterly' ? 'Quarterly expiry' : ev.expiry.type === 'monthly' ? 'Monthly expiry' : ev.expiry.type === 'weekly' ? 'Weekly expiry' : 'Daily expiry'}
@@ -222,7 +296,7 @@ export default function CbCalendar({ optionsData, fedOddsData, fedOddsError, con
     );
   }
 
-  let events = [...buildCentralBankEvents(now), ...buildOptionsEvents(optionsData), ...buildLegislativeEvents(congressData)];
+  let events = [...buildCentralBankEvents(now), ...buildEconomicDataEvents(now), ...buildClosureEvents(now), ...buildOptionsEvents(optionsData), ...buildLegislativeEvents(congressData)];
 
   // Attach live Polymarket odds to the nearest upcoming Fed meeting only —
   // the market tracks "the next decision," not a specific date.
@@ -241,7 +315,7 @@ export default function CbCalendar({ optionsData, fedOddsData, fedOddsError, con
       );
       return { ...ev, severity };
     }
-    if (ev.category === 'legislative') {
+    if (ev.category === 'legislative' || ev.category === 'economic-data' || ev.category === 'closure') {
       return ev;
     }
     return { ...ev, severity: expirySeverity(ev.expiry.type) };
@@ -261,7 +335,9 @@ export default function CbCalendar({ optionsData, fedOddsData, fedOddsError, con
   const upcoming = events.filter(
     (e) => !e.resolved && (e.category === 'legislative' || e.date <= cutoff)
   );
-  const recentlyResolved = events.filter((e) => e.resolved).slice(-3);
+  // Past data releases are dropped — the print itself is what matters, and
+  // the Macro tab already shows it.
+  const recentlyResolved = events.filter((e) => e.resolved && e.category !== 'economic-data' && e.category !== 'closure').slice(-3);
   const shown = [...recentlyResolved, ...upcoming];
 
   return (
@@ -272,6 +348,8 @@ export default function CbCalendar({ optionsData, fedOddsData, fedOddsError, con
       </div>
       <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '4px 0 4px' }}>
         Central bank decisions (Fed, BOE, BOJ — hand-maintained from each bank's own published calendar),
+        crypto-moving U.S. data releases (CPI, PPI, jobs report — hand-maintained from BLS's own release calendar, currently through October 2026),
+        weekdays U.S. banks and/or the stock market are closed, plus stock market early closes (computed from the federal holiday, Fed and NYSE rules),
         BTC options expiries (live, mirrors the Options panel on Macro & Seasonality), and crypto
         market-structure legislation (live, from Congress.gov's own API), scoped to the window above.
         Legislative tracking always shows regardless of window — it's a live status check, not a scheduled date.

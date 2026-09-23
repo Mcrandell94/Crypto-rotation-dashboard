@@ -10,6 +10,8 @@
 // quarterly ones); the Summary of Economic Projections (the "dot plot") is
 // released only at the March, June, September, and December meetings.
 
+import { zonedTime } from './zonedTime';
+
 export const FOMC_MEETINGS = [
   { start: '2026-01-27', end: '2026-01-28', sep: false },
   { start: '2026-03-17', end: '2026-03-18', sep: true },
@@ -29,7 +31,9 @@ export const FOMC_MEETINGS = [
   { start: '2027-12-07', end: '2027-12-08', sep: true, tentative: true },
 ];
 
-// Rate decisions are always released 2:00pm ET on the meeting's second day.
+// Rate decisions are always released 2:00pm ET on the meeting's second day
+// — Eastern wall-clock time, so EDT (UTC-4) or EST (UTC-5) depending on the
+// date, not a fixed offset.
 export function decisionDateTime(meeting) {
-  return new Date(`${meeting.end}T14:00:00-05:00`);
+  return zonedTime(meeting.end, '14:00:00', 'America/New_York');
 }
