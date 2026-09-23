@@ -42,7 +42,6 @@ import useCalendarTabData from './hooks/useCalendarTabData';
 import useWhaleTabData from './hooks/useWhaleTabData';
 
 const EMA_SYMBOLS = ['BTC', 'ETH'];
-const RRG_GUIDE_URL = 'https://claude.ai/code/artifact/a27fdba0-8821-4b06-9d01-660923519910';
 
 const TABS = [
   { key: 'rotation', label: 'Rotation' },
@@ -171,14 +170,6 @@ export default function DashboardHome() {
                 {m.label}
               </button>
             ))}
-            <a
-              href={RRG_GUIDE_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ marginLeft: 'auto', fontSize: 12, color: '#C9A66B' }}
-            >
-              How to read the RRG →
-            </a>
           </div>
 
           {rrgMode === 'tickers' && (
