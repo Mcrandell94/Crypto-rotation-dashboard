@@ -16,7 +16,8 @@
 //   on Dec 31 (NYSE Rule 7.2).
 // NYSE output is checked against the independent `holidays` package's
 // NYSE calendar for 2026–2035 (see us-closures.test.js). Half-day early
-// closes aren't full closures and aren't included.
+// closes aren't full closures — they're listed separately by
+// nyseEarlyCloses() below.
 
 function iso(y, m, d) {
   return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
@@ -103,4 +104,21 @@ export function usClosures(year) {
   add(shift(...easter(year), -2), 'Good Friday', 'nyseClosed');
 
   return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+// NYSE 1:00pm ET early closes: the day after Thanksgiving, every year; and
+// July 3 / December 24 when they fall Monday–Thursday (on a Friday they're
+// the observed full-day holiday instead, and on a weekend there's nothing
+// to shorten). Fed banks keep normal hours on all of these.
+// [{ date: 'YYYY-MM-DD', name }], sorted by date.
+export function nyseEarlyCloses(year) {
+  const out = [];
+  const monToThu = (m, d) => {
+    const dow = weekday(year, m, d);
+    return dow >= 1 && dow <= 4;
+  };
+  if (monToThu(7, 3)) out.push({ date: iso(year, 7, 3), name: 'Day before Independence Day' });
+  out.push({ date: iso(...shift(year, 11, nthWeekday(year, 11, 4, 4), 1)), name: 'Day after Thanksgiving' });
+  if (monToThu(12, 24)) out.push({ date: iso(year, 12, 24), name: 'Christmas Eve' });
+  return out;
 }

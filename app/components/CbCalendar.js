@@ -5,7 +5,7 @@ import { FOMC_MEETINGS, decisionDateTime as fomcDecisionDateTime } from '../lib/
 import { BOE_MEETINGS, decisionDateTime as boeDecisionDateTime } from '../lib/boe-calendar';
 import { BOJ_MEETINGS, decisionDateTime as bojDecisionDateTime } from '../lib/boj-calendar';
 import { BLS_RELEASES } from '../lib/bls-calendar';
-import { usClosures } from '../lib/us-closures';
+import { usClosures, nyseEarlyCloses } from '../lib/us-closures';
 import { zonedTime } from '../lib/zonedTime';
 
 const TEXT_PRIMARY = '#E7E4DD';
@@ -133,12 +133,15 @@ function buildEconomicDataEvents(now) {
   });
 }
 
-// Weekdays U.S. banks and/or the stock market are closed. No severity —
+// Weekdays U.S. banks and/or the stock market are closed, plus NYSE's
+// 1:00pm early closes. No severity —
 // not a market event, just context (thin liquidity, no ETF flows, fiat
 // rails paused). Dated noon ET so the day can't slip across time zones.
 function buildClosureEvents(now) {
   const year = now.getFullYear();
-  return [...usClosures(year), ...usClosures(year + 1)].map((c) => {
+  const earlyCloses = [...nyseEarlyCloses(year), ...nyseEarlyCloses(year + 1)]
+    .map((c) => ({ ...c, earlyClose: true }));
+  return [...usClosures(year), ...usClosures(year + 1), ...earlyCloses].map((c) => {
     const date = zonedTime(c.date, '12:00:00', 'America/New_York');
     const endOfDay = zonedTime(c.date, '23:59:59', 'America/New_York');
     return {
@@ -151,6 +154,7 @@ function buildClosureEvents(now) {
       tz: 'America/New_York',
       banksClosed: c.banksClosed,
       nyseClosed: c.nyseClosed,
+      earlyClose: !!c.earlyClose,
     };
   });
 }
@@ -214,7 +218,7 @@ function EventCard({ ev, now }) {
         </div>
         <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
           <Badge color={CATEGORY_BADGE[ev.category].color}>
-            {CATEGORY_BADGE[ev.category].label}
+            {ev.earlyClose ? 'Early close' : CATEGORY_BADGE[ev.category].label}
           </Badge>
           {ev.resolved && <Badge color={TEXT_MUTED}>Resolved</Badge>}
         </div>
@@ -251,12 +255,13 @@ function EventCard({ ev, now }) {
 
         {ev.category === 'closure' && (
           <div style={{ fontSize: 12, color: TEXT_SECONDARY, marginTop: 8, lineHeight: 1.6 }}>
-            {ev.banksClosed && ev.nyseClosed
-              ? 'U.S. banks and stock market closed'
-              : ev.nyseClosed
-                ? 'U.S. stock market closed — banks open'
-                : 'U.S. banks closed — stock market open'}
-            {ev.nyseClosed ? ' · no spot ETF flows' : ''}
+            {ev.earlyClose
+              ? 'U.S. stock market closes 1:00 PM ET — banks open · no spot ETF trading after 1:00 PM'
+              : ev.banksClosed && ev.nyseClosed
+                ? 'U.S. banks and stock market closed · no spot ETF flows'
+                : ev.nyseClosed
+                  ? 'U.S. stock market closed — banks open · no spot ETF flows'
+                  : 'U.S. banks closed — stock market open'}
           </div>
         )}
 
@@ -344,7 +349,7 @@ export default function CbCalendar({ optionsData, fedOddsData, fedOddsError, con
       <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '4px 0 4px' }}>
         Central bank decisions (Fed, BOE, BOJ — hand-maintained from each bank's own published calendar),
         crypto-moving U.S. data releases (CPI, PPI, jobs report — hand-maintained from BLS's own release calendar, currently through October 2026),
-        weekdays U.S. banks and/or the stock market are closed (computed from the federal holiday, Fed and NYSE rules),
+        weekdays U.S. banks and/or the stock market are closed, plus stock market early closes (computed from the federal holiday, Fed and NYSE rules),
         BTC options expiries (live, mirrors the Options panel on Macro & Seasonality), and crypto
         market-structure legislation (live, from Congress.gov's own API), scoped to the window above.
         Legislative tracking always shows regardless of window — it's a live status check, not a scheduled date.

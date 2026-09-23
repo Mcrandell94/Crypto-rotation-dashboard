@@ -2,11 +2,12 @@
 // `holidays` Python package (v0.105). NYSE dates are its NYSE calendar
 // verbatim; bank dates are its U.S. federal holidays with the Fed's weekend
 // rule applied (weekend dates dropped, Friday make-ups for Saturday
-// holidays dropped). Run with: npm test.
+// holidays dropped). Early closes are its NYSE `half_day` category.
+// Run with: npm test.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { usClosures } = require('./us-closures');
+const { usClosures, nyseEarlyCloses } = require('./us-closures');
 
 const EXPECTED_NYSE = {
   2026: ['2026-01-01', '2026-01-19', '2026-02-16', '2026-04-03', '2026-05-25', '2026-06-19', '2026-07-03', '2026-09-07', '2026-11-26', '2026-12-25'],
@@ -34,6 +35,19 @@ const EXPECTED_BANKS = {
   2035: ['2035-01-01', '2035-01-15', '2035-02-19', '2035-05-28', '2035-06-19', '2035-07-04', '2035-09-03', '2035-10-08', '2035-11-12', '2035-11-22', '2035-12-25'],
 };
 
+const EXPECTED_EARLY_CLOSES = {
+  2026: ['2026-11-27', '2026-12-24'],
+  2027: ['2027-11-26'],
+  2028: ['2028-07-03', '2028-11-24'],
+  2029: ['2029-07-03', '2029-11-23', '2029-12-24'],
+  2030: ['2030-07-03', '2030-11-29', '2030-12-24'],
+  2031: ['2031-07-03', '2031-11-28', '2031-12-24'],
+  2032: ['2032-11-26'],
+  2033: ['2033-11-25'],
+  2034: ['2034-07-03', '2034-11-24'],
+  2035: ['2035-07-03', '2035-11-23', '2035-12-24'],
+};
+
 for (const year of Object.keys(EXPECTED_NYSE).map(Number)) {
   test(`NYSE closures ${year}`, () => {
     const got = usClosures(year).filter((c) => c.nyseClosed).map((c) => c.date);
@@ -42,6 +56,9 @@ for (const year of Object.keys(EXPECTED_NYSE).map(Number)) {
   test(`Fed bank closures ${year}`, () => {
     const got = usClosures(year).filter((c) => c.banksClosed).map((c) => c.date);
     assert.deepEqual(got, EXPECTED_BANKS[year]);
+  });
+  test(`NYSE early closes ${year}`, () => {
+    assert.deepEqual(nyseEarlyCloses(year).map((c) => c.date), EXPECTED_EARLY_CLOSES[year]);
   });
 }
 
