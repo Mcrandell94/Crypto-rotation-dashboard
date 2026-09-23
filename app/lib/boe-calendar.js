@@ -11,6 +11,8 @@
 // quarterly Monetary Policy Report and a press conference led by the
 // Governor; the other 4 are decision-only.
 
+import { zonedTime } from './zonedTime';
+
 export const BOE_MEETINGS = [
   { date: '2026-02-05', mpr: true },
   { date: '2026-03-19', mpr: false },
@@ -31,10 +33,8 @@ export const BOE_MEETINGS = [
 ];
 
 // The Bank always publishes its rate decision at 12:00pm London time on
-// the meeting's Thursday. Like the FOMC calendar's fixed ET offset, this
-// uses a fixed +00:00 (GMT) rather than tracking BST, so it can read up to
-// an hour early during British Summer Time (late Mar-late Oct) — an
-// approximation, not a claim of minute-precision.
+// the meeting's Thursday — London wall-clock time, so BST (UTC+1) or GMT
+// depending on the date, not a fixed offset.
 export function decisionDateTime(meeting) {
-  return new Date(`${meeting.date}T12:00:00+00:00`);
+  return zonedTime(meeting.date, '12:00:00', 'Europe/London');
 }
