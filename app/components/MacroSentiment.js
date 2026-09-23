@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import { nextRelease } from '../lib/bls-calendar';
+import { FOMC_MEETINGS } from '../lib/fomc-calendar';
 
 const TEXT_PRIMARY = '#E7E4DD';
 const TEXT_SECONDARY = '#8B9298';
@@ -10,6 +12,10 @@ const CARD_BORDER = '#2A3136';
 const AMBER = '#C9A66B';
 const GAIN = '#7FA37F';
 const LOSS = '#A85D4F';
+
+function fmtEtDate(date) {
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' });
+}
 
 const FNG_SOURCES = [
   { key: 'altme', label: 'alternative.me' },
@@ -55,6 +61,12 @@ export default function MacroSentiment({ data, cpiData, cpiError }) {
   }
 
   const rates = data.rates;
+
+  // Upcoming scheduled dates from the hand-maintained official calendars —
+  // left off the tiles entirely if the list doesn't reach that far.
+  const now = new Date();
+  const nextCpi = nextRelease('cpi', now);
+  const nextFomc = FOMC_MEETINGS.find((m) => new Date(`${m.end}T23:59:59-04:00`) > now);
   const curve = rates?.yieldCurveSpread ? yieldCurveNote(rates.yieldCurveSpread.value) : null;
 
   const hasBothFng = !!data.fng && !!data.fngCoinstats;
@@ -107,13 +119,20 @@ export default function MacroSentiment({ data, cpiData, cpiError }) {
           value={data.dominance.usdt != null ? `${data.dominance.usdt.toFixed(1)}%` : '—'}
         />
         {rates?.fedFundsRate && (
-          <StatTile label="Fed Funds Rate" value={`${rates.fedFundsRate.value.toFixed(2)}%`} />
+          <StatTile
+            label="Fed Funds Rate"
+            value={`${rates.fedFundsRate.value.toFixed(2)}%`}
+            sub={nextFomc ? `Next FOMC decision ${fmtEtDate(new Date(`${nextFomc.end}T12:00:00Z`))}` : undefined}
+          />
         )}
         {cpiData?.latest && (
           <StatTile
             label={`CPI YoY (${cpiData.latest.periodName} ${cpiData.latest.year})`}
             value={cpiData.latest.yoyPct != null ? `${cpiData.latest.yoyPct}%` : '—'}
-            sub={cpiData.latest.momPct != null ? `${cpiData.latest.momPct > 0 ? '+' : ''}${cpiData.latest.momPct}% MoM` : undefined}
+            sub={[
+              cpiData.latest.momPct != null ? `${cpiData.latest.momPct > 0 ? '+' : ''}${cpiData.latest.momPct}% MoM` : null,
+              nextCpi ? `Next print ${fmtEtDate(new Date(nextCpi.at))}, ${new Date(nextCpi.at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })} ET` : null,
+            ].filter(Boolean).join(' · ') || undefined}
           />
         )}
         {rates?.treasury10y && (
