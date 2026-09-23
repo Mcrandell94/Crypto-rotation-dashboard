@@ -348,7 +348,7 @@ export default function CbCalendar({ optionsData, fedOddsData, fedOddsError, con
       </div>
       <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '4px 0 4px' }}>
         Central bank decisions (Fed, BOE, BOJ — hand-maintained from each bank's own published calendar),
-        crypto-moving U.S. data releases (CPI, PPI, jobs report — hand-maintained from BLS's own release calendar, currently through October 2026),
+        crypto-moving U.S. data releases (CPI, PPI, jobs report — hand-maintained from BLS's own release calendar, currently through November 2026),
         weekdays U.S. banks and/or the stock market are closed, plus stock market early closes (computed from the federal holiday, Fed and NYSE rules),
         BTC options expiries (live, mirrors the Options panel on Macro & Seasonality), and crypto
         market-structure legislation (live, from Congress.gov's own API), scoped to the window above.
