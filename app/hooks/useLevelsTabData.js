@@ -163,19 +163,24 @@ export default function useLevelsTabData(isActive) {
     }
   }, []);
 
+  // Taker buy/sell volume (Coinglass) and Liquidation Zones (CoinLobster)
+  // are disabled here for now — both fail every call in production
+  // (Coinglass: key/plan doesn't cover this endpoint; CoinLobster: the
+  // unresolved REST 401 auth issue from earlier this session). Not
+  // removed, just not called: fetchTakerFlow and fetchLiquidationZones
+  // above are untouched and still returned below — re-enable by adding
+  // both calls back into refetch() and its dependency array.
   const refetch = useCallback(() => {
     fetchTimeframes();
     fetchOpenInterest();
-    fetchTakerFlow();
     fetchLiquidations();
     fetchLiquidationHeatmap();
     fetchLiquidationHeatmapCoinalyze();
     fetchLiquidationHeatmapBcf();
     fetchLiquidationFeed();
-    fetchLiquidationZones();
     fetchBtcPrice();
     fetchEthPrice();
-  }, [fetchTimeframes, fetchOpenInterest, fetchTakerFlow, fetchLiquidations, fetchLiquidationHeatmap, fetchLiquidationHeatmapCoinalyze, fetchLiquidationHeatmapBcf, fetchLiquidationFeed, fetchLiquidationZones, fetchBtcPrice, fetchEthPrice]);
+  }, [fetchTimeframes, fetchOpenInterest, fetchLiquidations, fetchLiquidationHeatmap, fetchLiquidationHeatmapCoinalyze, fetchLiquidationHeatmapBcf, fetchLiquidationFeed, fetchBtcPrice, fetchEthPrice]);
 
   useEffect(() => {
     if (isActive && !loaded) {

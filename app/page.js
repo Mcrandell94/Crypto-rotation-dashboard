@@ -397,6 +397,12 @@ export default function DashboardHome() {
 
       {activeTab === 'levels' && (
         <TabErrorBoundary tabName="Levels & Liquidations">
+          {/* Liquidation Zones (CoinLobster) and Taker Flow (Coinglass) are
+              temporarily off this tab — both fail every call right now
+              (CoinLobster's unresolved REST 401, Coinglass's key/plan not
+              covering this endpoint). Not removed: their fetchers stay
+              intact in useLevelsTabData, just uncalled — see that hook's
+              refetch() comment for how to bring them back. */}
           {header.emaError ? (
             <div style={{ marginTop: 20, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
               <strong>EMA fetch failed:</strong> {header.emaError}
@@ -432,17 +438,6 @@ export default function DashboardHome() {
             ethPriceError={levels.ethPriceError}
           />
 
-          {levels.liquidationZonesError ? (
-            <div style={{ marginTop: 20, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-              <strong>Liquidation zones fetch failed:</strong> {levels.liquidationZonesError}
-              <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
-                Most likely cause: COINLOBSTER_API_KEY isn't set yet in this environment's variables.
-              </div>
-            </div>
-          ) : (
-            <LiquidationZones data={levels.liquidationZonesData} />
-          )}
-
           {levels.openInterestError ? (
             <div style={{ marginTop: 20, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
               <strong>Cross-exchange open interest fetch failed:</strong> {levels.openInterestError}
@@ -452,17 +447,6 @@ export default function DashboardHome() {
             </div>
           ) : (
             <OpenInterestPanel data={levels.openInterestData} />
-          )}
-
-          {levels.takerFlowError ? (
-            <div style={{ marginTop: 20, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-              <strong>Taker buy/sell volume fetch failed:</strong> {levels.takerFlowError}
-              <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
-                Most likely cause: COINGLASS_API_KEY isn't set yet, or the key's plan doesn't include this endpoint.
-              </div>
-            </div>
-          ) : (
-            <TakerFlow data={levels.takerFlowData} />
           )}
 
           {levels.liquidationsError ? (
