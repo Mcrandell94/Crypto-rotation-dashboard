@@ -12,10 +12,15 @@ const GAIN = '#7FA37F';
 const LOSS = '#A85D4F';
 const MAX_ROWS = 24;
 
+// BitcoinCounterFlow is disabled for now — BITCOINCOUNTERFLOW_API_KEY isn't
+// set in Vercel, so every call failed. Its button is hidden and
+// useLevelsTabData no longer fetches it; the route and the rendering
+// below are untouched. Re-enable by removing `disabled` here and adding
+// fetchLiquidationHeatmapBcf back into useLevelsTabData's refetch().
 const SOURCES = [
   { key: 'default', label: 'Kraken + Coinglass (modeled, 4h bars)' },
   { key: 'coinalyze', label: 'Coinalyze (modeled, hourly bars)' },
-  { key: 'bcf', label: "BitcoinCounterFlow (vendor's own heatmap)" },
+  { key: 'bcf', label: "BitcoinCounterFlow (vendor's own heatmap)", disabled: true },
 ];
 
 function formatUsd(v) {
@@ -37,7 +42,7 @@ function formatPrice(v) {
 function SourcePicker({ source, setSource }) {
   return (
     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
-      {SOURCES.map((s) => (
+      {SOURCES.filter((s) => !s.disabled).map((s) => (
         <button
           key={s.key}
           onClick={() => setSource(s.key)}

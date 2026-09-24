@@ -163,6 +163,12 @@ export default function useLevelsTabData(isActive) {
     }
   }, []);
 
+  // BitcoinCounterFlow's liquidation heatmap is disabled too —
+  // BITCOINCOUNTERFLOW_API_KEY isn't set in Vercel, so it failed on every
+  // load. fetchLiquidationHeatmapBcf is untouched; re-enable by adding it
+  // back below and removing `disabled` from its entry in
+  // LiquidationHeatmap.js's SOURCES.
+  //
   // Taker buy/sell volume (Coinglass) and Liquidation Zones (CoinLobster)
   // are disabled here for now — both fail every call in production
   // (Coinglass: key/plan doesn't cover this endpoint; CoinLobster: the
@@ -176,11 +182,10 @@ export default function useLevelsTabData(isActive) {
     fetchLiquidations();
     fetchLiquidationHeatmap();
     fetchLiquidationHeatmapCoinalyze();
-    fetchLiquidationHeatmapBcf();
     fetchLiquidationFeed();
     fetchBtcPrice();
     fetchEthPrice();
-  }, [fetchTimeframes, fetchOpenInterest, fetchLiquidations, fetchLiquidationHeatmap, fetchLiquidationHeatmapCoinalyze, fetchLiquidationHeatmapBcf, fetchLiquidationFeed, fetchBtcPrice, fetchEthPrice]);
+  }, [fetchTimeframes, fetchOpenInterest, fetchLiquidations, fetchLiquidationHeatmap, fetchLiquidationHeatmapCoinalyze, fetchLiquidationFeed, fetchBtcPrice, fetchEthPrice]);
 
   useEffect(() => {
     if (isActive && !loaded) {
