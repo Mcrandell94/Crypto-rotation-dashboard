@@ -38,3 +38,19 @@ failing source shows up without someone having to notice it.
 ## Recurring upkeep
 - Paste BLS's 2027 release schedule into `app/lib/bls-calendar.js` when
   it's published (current coverage ends Dec 2026).
+
+## Working notes (for future sessions)
+- **Production domain:** `https://crypto-rotation-dashboard-xi.vercel.app` is
+  public. Use it for live checks. Per-deployment URLs
+  (`…-<hash>-onchain4.vercel.app`) sit behind Vercel Authentication and
+  redirect to a login.
+- **Checking a branch preview before merging:** the project has a Protection
+  Bypass for Automation secret. It's stored in the Claude environment's
+  settings as `VERCEL_AUTOMATION_BYPASS_SECRET`, with `*.vercel.app` allowed
+  under Network access. Send it as the `x-vercel-protection-bypass` header on
+  requests to a preview URL. Never print it or commit it. Environment settings
+  only load when a session starts, so a session opened before they were added
+  won't see them. If the secret leaks, regenerate it in Vercel → Deployment
+  Protection.
+- **Logs:** production runtime logs are readable through the Vercel connector
+  (team `onchain4`). Each request line shows `cache=HIT/MISS/STALE`.
