@@ -91,6 +91,11 @@ async function handler(request) {
       prices,
       sectorMembers: Object.fromEntries(SECTORS.map((s, i) => [s.label, sectorTickers[i]])),
       failed,
+      // Individual members that failed (e.g. a CoinGecko 429 in the burst):
+      // their sector's composite is built from the remaining members, so say
+      // so rather than silently. Non-empty also keeps this partial result
+      // out of the CDN cache (see app/lib/cdnCache.js).
+      tickersFailed: failedTickers,
       fetchedAt: new Date().toISOString(),
     });
   } catch (err) {
