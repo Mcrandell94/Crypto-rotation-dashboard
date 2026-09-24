@@ -7,12 +7,44 @@
 // coins under a "k"-prefixed scaled name like kPEPE; without verifying each
 // one we'd risk mismatching a ticker to the wrong market, so those are
 // reported as "not listed" instead of guessed).
+//
+// Hyperliquid's /info only accepts POST, and Next.js's fetch cache never
+// caches POST — so `next: { revalidate }` alone did nothing and every page
+// load (this feeds the always-visible header) hit Hyperliquid. The call is
+// cached with unstable_cache instead. A failed call throws, and thrown
+// results aren't cached, so an outage clears on the next request.
+
+import { unstable_cache } from 'next/cache';
+import { withCdnCache } from '../../lib/cdnCache';
 
 export const dynamic = 'force-dynamic';
 
 const HYPERLIQUID_INFO_URL = 'https://api.hyperliquid.xyz/info';
 
-export async function GET(request) {
+class UpstreamError extends Error {
+  constructor(status, detail) {
+    super(`Hyperliquid returned ${status}`);
+    this.status = status;
+    this.detail = detail;
+  }
+}
+
+const fetchMetaAndAssetCtxs = unstable_cache(
+  async () => {
+    const res = await fetch(HYPERLIQUID_INFO_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'metaAndAssetCtxs' }),
+      cache: 'no-store',
+    });
+    if (!res.ok) throw new UpstreamError(res.status, await res.text());
+    return res.json();
+  },
+  ['hyperliquid-metaAndAssetCtxs'],
+  { revalidate: 300 }
+);
+
+async function handler(request) {
   const { searchParams } = new URL(request.url);
   const requested = (searchParams.get('symbols') || 'BTC,ETH')
     .split(',')
@@ -20,19 +52,7 @@ export async function GET(request) {
     .filter(Boolean);
 
   try {
-    const res = await fetch(HYPERLIQUID_INFO_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'metaAndAssetCtxs' }),
-      next: { revalidate: 300 },
-    });
-
-    if (!res.ok) {
-      const detail = await res.text();
-      return Response.json({ error: `Hyperliquid returned ${res.status}`, detail }, { status: res.status });
-    }
-
-    const [meta, assetCtxs] = await res.json();
+    const [meta, assetCtxs] = await fetchMetaAndAssetCtxs();
     const universe = meta?.universe || [];
 
     const bySymbol = {};
@@ -62,6 +82,11 @@ export async function GET(request) {
 
     return Response.json({ data, notListed, fetchedAt: new Date().toISOString() });
   } catch (err) {
+    if (err instanceof UpstreamError) {
+      return Response.json({ error: err.message, detail: err.detail }, { status: err.status });
+    }
     return Response.json({ error: 'Fetch failed', detail: String(err) }, { status: 500 });
   }
 }
+
+export const GET = withCdnCache(handler, 300);

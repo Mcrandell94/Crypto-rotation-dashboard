@@ -10,6 +10,8 @@
 // decrease", "50+ bps decrease"), not a single Yes/No — so every outcome
 // and its live price is returned, not just one side.
 
+import { withCdnCache } from '../../lib/cdnCache';
+
 export const dynamic = 'force-dynamic';
 
 const GAMMA_BASE = 'https://gamma-api.polymarket.com';
@@ -46,7 +48,7 @@ function parseOutcomes(market) {
   }
 }
 
-export async function GET() {
+async function handler() {
   try {
     const events = await fetchEvents();
     const candidates = events.filter((e) => isFedDecisionEvent(e.title));
@@ -85,3 +87,5 @@ export async function GET() {
     );
   }
 }
+
+export const GET = withCdnCache(handler, 300);

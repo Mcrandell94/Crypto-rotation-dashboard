@@ -13,6 +13,7 @@
 // inputs (different venues, different bar size) and can disagree.
 
 import { runLiquidationHeatmap } from '../../lib/liquidationHeatmap';
+import { withCdnCache } from '../../lib/cdnCache';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,7 +42,7 @@ async function fetchHistory(url, params, apiKey) {
   return res.json();
 }
 
-export async function GET() {
+async function handler() {
   const apiKey = process.env.COINALYZE_API_KEY;
   if (!apiKey) {
     return Response.json(
@@ -121,3 +122,5 @@ export async function GET() {
     );
   }
 }
+
+export const GET = withCdnCache(handler, 900);

@@ -13,6 +13,8 @@
 // Hobbyist requires interval >= 4h; 1d is used here for a clean 30-day
 // daily view, well above that floor.
 
+import { withCdnCache } from '../../lib/cdnCache';
+
 export const dynamic = 'force-dynamic';
 
 const BASE_URL = 'https://open-api-v4.coinglass.com/api';
@@ -62,7 +64,7 @@ async function fetchLiquidationsForSymbol(symbol, apiKey) {
   return { days, last24h, last7dLong, last7dShort };
 }
 
-export async function GET() {
+async function handler() {
   const apiKey = process.env.COINGLASS_API_KEY;
   if (!apiKey) {
     return Response.json(
@@ -95,3 +97,5 @@ export async function GET() {
     return Response.json({ error: 'Fetch failed', detail: String(err) }, { status: 500 });
   }
 }
+
+export const GET = withCdnCache(handler, 900);

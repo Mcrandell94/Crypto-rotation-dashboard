@@ -13,6 +13,7 @@
 // mismatch against a chart pinned to a specific exchange.
 
 import { PAIRS, fetchCandles } from '../../lib/kraken';
+import { withCdnCache } from '../../lib/cdnCache';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,7 +33,7 @@ function ema(values, period) {
   return value;
 }
 
-export async function GET() {
+async function handler() {
   try {
     const assets = {};
     const failed = [];
@@ -65,3 +66,5 @@ export async function GET() {
     );
   }
 }
+
+export const GET = withCdnCache(handler, 300);

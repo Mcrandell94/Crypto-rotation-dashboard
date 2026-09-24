@@ -3,11 +3,13 @@
 // side of the liquidation-levels tracker's "has price crossed this level"
 // check, so it needs the actual last-traded price rather than a candle close.
 
+import { withCdnCache } from '../../lib/cdnCache';
+
 export const dynamic = 'force-dynamic';
 
 const KRAKEN_TICKER_URL = 'https://api.kraken.com/0/public/Ticker?pair=ETHUSD';
 
-export async function GET() {
+async function handler() {
   try {
     const res = await fetch(KRAKEN_TICKER_URL, { next: { revalidate: 30 } });
     if (!res.ok) {
@@ -38,3 +40,5 @@ export async function GET() {
     return Response.json({ error: err.message || 'Fetch failed', detail: String(err) }, { status: 500 });
   }
 }
+
+export const GET = withCdnCache(handler, 30);

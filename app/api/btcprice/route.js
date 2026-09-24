@@ -4,11 +4,13 @@
 // candle close (the /api/ema route's price is a daily-candle close, fine for
 // EMAs but a step removed from "what is BTC trading at right now").
 
+import { withCdnCache } from '../../lib/cdnCache';
+
 export const dynamic = 'force-dynamic';
 
 const KRAKEN_TICKER_URL = 'https://api.kraken.com/0/public/Ticker?pair=XBTUSD';
 
-export async function GET() {
+async function handler() {
   try {
     const res = await fetch(KRAKEN_TICKER_URL, { next: { revalidate: 30 } });
     if (!res.ok) {
@@ -39,3 +41,5 @@ export async function GET() {
     return Response.json({ error: err.message || 'Fetch failed', detail: String(err) }, { status: 500 });
   }
 }
+
+export const GET = withCdnCache(handler, 30);

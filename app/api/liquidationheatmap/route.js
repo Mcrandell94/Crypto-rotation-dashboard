@@ -12,6 +12,7 @@
 
 import { PAIRS, fetchCandles } from '../../lib/kraken';
 import { runLiquidationHeatmap } from '../../lib/liquidationHeatmap';
+import { withCdnCache } from '../../lib/cdnCache';
 
 export const dynamic = 'force-dynamic';
 
@@ -51,7 +52,7 @@ async function fetchOiHistory(apiKey) {
   return rows;
 }
 
-export async function GET() {
+async function handler() {
   const apiKey = process.env.COINGLASS_API_KEY;
   if (!apiKey) {
     return Response.json(
@@ -118,3 +119,5 @@ export async function GET() {
     );
   }
 }
+
+export const GET = withCdnCache(handler, 900);

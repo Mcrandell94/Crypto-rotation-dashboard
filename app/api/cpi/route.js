@@ -37,13 +37,15 @@
 // one-element array, so both are handled. bls.gov itself is unreachable
 // from this sandbox like most providers hit this session.
 
+import { withCdnCache } from '../../lib/cdnCache';
+
 export const dynamic = 'force-dynamic';
 
 const SERIES_ID = 'CUUR0000SA0';
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const SERIES_URL = `https://api.bls.gov/publicAPI/v1/timeseries/data/${SERIES_ID}`;
 
-export async function GET() {
+async function handler() {
   try {
     const res = await fetch(SERIES_URL, {
       headers: { Accept: 'application/json' },
@@ -117,3 +119,5 @@ export async function GET() {
     return Response.json({ error: err.message || 'Fetch failed', detail: String(err) }, { status: 500 });
   }
 }
+
+export const GET = withCdnCache(handler, 3600);

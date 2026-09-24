@@ -7,6 +7,8 @@
 // of it (BOERUKM) stopped updating in 2017, the same staleness trap that
 // ruled out FRED's Japan discount-rate series earlier.
 
+import { withCdnCache } from '../../lib/cdnCache';
+
 export const dynamic = 'force-dynamic';
 
 // { key in the response, FRED series id, display formatting hint }
@@ -127,7 +129,7 @@ async function fetchCoinstatsFng() {
   };
 }
 
-export async function GET() {
+async function handler() {
   const cgKey = process.env.COINGECKO_API_KEY;
   if (!cgKey) {
     return Response.json(
@@ -182,3 +184,5 @@ export async function GET() {
     return Response.json({ error: 'Fetch failed', detail: String(err) }, { status: 500 });
   }
 }
+
+export const GET = withCdnCache(handler, 900);

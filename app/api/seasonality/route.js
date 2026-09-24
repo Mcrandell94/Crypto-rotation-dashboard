@@ -12,6 +12,7 @@
 // at its boundary rather than landing on the exact calendar close.
 
 import { PAIRS, fetchCandles } from '../../lib/kraken';
+import { withCdnCache } from '../../lib/cdnCache';
 
 export const dynamic = 'force-dynamic';
 
@@ -62,7 +63,7 @@ async function seasonalityForPair(pair) {
   };
 }
 
-export async function GET() {
+async function handler() {
   try {
     const [btc, eth] = await Promise.allSettled([
       seasonalityForPair(PAIRS.BTC),
@@ -90,3 +91,5 @@ export async function GET() {
     );
   }
 }
+
+export const GET = withCdnCache(handler, 300);

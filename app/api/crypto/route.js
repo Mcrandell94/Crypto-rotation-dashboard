@@ -3,9 +3,11 @@
 // the client. This is the whole reason a backend route exists instead of calling CoinMarketCap
 // directly from the React page.
 
+import { withCdnCache } from '../../lib/cdnCache';
+
 export const dynamic = 'force-dynamic';
 
-export async function GET(request) {
+async function handler(request) {
   const apiKey = process.env.CMC_API_KEY;
 
   if (!apiKey) {
@@ -73,3 +75,5 @@ export async function GET(request) {
     return Response.json({ error: 'Fetch failed', detail: String(err) }, { status: 500 });
   }
 }
+
+export const GET = withCdnCache(handler, 60);

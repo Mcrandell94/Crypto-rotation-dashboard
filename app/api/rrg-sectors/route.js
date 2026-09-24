@@ -17,6 +17,7 @@
 import { COINGECKO_IDS } from '../../lib/coingecko-ids';
 import { fetchDailyPrices } from '../../lib/coingecko-history';
 import { SECTORS } from '../../lib/sectors';
+import { withCdnCache } from '../../lib/cdnCache';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,7 +32,7 @@ function composite(dayMaps, commonDays) {
   });
 }
 
-export async function GET(request) {
+async function handler(request) {
   const apiKey = process.env.COINGECKO_API_KEY;
   if (!apiKey) {
     return Response.json(
@@ -99,3 +100,5 @@ export async function GET(request) {
     );
   }
 }
+
+export const GET = withCdnCache(handler, 900);

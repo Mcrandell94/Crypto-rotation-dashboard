@@ -15,6 +15,8 @@
 // ($699+/mo) — deliberately not used here, and not silently pretended to
 // exist; see the panel's own footer note.
 
+import { withCdnCache } from '../../lib/cdnCache';
+
 export const dynamic = 'force-dynamic';
 
 const BASE_URL = 'https://open-api-v4.coinglass.com/api';
@@ -84,7 +86,7 @@ async function fetchOiForSymbol(symbol, apiKey) {
   return { symbol, totalUsd, byExchange };
 }
 
-export async function GET() {
+async function handler() {
   const apiKey = process.env.COINGLASS_API_KEY;
   if (!apiKey) {
     return Response.json(
@@ -106,3 +108,5 @@ export async function GET() {
     );
   }
 }
+
+export const GET = withCdnCache(handler, 300);

@@ -45,6 +45,8 @@ export default function FundingOI({ data, symbols }) {
       <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '4px 0 16px' }}>
         Live perpetual funding rate and open interest, ranked by how extreme the funding rate is.
         Positive funding = longs pay shorts (crowded long); negative = shorts pay longs.
+        Annualized shows what the current rate would cost (or earn) over a full year — a gauge of how
+        stretched positioning is, not a forecast.
       </p>
 
       {rows.length === 0 ? (
