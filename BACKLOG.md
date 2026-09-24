@@ -40,15 +40,18 @@ failing source shows up without someone having to notice it.
   it's published (current coverage ends Dec 2026).
 
 ## Working notes (for future sessions)
-- **Production domain:** `https://crypto-rotation-dashboard-xi.vercel.app` is
-  public. Use it for live checks. Per-deployment URLs
-  (`…-<hash>-onchain4.vercel.app`) sit behind Vercel Authentication and
-  redirect to a login.
-- **Checking a branch preview before merging:** the project has a Protection
+- **Production domain:** `https://crypto-rotation-dashboard-xi.vercel.app`.
+  It is NOT public: Vercel Authentication is set to protect all deployments
+  (`ssoProtection.deploymentType: "all"`), production included, so only
+  logged-in members of the Vercel team can open it. The Vercel connector's
+  fetch tool sometimes gets through via a temporary share link, but not
+  reliably. Use the bypass header below for any automated check,
+  production or preview.
+- **Checking deployments (production or a branch preview):** the project has a Protection
   Bypass for Automation secret. It's stored in the Claude environment's
   settings as `VERCEL_AUTOMATION_BYPASS_SECRET`, with `*.vercel.app` allowed
   under Network access. Send it as the `x-vercel-protection-bypass` header on
-  requests to a preview URL. Never print it or commit it. Environment settings
+  requests to any deployment URL. Never print it or commit it. Environment settings
   only load when a session starts, so a session opened before they were added
   won't see them. If the secret leaks, regenerate it in Vercel → Deployment
   Protection.
