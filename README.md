@@ -57,6 +57,22 @@ npm run dev
 Then open http://localhost:3000 — you should see live prices. This confirms everything works
 before it's public.
 
+## Before merging a PR: verify the preview deployment
+
+Vercel Authentication protects preview deployments, so a preview URL opened without
+credentials just shows a login page — that includes plain `curl`. Don't trust "the
+preview looks up" without checking; confirm the API routes actually return data:
+
+```
+VERCEL_AUTOMATION_BYPASS_SECRET=<value from Vercel project settings> \
+  ./scripts/check-preview.sh <preview-deployment-url> /api/cpi
+```
+
+This sends the `x-vercel-protection-bypass` header (and follows the redirect that sets
+the bypass cookie), so it hits the real route instead of the login redirect. Swap in
+whichever API path is relevant to the change. A non-200 here means something's broken
+on the preview even if the UI renders.
+
 ## After this is live
 
 Come back and we'll port over the next piece of the original dashboard — AI Market Vibe scoring
