@@ -98,4 +98,16 @@ export const COINGECKO_IDS = {
   QNT: 'quant-network',
   CFG: 'centrifuge-2',
   TRU: 'truefi',
+
+  // Gaming — ids checked against CoinGecko's markets data (name + symbol).
+  IMX: 'immutable-x',
+  GALA: 'gala',
+  SAND: 'the-sandbox',
+  AXS: 'axie-infinity',
+  MANA: 'decentraland',
+  RON: 'ronin',
+  BEAMX: 'beam-2', // Beam gaming network (Merit Circle) — not Privacy's BEAM ("beam")
+  PRIME: 'echelon-prime',
+  ILV: 'illuvium',
+  APE: 'apecoin',
 };

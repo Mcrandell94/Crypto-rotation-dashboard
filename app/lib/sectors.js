@@ -16,6 +16,10 @@ export const SECTORS = [
     tickers: ['DOGE', 'SHIB', 'PEPE', 'WIF', 'FLOKI', 'BONK', 'BRETT', 'POPCAT', 'MOG', 'TURBO'] },
   { key: 'rwa', label: 'Enterprise / RWA',
     tickers: ['HBAR', 'ONDO', 'ALGO', 'XDC', 'POLYX', 'VET', 'QNT', 'CFG', 'TRU'] },
+  // BEAMX is Beam the gaming network (CoinGecko `beam-2`), kept distinct
+  // from Privacy's BEAM (the Mimblewimble coin, `beam`).
+  { key: 'gaming', label: 'Gaming',
+    tickers: ['IMX', 'GALA', 'SAND', 'AXS', 'MANA', 'RON', 'BEAMX', 'PRIME', 'ILV', 'APE'] },
 ];
 
 // BTC and ETH are the only benchmarks with a wired-up live data source

@@ -269,6 +269,12 @@ export default function DashboardHome() {
                   No live data for: {rotation.rrgSectorsData.failed.join(', ')} — skipped.
                 </p>
               )}
+              {rotation.rrgSectorsData?.tickersFailed?.length > 0 && (
+                <p style={{ fontSize: 11, color: '#6E767B', marginTop: 8 }}>
+                  Couldn&apos;t fetch {rotation.rrgSectorsData.tickersFailed.join(', ')} this refresh — their
+                  sectors are averaged from the remaining members.
+                </p>
+              )}
             </>
           )}
 
