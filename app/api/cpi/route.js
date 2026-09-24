@@ -40,6 +40,7 @@
 export const dynamic = 'force-dynamic';
 
 const SERIES_ID = 'CUUR0000SA0';
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const SERIES_URL = `https://api.bls.gov/publicAPI/v1/timeseries/data/${SERIES_ID}`;
 
 export async function GET() {
@@ -73,6 +74,10 @@ export async function GET() {
         periodName: d.periodName,
         value: Number(d.value),
       }))
+      // BLS marks months it never collected with "-" (e.g. October 2025,
+      // lost to the federal shutdown; BLS won't publish it). Drop them
+      // rather than letting NaN through — nothing is filled in.
+      .filter((p) => Number.isFinite(p.value))
       .sort((a, b) => (a.year - b.year) || (a.month - b.month));
 
     if (points.length === 0) {
@@ -83,15 +88,29 @@ export async function GET() {
       );
     }
 
+    // Comparisons look up the exact calendar month, so a gap BLS left blank
+    // yields null plus the missing month's label — never a comparison
+    // against the wrong month.
+    const monthIndex = (p) => p.year * 12 + (p.month - 1);
     const latest = points[points.length - 1];
-    const yearAgo = points.find((p) => p.year === latest.year - 1 && p.month === latest.month);
-    const priorMonth = points[points.length - 2];
+    const findMonth = (idx) => points.find((p) => monthIndex(p) === idx);
+    const labelFor = (idx) => `${MONTH_NAMES[idx % 12]} ${Math.floor(idx / 12)}`;
+    const yearAgoIdx = monthIndex(latest) - 12;
+    const priorIdx = monthIndex(latest) - 1;
+    const yearAgo = findMonth(yearAgoIdx);
+    const priorMonth = findMonth(priorIdx);
     const yoyPct = yearAgo ? Math.round(((latest.value / yearAgo.value) - 1) * 1000) / 10 : null;
     const momPct = priorMonth ? Math.round(((latest.value / priorMonth.value) - 1) * 1000) / 10 : null;
 
     return Response.json({
-      latest: { ...latest, yoyPct, momPct },
-      history: points.slice(-13),
+      latest: {
+        ...latest,
+        yoyPct,
+        momPct,
+        yoyMissingMonth: yearAgo ? null : labelFor(yearAgoIdx),
+        momMissingMonth: priorMonth ? null : labelFor(priorIdx),
+      },
+      history: points.filter((p) => monthIndex(p) > monthIndex(latest) - 13),
       fetchedAt: new Date().toISOString(),
     });
   } catch (err) {

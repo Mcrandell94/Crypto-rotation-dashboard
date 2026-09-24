@@ -11,6 +11,12 @@ const AMBER = '#C9A66B';
 const GAIN = '#7FA37F';
 const LOSS = '#A85D4F';
 
+// "October 2025" -> "Oct 2025"
+function shortMonth(label) {
+  const [month, year] = label.split(' ');
+  return `${month.slice(0, 3)} ${year}`;
+}
+
 const FNG_SOURCES = [
   { key: 'altme', label: 'alternative.me' },
   { key: 'coinstats', label: 'CoinStats' },
@@ -112,8 +118,13 @@ export default function MacroSentiment({ data, cpiData, cpiError }) {
         {cpiData?.latest && (
           <StatTile
             label={`CPI YoY (${cpiData.latest.periodName} ${cpiData.latest.year})`}
-            value={cpiData.latest.yoyPct != null ? `${cpiData.latest.yoyPct}%` : '—'}
-            sub={cpiData.latest.momPct != null ? `${cpiData.latest.momPct > 0 ? '+' : ''}${cpiData.latest.momPct}% MoM` : undefined}
+            value={cpiData.latest.yoyPct != null ? `${cpiData.latest.yoyPct}%` : 'n/a'}
+            sub={[
+              cpiData.latest.yoyMissingMonth ? `YoY n/a — BLS has no ${shortMonth(cpiData.latest.yoyMissingMonth)} reading` : null,
+              cpiData.latest.momPct != null
+                ? `${cpiData.latest.momPct > 0 ? '+' : ''}${cpiData.latest.momPct}% MoM`
+                : cpiData.latest.momMissingMonth ? `MoM n/a — BLS has no ${shortMonth(cpiData.latest.momMissingMonth)} reading` : null,
+            ].filter(Boolean).join(' · ') || undefined}
           />
         )}
         {rates?.treasury10y && (
