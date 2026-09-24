@@ -11,6 +11,7 @@
 export const dynamic = 'force-dynamic';
 
 import { fetchCoinLobster, extractArray, pick, normalizeTimeMs } from '../../lib/coinlobster';
+import { withCdnCache } from '../../lib/cdnCache';
 
 const CHAIN_EXPLORERS = {
   ethereum: 'https://etherscan.io',
@@ -20,7 +21,7 @@ const CHAIN_EXPLORERS = {
   arb: 'https://arbiscan.io',
 };
 
-export async function GET() {
+async function handler() {
   const apiKey = process.env.COINLOBSTER_API_KEY;
   if (!apiKey) {
     return Response.json(
@@ -72,3 +73,5 @@ export async function GET() {
     );
   }
 }
+
+export const GET = withCdnCache(handler, 120);

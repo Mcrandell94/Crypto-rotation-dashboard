@@ -63,6 +63,7 @@
 // CoinLobster and Notable Wallet Activity's Solana leg (see
 // app/lib/apiParsing.js) — used by the Tron/Solana parsers below.
 import { pick as pickField, extractArray as extractRows, normalizeTimeMs as normalizeMs, scaleAmount } from '../../lib/apiParsing';
+import { withCdnCache } from '../../lib/cdnCache';
 
 export const dynamic = 'force-dynamic';
 
@@ -275,7 +276,7 @@ async function fetchMints(token, apiKey, latestBlock) {
   return { chain: 'Ethereum', symbol: token.symbol, mints };
 }
 
-export async function GET() {
+async function handler() {
   const etherscanKey = process.env.ETHERSCAN_API_KEY;
   const tronscanKey = process.env.TRONSCAN_API_KEY;
 
@@ -344,3 +345,5 @@ export async function GET() {
     return Response.json({ error: err.message || 'Fetch failed', detail: String(err) }, { status: 500 });
   }
 }
+
+export const GET = withCdnCache(handler, 60);

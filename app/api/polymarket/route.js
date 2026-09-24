@@ -12,6 +12,8 @@
 // search-by-timeframe endpoint — Polymarket's own reference agent code
 // fetches broadly by tag and filters client-side the same way.
 
+import { withCdnCache } from '../../lib/cdnCache';
+
 export const dynamic = 'force-dynamic';
 
 const GAMMA_BASE = 'https://gamma-api.polymarket.com';
@@ -77,7 +79,7 @@ function parseMarket(market) {
   return { label: market.groupItemTitle || market.question, outcome: outcomes[idx], pct };
 }
 
-export async function GET() {
+async function handler() {
   try {
     const events = await fetchEvents();
     const buckets = { daily: null, weekly: null, monthly: null, yearly: null };
@@ -123,3 +125,5 @@ export async function GET() {
     );
   }
 }
+
+export const GET = withCdnCache(handler, 120);

@@ -10,6 +10,8 @@
 // same underlying idea (breadth of outperformance vs BTC), honestly
 // different lookback than the original index.
 
+import { withCdnCache } from '../../lib/cdnCache';
+
 export const dynamic = 'force-dynamic';
 
 const STABLECOIN_IDS = new Set([
@@ -20,7 +22,7 @@ const STABLECOIN_IDS = new Set([
 
 const TOP_N = 50;
 
-export async function GET() {
+async function handler() {
   const apiKey = process.env.COINGECKO_API_KEY;
   if (!apiKey) {
     return Response.json(
@@ -70,3 +72,5 @@ export async function GET() {
     return Response.json({ error: 'Fetch failed', detail: String(err) }, { status: 500 });
   }
 }
+
+export const GET = withCdnCache(handler, 1800);

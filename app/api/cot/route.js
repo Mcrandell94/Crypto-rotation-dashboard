@@ -6,6 +6,8 @@
 // Contract: CME Bitcoin futures, CFTC contract market code 133741
 // ("BITCOIN - CHICAGO MERCANTILE EXCHANGE").
 
+import { withCdnCache } from '../../lib/cdnCache';
+
 export const dynamic = 'force-dynamic';
 
 const CFTC_BASE = 'https://publicreporting.cftc.gov/resource/6dca-aqww.json';
@@ -18,7 +20,7 @@ function num(v) {
   return Number.isFinite(n) ? n : 0;
 }
 
-export async function GET() {
+async function handler() {
   try {
     const fields = [
       'report_date_as_yyyy_mm_dd',
@@ -94,3 +96,5 @@ export async function GET() {
     return Response.json({ error: 'Fetch failed', detail: String(err) }, { status: 500 });
   }
 }
+
+export const GET = withCdnCache(handler, 3600);

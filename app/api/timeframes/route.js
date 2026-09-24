@@ -8,6 +8,7 @@
 // comparison instead, which is strictly more accurate than what it replaces.
 
 import { PAIRS, fetchCandles } from '../../lib/kraken';
+import { withCdnCache } from '../../lib/cdnCache';
 
 // No searchParams here (unlike the other routes), so without this Next.js
 // would statically optimize the route at build time and bake in whatever
@@ -75,7 +76,7 @@ function sma(values, period) {
   return s.reduce((a, b) => a + b, 0) / s.length;
 }
 
-export async function GET() {
+async function handler() {
   try {
     const assets = {};
     const failed = [];
@@ -115,3 +116,5 @@ export async function GET() {
     );
   }
 }
+
+export const GET = withCdnCache(handler, 300);

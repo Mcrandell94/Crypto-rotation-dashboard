@@ -16,6 +16,7 @@
 // take the strike that minimizes that total.
 
 import { FOMC_MEETINGS, decisionDateTime } from '../../lib/fomc-calendar';
+import { withCdnCache } from '../../lib/cdnCache';
 
 export const dynamic = 'force-dynamic';
 
@@ -203,7 +204,7 @@ async function fetchOptionsForCurrency(currency) {
     };
 }
 
-export async function GET() {
+async function handler() {
   try {
     const [btc, eth] = await Promise.allSettled([
       fetchOptionsForCurrency('BTC'),
@@ -231,3 +232,5 @@ export async function GET() {
     );
   }
 }
+
+export const GET = withCdnCache(handler, 600);

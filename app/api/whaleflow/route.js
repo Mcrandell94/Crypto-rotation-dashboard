@@ -13,8 +13,9 @@
 export const dynamic = 'force-dynamic';
 
 import { fetchCoinLobster, extractArray, pick, normalizeTimeMs } from '../../lib/coinlobster';
+import { withCdnCache } from '../../lib/cdnCache';
 
-export async function GET(request) {
+async function handler(request) {
   const apiKey = process.env.COINLOBSTER_API_KEY;
   if (!apiKey) {
     return Response.json(
@@ -57,3 +58,5 @@ export async function GET(request) {
     );
   }
 }
+
+export const GET = withCdnCache(handler, 300);

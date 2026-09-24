@@ -11,6 +11,8 @@
 // fails loudly with a raw sample of the actual response if none match,
 // rather than silently rendering an empty or broken list.
 
+import { withCdnCache } from '../../lib/cdnCache';
+
 export const dynamic = 'force-dynamic';
 
 const BASE_URL = 'https://openapiv1.coinstats.app';
@@ -22,7 +24,7 @@ function pick(obj, keys) {
   return null;
 }
 
-export async function GET() {
+async function handler() {
   const apiKey = process.env.COINSTATS_API_KEY;
   if (!apiKey) {
     return Response.json(
@@ -83,3 +85,5 @@ export async function GET() {
     return Response.json({ error: 'Fetch failed', detail: String(err) }, { status: 500 });
   }
 }
+
+export const GET = withCdnCache(handler, 900);

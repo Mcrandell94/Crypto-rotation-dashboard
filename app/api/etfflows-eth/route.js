@@ -9,11 +9,13 @@
 // docs repo (github.com/coinglass-official/coinglass-api-docs) instead of
 // guessed.
 
+import { withCdnCache } from '../../lib/cdnCache';
+
 export const dynamic = 'force-dynamic';
 
 const BASE_URL = 'https://open-api-v4.coinglass.com/api';
 
-export async function GET() {
+async function handler() {
   const apiKey = process.env.COINGLASS_API_KEY;
   if (!apiKey) {
     return Response.json(
@@ -61,3 +63,5 @@ export async function GET() {
     return Response.json({ error: 'Fetch failed', detail: String(err) }, { status: 500 });
   }
 }
+
+export const GET = withCdnCache(handler, 1800);

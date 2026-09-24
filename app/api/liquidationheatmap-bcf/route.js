@@ -16,6 +16,8 @@
 // with 0-1 normalized intensities — and fails loudly with a raw response
 // sample if none match, rather than silently rendering something broken.
 
+import { withCdnCache } from '../../lib/cdnCache';
+
 export const dynamic = 'force-dynamic';
 
 const BASE_URL = 'https://api.bitcoincounterflow.com/api';
@@ -61,7 +63,7 @@ function parseRows(json) {
   return null;
 }
 
-export async function GET() {
+async function handler() {
   const apiKey = process.env.BITCOINCOUNTERFLOW_API_KEY;
   if (!apiKey) {
     return Response.json(
@@ -126,3 +128,5 @@ export async function GET() {
     return Response.json({ error: err.message || 'Fetch failed', detail: String(err) }, { status: 500 });
   }
 }
+
+export const GET = withCdnCache(handler, 900);

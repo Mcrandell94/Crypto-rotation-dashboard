@@ -7,11 +7,13 @@
 // backend/services/sosovalue.py), not guessed — same standard as reading
 // Hyperliquid's own Python SDK source for the Funding/OI route.
 
+import { withCdnCache } from '../../lib/cdnCache';
+
 export const dynamic = 'force-dynamic';
 
 const BASE_URL = 'https://openapi.sosovalue.com/openapi/v1';
 
-export async function GET() {
+async function handler() {
   const apiKey = process.env.SOSOVALUE_API_KEY;
   if (!apiKey) {
     return Response.json(
@@ -62,3 +64,5 @@ export async function GET() {
     return Response.json({ error: 'Fetch failed', detail: String(err) }, { status: 500 });
   }
 }
+
+export const GET = withCdnCache(handler, 1800);

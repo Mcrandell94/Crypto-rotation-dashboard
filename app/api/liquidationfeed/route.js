@@ -18,6 +18,8 @@
 // of view), so it's located by scanning `data` for its one array-valued
 // property rather than a hardcoded key.
 
+import { withCdnCache } from '../../lib/cdnCache';
+
 export const dynamic = 'force-dynamic';
 
 const BASE_URL = 'https://marginpad.io';
@@ -29,7 +31,7 @@ function pick(obj, keys) {
   return null;
 }
 
-export async function GET() {
+async function handler() {
   try {
     const res = await fetch(`${BASE_URL}/api/v1/liquidations`, {
       headers: { Accept: 'application/json' },
@@ -95,3 +97,5 @@ export async function GET() {
     return Response.json({ error: err.message || 'Fetch failed', detail: String(err) }, { status: 500 });
   }
 }
+
+export const GET = withCdnCache(handler, 60);

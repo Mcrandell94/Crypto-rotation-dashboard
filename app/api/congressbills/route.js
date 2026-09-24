@@ -13,6 +13,8 @@
 // under a `bill` key with `latestAction`) is from the API's own published
 // schema, not guessed.
 
+import { withCdnCache } from '../../lib/cdnCache';
+
 export const dynamic = 'force-dynamic';
 
 const BASE_URL = 'https://api.congress.gov/v3';
@@ -50,7 +52,7 @@ async function fetchBill(bill, apiKey) {
   };
 }
 
-export async function GET() {
+async function handler() {
   const apiKey = process.env.DATAGOV_API_KEY;
   if (!apiKey) {
     return Response.json(
@@ -66,3 +68,5 @@ export async function GET() {
     return Response.json({ error: err.message || 'Fetch failed', detail: String(err) }, { status: 500 });
   }
 }
+
+export const GET = withCdnCache(handler, 3600);

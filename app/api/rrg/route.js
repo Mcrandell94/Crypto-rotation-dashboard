@@ -6,6 +6,7 @@
 
 import { COINGECKO_IDS } from '../../lib/coingecko-ids';
 import { fetchDailyPrices as fetchDailyPricesById } from '../../lib/coingecko-history';
+import { withCdnCache } from '../../lib/cdnCache';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,7 +14,7 @@ function fetchDailyPrices(symbol, apiKey) {
   return fetchDailyPricesById(COINGECKO_IDS[symbol], apiKey);
 }
 
-export async function GET(request) {
+async function handler(request) {
   const apiKey = process.env.COINGECKO_API_KEY;
   if (!apiKey) {
     return Response.json(
@@ -72,3 +73,5 @@ export async function GET(request) {
     );
   }
 }
+
+export const GET = withCdnCache(handler, 900);
