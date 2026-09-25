@@ -5,13 +5,13 @@
 // windows, z-score toggle, scrubber) don't need a refetch per change.
 
 import { COINGECKO_IDS } from '../../lib/coingecko-ids';
-import { fetchDailyPrices as fetchDailyPricesById } from '../../lib/coingecko-history';
+import { fetchDailyHistory } from '../../lib/coingecko-history';
 import { withCdnCache } from '../../lib/cdnCache';
 
 export const dynamic = 'force-dynamic';
 
-function fetchDailyPrices(symbol, apiKey) {
-  return fetchDailyPricesById(COINGECKO_IDS[symbol], apiKey);
+function fetchHistory(symbol, apiKey) {
+  return fetchDailyHistory(COINGECKO_IDS[symbol], apiKey);
 }
 
 async function handler(request) {
@@ -39,7 +39,7 @@ async function handler(request) {
 
   try {
     const allSymbols = [benchmark, ...symbols];
-    const results = await Promise.allSettled(allSymbols.map((sym) => fetchDailyPrices(sym, apiKey)));
+    const results = await Promise.allSettled(allSymbols.map((sym) => fetchHistory(sym, apiKey)));
 
     const failed = [...unmapped];
     const mapBySymbol = {};
@@ -54,18 +54,23 @@ async function handler(request) {
     }
 
     const okSymbols = symbols.filter((s) => mapBySymbol[s]);
-    let commonDays = [...mapBySymbol[benchmark].keys()];
+    let commonDays = [...mapBySymbol[benchmark].prices.keys()];
     for (const sym of okSymbols) {
-      commonDays = commonDays.filter((d) => mapBySymbol[sym].has(d));
+      commonDays = commonDays.filter((d) => mapBySymbol[sym].prices.has(d));
     }
     commonDays.sort();
 
+    // Daily USD volume alongside price (same CoinGecko response) for the
+    // RRG's optional volume-confirmation overlay; null where a day's
+    // volume is missing rather than a filled-in guess.
     const prices = {};
+    const volumes = {};
     for (const sym of [benchmark, ...okSymbols]) {
-      prices[sym] = commonDays.map((d) => mapBySymbol[sym].get(d));
+      prices[sym] = commonDays.map((d) => mapBySymbol[sym].prices.get(d));
+      volumes[sym] = commonDays.map((d) => mapBySymbol[sym].volumes.get(d) ?? null);
     }
 
-    return Response.json({ benchmark, days: commonDays, prices, failed, fetchedAt: new Date().toISOString() });
+    return Response.json({ benchmark, days: commonDays, prices, volumes, failed, fetchedAt: new Date().toISOString() });
   } catch (err) {
     return Response.json(
       { error: err.message || 'Fetch failed', detail: err.detail || String(err) },

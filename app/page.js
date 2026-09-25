@@ -234,7 +234,7 @@ export default function DashboardHome() {
               </div>
             ) : (
               <>
-                <RelativeRotationGraph data={rotation.rrgData} symbols={sectorTickers} benchmark={benchmark} />
+                <RelativeRotationGraph data={rotation.rrgData} symbols={sectorTickers} benchmark={benchmark} funding={rotation.fundingData?.data} />
                 {rotation.rrgData?.failed?.length > 0 && (
                   <p style={{ fontSize: 11, color: '#6E767B', marginTop: 8 }}>
                     No live data for: {rotation.rrgData.failed.join(', ')} — skipped.
@@ -260,6 +260,7 @@ export default function DashboardHome() {
               <RelativeRotationGraph
                 data={rotation.rrgSectorsData}
                 symbols={SECTORS.map((s) => s.label)}
+                labelFor={(label) => SECTORS.find((s) => s.label === label)?.short || label}
                 benchmark={benchmark}
                 assetLabel="index"
                 assetFormat={(v) => v?.toFixed(3)}

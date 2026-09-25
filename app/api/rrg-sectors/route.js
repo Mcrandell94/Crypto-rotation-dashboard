@@ -7,7 +7,9 @@
 // Each sector's composite is an equal-weighted average of its representative
 // tickers' *normalized* returns (each ticker rebased to 1.0 at the start of
 // the window, then averaged day by day) — not a raw price average, which
-// would let a single high-priced token dominate the sector's shape.
+// would let a single high-priced token dominate the sector's shape. A
+// cap-weighted version (members weighted by day-0 market cap) is returned
+// alongside as `pricesCapWeighted` for the chart's optional toggle.
 //
 // Fetching full daily history for every ticker in every sector (70+ ids)
 // would risk CoinGecko's Demo-tier rate limit in one burst, so each sector
@@ -15,22 +17,14 @@
 // prominent names per sector in app/lib/sectors.js) rather than all of them.
 
 import { COINGECKO_IDS } from '../../lib/coingecko-ids';
-import { fetchDailyPrices } from '../../lib/coingecko-history';
+import { fetchDailyHistory } from '../../lib/coingecko-history';
+import { equalWeightComposite, capWeightComposite, capWeights } from '../../lib/rrgOverlays';
 import { SECTORS } from '../../lib/sectors';
 import { withCdnCache } from '../../lib/cdnCache';
 
 export const dynamic = 'force-dynamic';
 
 const TICKERS_PER_SECTOR = 4;
-
-function composite(dayMaps, commonDays) {
-  return commonDays.map((day, i) => {
-    const ratios = dayMaps
-      .map((m) => (i === 0 ? 1 : m.get(day) / m.get(commonDays[0])))
-      .filter((r) => Number.isFinite(r));
-    return ratios.reduce((a, b) => a + b, 0) / ratios.length;
-  });
-}
 
 async function handler(request) {
   const apiKey = process.env.COINGECKO_API_KEY;
@@ -53,7 +47,7 @@ async function handler(request) {
   try {
     const allSymbols = [benchmark, ...allTickers];
     const results = await Promise.allSettled(
-      allSymbols.map((sym) => fetchDailyPrices(COINGECKO_IDS[sym], apiKey))
+      allSymbols.map((sym) => fetchDailyHistory(COINGECKO_IDS[sym], apiKey))
     );
 
     const mapBySymbol = {};
@@ -69,11 +63,19 @@ async function handler(request) {
     }
 
     const okTickers = allTickers.filter((t) => mapBySymbol[t]);
-    let commonDays = [...mapBySymbol[benchmark].keys()];
-    for (const t of okTickers) commonDays = commonDays.filter((d) => mapBySymbol[t].has(d));
+    let commonDays = [...mapBySymbol[benchmark].prices.keys()];
+    for (const t of okTickers) commonDays = commonDays.filter((d) => mapBySymbol[t].prices.has(d));
     commonDays.sort();
 
-    const prices = { [benchmark]: commonDays.map((d) => mapBySymbol[benchmark].get(d)) };
+    // Two composites per sector, both rebased to 1.0 on day 0: equal-weighted
+    // (each member counts the same) and cap-weighted (weighted by each
+    // member's market cap on day 0). Plus the sector's summed daily volume
+    // for the volume overlay, and the cap weights so the UI can show them.
+    const benchPrices = commonDays.map((d) => mapBySymbol[benchmark].prices.get(d));
+    const prices = { [benchmark]: benchPrices };
+    const pricesCapWeighted = { [benchmark]: benchPrices };
+    const volumes = {};
+    const memberWeights = {};
     const failed = [];
     SECTORS.forEach((sector, i) => {
       const tickers = sectorTickers[i].filter((t) => mapBySymbol[t]);
@@ -81,14 +83,24 @@ async function handler(request) {
         failed.push(sector.label);
         return;
       }
-      const dayMaps = tickers.map((t) => mapBySymbol[t]);
-      prices[sector.label] = composite(dayMaps, commonDays);
+      const series = tickers.map((t) => commonDays.map((d) => mapBySymbol[t].prices.get(d)));
+      const day0Caps = tickers.map((t) => mapBySymbol[t].caps.get(commonDays[0]) ?? null);
+      prices[sector.label] = equalWeightComposite(series);
+      pricesCapWeighted[sector.label] = capWeightComposite(series, day0Caps) || prices[sector.label];
+      volumes[sector.label] = commonDays.map((d) => {
+        const vs = tickers.map((t) => mapBySymbol[t].volumes.get(d));
+        return vs.every((v) => Number.isFinite(v)) ? vs.reduce((a, b) => a + b, 0) : null;
+      });
+      memberWeights[sector.label] = Object.fromEntries(tickers.map((t, k) => [t, capWeights(day0Caps)[k]]));
     });
 
     return Response.json({
       benchmark,
       days: commonDays,
       prices,
+      pricesCapWeighted,
+      volumes,
+      memberWeights,
       sectorMembers: Object.fromEntries(SECTORS.map((s, i) => [s.label, sectorTickers[i]])),
       failed,
       // Individual members that failed (e.g. a CoinGecko 429 in the burst):

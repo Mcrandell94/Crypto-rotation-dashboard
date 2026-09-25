@@ -1,6 +1,10 @@
 'use client';
 
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import {
+  computeSeries, firstValidIndex, quadrantOf, countFlips, quadrantStreak, heading, RRG_PRESETS,
+} from '../lib/rrgMath';
+import { relativeVolume, absoluteTrend, fundingFlag, FUNDING_HOT } from '../lib/rrgOverlays';
 
 const TEXT_PRIMARY = '#E7E4DD';
 const TEXT_SECONDARY = '#8B9298';
@@ -8,7 +12,9 @@ const TEXT_MUTED = '#6E767B';
 const CARD_BG = '#171D21';
 const CARD_BORDER = '#2A3136';
 const PLOT_BG = '#141A1D';
-const GRID = '#333B40';
+const GRID = '#222A2F'; // hairline, one step off the plot surface
+const AXIS_100 = '#46525A'; // the benchmark lines — the only emphasized rules
+const ACCENT = '#C9A66B';
 
 const QUADRANTS = {
   leading: { name: 'Leading', color: '#7FA37F' },
@@ -16,497 +22,1030 @@ const QUADRANTS = {
   lagging: { name: 'Lagging', color: '#A85D4F' },
   improving: { name: 'Improving', color: '#5E8FA8' },
 };
+// Laid out like the chart itself: top row Improving | Leading, bottom row
+// Lagging | Weakening. Rotation is normally clockwise through them.
+const QUADRANT_GRID = ['improving', 'leading', 'lagging', 'weakening'];
+const QUADRANT_SORT = { leading: 0, improving: 1, weakening: 2, lagging: 3 };
 
-// The first 3 hues clear the all-pairs CVD/contrast checks on their own; past
-// that, a scatter chart can't keep every pair distinct by hue alone (verified
-// with the dataviz palette validator — see project notes). Sectors here run
-// up to 14 tickers, well past that cap, so color is a secondary channel:
-// identity is carried primarily by the always-visible ticker label next to
-// each dot, the click-to-hide legend, and the pin-for-detail view. Color +
-// shape are cycled together (8 hues x 2 shapes = 16 combinations) so no two
-// tickers in the same sector ever share both.
+// Series identity: 8 dark-mode categorical hues x 2 marker shapes. Scatter
+// can't keep more than ~3 series apart by hue alone (dataviz palette
+// validator, all-pairs), so identity is carried by the ticker label, the
+// legend, and focus mode (hover or pin one series, the rest dim). Color is
+// keyed to the ticker's position in the sector list, so a ticker that fails
+// to load doesn't repaint the others.
 const CATEGORICAL_HUES = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300', '#9085e9', '#e66767'];
 function seriesStyleFor(index) {
+  const i = Math.max(0, index);
   return {
-    color: CATEGORICAL_HUES[index % CATEGORICAL_HUES.length],
-    shape: Math.floor(index / CATEGORICAL_HUES.length) % 2 === 0 ? 'circle' : 'diamond',
+    color: CATEGORICAL_HUES[i % CATEGORICAL_HUES.length],
+    shape: Math.floor(i / CATEGORICAL_HUES.length) % 2 === 0 ? 'circle' : 'diamond',
   };
 }
 
-function sma(arr, i, w) {
-  const s = arr.slice(Math.max(0, i - w + 1), i + 1);
-  return s.reduce((a, b) => a + b, 0) / s.length;
-}
-function stdev(arr, i, w) {
-  const s = arr.slice(Math.max(0, i - w + 1), i + 1);
-  if (s.length < 2) return 0;
-  const m = s.reduce((a, b) => a + b, 0) / s.length;
-  return Math.sqrt(s.reduce((a, b) => a + (b - m) ** 2, 0) / (s.length - 1));
-}
-// zscore=false -> ratio-to-average (simple). zscore=true -> JdK-style volatility-normalized.
-function computeSeries(asset, bench, n, m, zscore) {
-  const ratio = asset.map((v, i) => v / bench[i]);
-  const rsRatio = zscore
-    ? ratio.map((r, i) => {
-        const sd = stdev(ratio, i, n);
-        return sd > 0 ? 100 + (r - sma(ratio, i, n)) / sd : 100;
-      })
-    : ratio.map((r, i) => 100 * (r / sma(ratio, i, n)));
-  const rsMom = zscore
-    ? rsRatio.map((r, i) => {
-        const sd = stdev(rsRatio, i, m);
-        return sd > 0 ? 100 + (r - sma(rsRatio, i, m)) / sd : 100;
-      })
-    : rsRatio.map((r, i) => 100 * (r / sma(rsRatio, i, m)));
-  return rsRatio.map((_, i) => ({ x: rsRatio[i], y: rsMom[i] }));
-}
-function quadrantOf(x, y) {
-  if (x >= 100 && y >= 100) return 'leading';
-  if (x >= 100 && y < 100) return 'weakening';
-  if (x < 100 && y < 100) return 'lagging';
-  return 'improving';
-}
-function countFlips(pts) {
-  let f = 0;
-  for (let i = 1; i < pts.length; i++) {
-    if (quadrantOf(pts[i].x, pts[i].y) !== quadrantOf(pts[i - 1].x, pts[i - 1].y)) f++;
-  }
-  return f;
-}
+// Default = the Balanced preset (see RRG_PRESETS in app/lib/rrgMath.js for
+// how the three presets were tuned).
+const DEFAULT_SETTINGS = { zscore: true, ...RRG_PRESETS.find((p) => p.key === 'balanced').settings };
+const SETTINGS_KEY = 'rrgSettings.v2';
+const OVERLAYS_KEY = 'rrgOverlays.v1';
+const TREND_WINDOW = 20; // absolute-trend overlay: price vs its own 20-day average
+const presetMatching = (st) => RRG_PRESETS.find((p) => Object.entries(p.settings).every(([k, v]) => st[k] === v));
+const RECENT_DAYS = 3; // "recent quadrant change" window for the summary
+const RECENT_MAX = 6; // how many recent changes to list before "+N more"
+
 function clamp(v, lo, hi) {
   return Math.min(hi, Math.max(lo, v));
 }
 
-function Marker({ shape, x, y, r, color, ring }) {
-  if (shape === 'diamond') {
-    const d = `M ${x} ${y - r} L ${x + r} ${y} L ${x} ${y + r} L ${x - r} ${y} Z`;
-    return <path d={d} fill={color} stroke={ring} strokeWidth={1.5} />;
+// Axis ticks on a 1/2/5 step ladder (~4-6 per axis), labelled with just
+// enough decimals for the step.
+function ticksFor(lo, hi) {
+  const raw = (hi - lo) / 4;
+  const pow = 10 ** Math.floor(Math.log10(raw));
+  const f = raw / pow;
+  const step = (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * pow;
+  const decimals = Math.max(0, Math.min(3, -Math.floor(Math.log10(step) + 1e-9)));
+  const out = [];
+  const first = Math.ceil(lo / step - 1e-9);
+  for (let k = first; k * step <= hi + 1e-9; k++) {
+    const v = Math.round(k * step * 1e9) / 1e9;
+    out.push({ v, label: v.toFixed(decimals) });
   }
-  return <circle cx={x} cy={y} r={r} fill={color} stroke={ring} strokeWidth={1.5} />;
+  return out;
 }
 
-const SIZE = 460;
-const MARGIN = 34;
-const PLOT = SIZE - MARGIN * 2;
+// Hover handlers that only fire for a real mouse. On touch, a tap would
+// otherwise leave a hover "stuck" on; taps go through onClick instead.
+const mouseOnly = (fn) => (e) => {
+  if (e.pointerType === 'mouse') fn(e);
+};
+
+// `hollow` draws the marker as an outline (used by the trend overlay).
+function Marker({ shape, x, y, r, color, ring, ringWidth = 1.5, opacity = 1, hollow = false }) {
+  const fill = hollow ? PLOT_BG : color;
+  const stroke = hollow ? color : ring;
+  const sw = hollow ? 2.2 : ringWidth;
+  if (shape === 'diamond') {
+    const rr = r * 1.15;
+    const d = `M ${x} ${y - rr} L ${x + rr} ${y} L ${x} ${y + rr} L ${x - rr} ${y} Z`;
+    return <path d={d} fill={fill} stroke={stroke} strokeWidth={sw} opacity={opacity} />;
+  }
+  return <circle cx={x} cy={y} r={r} fill={fill} stroke={stroke} strokeWidth={sw} opacity={opacity} />;
+}
+
+function Swatch({ shape, color, size = 10 }) {
+  return (
+    <svg width={size} height={size} aria-hidden="true" style={{ flexShrink: 0 }}>
+      {shape === 'diamond' ? (
+        <path d={`M ${size / 2} 0.5 L ${size - 0.5} ${size / 2} L ${size / 2} ${size - 0.5} L 0.5 ${size / 2} Z`} fill={color} />
+      ) : (
+        <circle cx={size / 2} cy={size / 2} r={size / 2 - 0.5} fill={color} />
+      )}
+    </svg>
+  );
+}
+
+// Greedy label placement: try positions around each series' head and take
+// the first that stays inside the plot and clear of other labels and heads.
+// A label with nowhere to go is dropped — the legend, tooltip and table
+// still carry that series — rather than stacked on top of another one.
+function placeLabels(items, bounds) {
+  const obstacles = items.map((it) => {
+    const r = (it.r || 5.5) + 2;
+    return { x0: it.x - r, y0: it.y - r, x1: it.x + r, y1: it.y + r, owner: it.sym, head: true };
+  });
+  const overlaps = (a, b) => !(a.x1 <= b.x0 || a.x0 >= b.x1 || a.y1 <= b.y0 || a.y0 >= b.y1);
+  const out = {};
+  for (const it of items) {
+    const w = it.text.length * 6.7 + 2;
+    const h = 13;
+    const { x, y } = it;
+    const extra = Math.max(0, (it.r || 5.5) - 5.5);
+    const g = extra > 0 ? extra + 3 : 0; // push labels out past bigger heads
+    const candidates = [
+      { x0: x + 8 + g, y0: y - h / 2, anchor: 'start', tx: x + 9 + g, ty: y + 4 },
+      { x0: x - 8 - g - w, y0: y - h / 2, anchor: 'end', tx: x - 9 - g, ty: y + 4 },
+      { x0: x - w / 2, y0: y - 9 - h, anchor: 'middle', tx: x, ty: y - 12 },
+      { x0: x - w / 2, y0: y + 9, anchor: 'middle', tx: x, ty: y + 19 },
+      { x0: x + 6, y0: y - 6 - h, anchor: 'start', tx: x + 7, ty: y - 9 },
+      { x0: x + 6, y0: y + 6, anchor: 'start', tx: x + 7, ty: y + 16 },
+      { x0: x - 6 - w, y0: y - 6 - h, anchor: 'end', tx: x - 7, ty: y - 9 },
+      { x0: x - 6 - w, y0: y + 6, anchor: 'end', tx: x - 7, ty: y + 16 },
+    ];
+    for (const c of candidates) {
+      const r = { x0: c.x0, y0: c.y0, x1: c.x0 + w, y1: c.y0 + h };
+      const inside = r.x0 >= bounds.x0 && r.x1 <= bounds.x1 && r.y0 >= bounds.y0 && r.y1 <= bounds.y1;
+      const blocked = obstacles.some((o) => !(o.head && o.owner === it.sym) && overlaps(r, o));
+      if (inside && !blocked) {
+        obstacles.push({ ...r, owner: it.sym, head: false });
+        out[it.sym] = c;
+        break;
+      }
+    }
+  }
+  return out;
+}
 
 const defaultAssetFormat = (v) => `$${v?.toLocaleString(undefined, { maximumFractionDigits: v < 1 ? 4 : 2 })}`;
 
-export default function RelativeRotationGraph({ data, symbols, benchmark, assetLabel = 'price', assetFormat = defaultAssetFormat }) {
+export default function RelativeRotationGraph({
+  data, symbols, benchmark, assetLabel = 'price', assetFormat = defaultAssetFormat, labelFor = (s) => s,
+  funding = null, // { [sym]: { fundingRateAnnualized } } from /api/funding (tickers view only)
+}) {
   const [tableView, setTableView] = useState(false);
-  const [zscore, setZscore] = useState(true);
-  // Defaults tuned for a "one trading week at a glance" read. In the
-  // default z-score mode, the trend/momentum windows only set how many
-  // days feed each axis's rolling mean/stdev *reference* — every plotted
-  // point still reflects that exact day's real ratio, so window length
-  // controls statistical stability, not lag or resolution (see
-  // computeSeries below). 14/5 give a ~2-week trend reference and a
-  // ~1-week momentum reference, both long enough for a stable stdev
-  // without going stale; a 7-day tail matches that timescale.
-  const [tailLength, setTailLength] = useState(7);
-  const [trendWindow, setTrendWindow] = useState(14);
-  const [momentumWindow, setMomentumWindow] = useState(5);
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+  const { zscore, tailLength, trendWindow, momentumWindow, smoothing } = settings;
+  const setSetting = (key, value) => setSettings((s) => ({ ...s, [key]: value }));
+
+  // Remember this viewer's chart settings between visits (browser-only
+  // convenience; the chart works the same without it).
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(SETTINGS_KEY) || 'null');
+      if (saved && typeof saved === 'object') setSettings((s) => ({ ...s, ...saved }));
+    } catch {}
+  }, []);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    } catch {}
+  }, [settings]);
+
+  // Optional overlays (all off by default, remembered per browser). None
+  // move a ticker's position — see app/lib/rrgOverlays.js.
+  const [overlays, setOverlays] = useState({ volume: false, trend: false, funding: false, capWeighted: false });
+  const setOverlay = (key, value) => setOverlays((o) => ({ ...o, [key]: value }));
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(OVERLAYS_KEY) || 'null');
+      if (saved && typeof saved === 'object') setOverlays((o) => ({ ...o, ...saved }));
+    } catch {}
+  }, []);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(OVERLAYS_KEY, JSON.stringify(overlays));
+    } catch {}
+  }, [overlays]);
+
   const [hidden, setHidden] = useState(new Set());
   const [pinned, setPinned] = useState(null);
-  const [hover, setHover] = useState(null);
+  const [hoverSym, setHoverSym] = useState(null); // legend/series hover -> focus
+  const [hoverPt, setHoverPt] = useState(null); // { sym, idx } -> tooltip
 
   const days = data?.days || [];
-  const prices = data?.prices;
+  const capAvailable = !!data?.pricesCapWeighted;
+  const prices = overlays.capWeighted && capAvailable ? data.pricesCapWeighted : data?.prices;
+  const volumes = data?.volumes;
   const activeSymbols = symbols.filter((s) => prices?.[s]?.length);
-  const styleOf = (sym) => seriesStyleFor(activeSymbols.indexOf(sym));
+  const styleOf = (sym) => seriesStyleFor(symbols.indexOf(sym));
   const lastIdx = days.length - 1;
+  const symbolsKey = symbols.join(',');
+
+  // A new sector/benchmark is a new set of series: clear per-series state.
+  useEffect(() => {
+    setHidden(new Set());
+    setPinned(null);
+    setHoverSym(null);
+    setHoverPt(null);
+  }, [symbolsKey]);
+
+  const warm = firstValidIndex(settings);
+  const minEnd = Math.min(Math.max(0, lastIdx), warm + tailLength - 1);
 
   const [endIdx, setEndIdx] = useState(0);
+  const [playing, setPlaying] = useState(false);
   useEffect(() => {
     if (lastIdx >= 0) setEndIdx(lastIdx);
-  }, [lastIdx]);
+    setPlaying(false);
+  }, [lastIdx, symbolsKey, benchmark]);
+  const end = clamp(endIdx, minEnd, Math.max(minEnd, lastIdx));
+
+  // Play: step the scrubber forward a day at a time to watch the rotation.
+  const endRef = useRef(end);
+  endRef.current = end;
+  useEffect(() => {
+    if (!playing) return undefined;
+    const t = setInterval(() => {
+      const next = endRef.current + 1;
+      if (next >= lastIdx) {
+        setEndIdx(lastIdx);
+        setPlaying(false);
+      } else {
+        setEndIdx(next);
+      }
+    }, 450);
+    return () => clearInterval(t);
+  }, [playing, lastIdx]);
+  const togglePlay = () => {
+    if (playing) return setPlaying(false);
+    if (end >= lastIdx) setEndIdx(minEnd);
+    setPlaying(true);
+  };
 
   const seriesByTicker = useMemo(() => {
-    // `data` can still be a stale fetch for the *previous* benchmark right
-    // after switching (the new fetch hasn't resolved yet) — if that old
-    // payload never included the new benchmark's price series, computeSeries
-    // would divide by an undefined array and crash the page. Bail until the
-    // fresh fetch lands instead.
+    // `data` can still be the previous benchmark's payload for a moment
+    // after switching; bail until the fresh fetch lands rather than divide
+    // by a missing benchmark series.
     if (!prices || !prices[benchmark]) return {};
     const out = {};
     for (const sym of activeSymbols) {
-      out[sym] = computeSeries(prices[sym], prices[benchmark], trendWindow, momentumWindow, zscore);
+      out[sym] = computeSeries(prices[sym], prices[benchmark], { trendWindow, momentumWindow, zscore, smoothing });
     }
     return out;
-  }, [prices, activeSymbols.join(','), benchmark, trendWindow, momentumWindow, zscore]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prices, activeSymbols.join(','), benchmark, trendWindow, momentumWindow, zscore, smoothing]);
 
+  const tailStart = Math.max(warm, end - tailLength + 1);
   const tailOf = (sym) => {
     const s = seriesByTicker[sym];
-    if (!s) return [];
-    return s.slice(Math.max(0, endIdx - tailLength + 1), endIdx + 1);
+    return s ? s.slice(tailStart, end + 1) : [];
+  };
+  const historyOf = (sym) => {
+    const s = seriesByTicker[sym];
+    return s ? s.slice(warm, end + 1) : [];
   };
 
   const shownSymbols = activeSymbols.filter((s) => !hidden.has(s));
+  const focus = hoverSym || pinned;
 
-  const autoRadius = useMemo(() => {
-    let d = zscore ? 1.2 : 5;
-    (shownSymbols.length ? shownSymbols : activeSymbols).forEach((sym) => {
-      tailOf(sym).forEach((p) => {
-        d = Math.max(d, Math.abs(p.x - 100), Math.abs(p.y - 100));
-      });
-    });
-    return d * 1.25;
+  // ---- sizing: render at the container's real width so text stays legible on phones
+  const [W, setW] = useState(460);
+  const roRef = useRef(null);
+  const wrapRef = useCallback((node) => {
+    roRef.current?.disconnect();
+    roRef.current = null;
+    if (node && typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(([entry]) => setW(clamp(Math.floor(entry.contentRect.width), 260, 560)));
+      ro.observe(node);
+      roRef.current = ro;
+    }
+  }, []);
+  const M = { left: 52, right: 10, top: 10, bottom: 38 };
+  const H = W;
+  const PW = W - M.left - M.right;
+  const PH = H - M.top - M.bottom;
+
+  // ---- view: auto-fit around 100/100 unless the viewer has panned/zoomed.
+  // While playing, fit the whole playback range so the frame holds still.
+  const autoFit = useMemo(() => {
+    let rx = zscore ? 1.2 : 2;
+    let ry = zscore ? 1.2 : 2;
+    const from = playing ? warm : tailStart;
+    for (const sym of shownSymbols.length ? shownSymbols : activeSymbols) {
+      const s = seriesByTicker[sym];
+      if (!s) continue;
+      for (let i = from; i <= end && i < s.length; i++) {
+        rx = Math.max(rx, Math.abs(s[i].x - 100));
+        ry = Math.max(ry, Math.abs(s[i].y - 100));
+      }
+    }
+    return { cx: 100, cy: 100, rx: rx * 1.15, ry: ry * 1.15 };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seriesByTicker, tailLength, hidden, endIdx, zscore]);
+  }, [seriesByTicker, hidden, tailStart, end, zscore, playing, warm]);
+  const [manualView, setManualView] = useState(null);
+  useEffect(() => setManualView(null), [symbolsKey, benchmark, zscore, overlays.capWeighted]);
+  const view = manualView || autoFit;
 
-  const [viewCenter, setViewCenter] = useState({ x: 100, y: 100 });
-  const [viewRadius, setViewRadius] = useState(autoRadius);
-  useEffect(() => {
-    setViewRadius(autoRadius);
-    setViewCenter({ x: 100, y: 100 });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tailLength, trendWindow, momentumWindow, zscore]);
-
-  const pxToData = (2 * viewRadius) / PLOT;
   const toPx = (x, y) => [
-    MARGIN + ((x - (viewCenter.x - viewRadius)) / (2 * viewRadius)) * PLOT,
-    MARGIN + PLOT - ((y - (viewCenter.y - viewRadius)) / (2 * viewRadius)) * PLOT,
+    M.left + ((x - (view.cx - view.rx)) / (2 * view.rx)) * PW,
+    M.top + PH - ((y - (view.cy - view.ry)) / (2 * view.ry)) * PH,
   ];
   const [cx0, cy0] = toPx(100, 100);
+  const cxc = clamp(cx0, M.left, M.left + PW);
+  const cyc = clamp(cy0, M.top, M.top + PH);
 
-  const dragRef = useRef({ dragging: false, lastX: 0, lastY: 0 });
-  const onWheel = (e) => {
-    e.preventDefault();
-    setViewRadius((r) => clamp(r * (e.deltaY > 0 ? 1.12 : 0.89), 0.2, 200));
-  };
-  const onMouseDown = (e) => {
-    dragRef.current = { dragging: true, lastX: e.clientX, lastY: e.clientY };
-  };
-  const onMouseMove = (e) => {
-    if (!dragRef.current.dragging) return;
-    const dx = e.clientX - dragRef.current.lastX;
-    const dy = e.clientY - dragRef.current.lastY;
-    dragRef.current.lastX = e.clientX;
-    dragRef.current.lastY = e.clientY;
-    setViewCenter((c) => ({ x: c.x - dx * pxToData, y: c.y + dy * pxToData }));
-  };
-  const stopDrag = () => {
-    dragRef.current.dragging = false;
-  };
-  const resetView = () => {
-    setViewRadius(autoRadius);
-    setViewCenter({ x: 100, y: 100 });
+  const zoomBy = (k) => setManualView((v) => {
+    const b = v || autoFit;
+    return { ...b, rx: clamp(b.rx * k, 0.05, 500), ry: clamp(b.ry * k, 0.05, 500) };
+  });
+
+  // Hit-testing: one nearest-point lookup for the whole plot instead of a
+  // hit circle per dot. With 10+ tickers the per-dot circles overlapped, so
+  // a tap near one head could land on its neighbour. Heads win close calls.
+  const nearestPoint = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    let best = null;
+    for (const sym of shownSymbols) {
+      const tail = tailOf(sym);
+      tail.forEach((pt, i) => {
+        const [x, y] = toPx(pt.x, pt.y);
+        const isHead = i === tail.length - 1;
+        const d = Math.hypot(x - mx, y - my) - (isHead ? 4 : 0);
+        if (!best || d < best.d) best = { sym, idx: tailStart + i, d, isHead };
+      });
+    }
+    return best && best.d <= 20 ? best : null;
   };
 
-  const toggleTicker = (sym) =>
-    setHidden((prev) => {
-      const n = new Set(prev);
-      if (n.has(sym)) n.delete(sym);
-      else n.add(sym);
-      return n;
+  // Mouse drag pans. Touch is left to the browser so a swipe over the chart
+  // still scrolls the page on a phone (zoom there is the +/- buttons).
+  const dragRef = useRef(null);
+  const movedRef = useRef(false);
+  const onPointerDown = (e) => {
+    if (e.pointerType !== 'mouse' || e.button !== 0) return;
+    dragRef.current = { x: e.clientX, y: e.clientY, moved: false };
+  };
+  const onPointerMove = (e) => {
+    if (dragRef.current) {
+      const dx = e.clientX - dragRef.current.x;
+      const dy = e.clientY - dragRef.current.y;
+      if (Math.abs(dx) + Math.abs(dy) < 3) return;
+      dragRef.current = { x: e.clientX, y: e.clientY, moved: true };
+      setManualView((v) => {
+        const b = v || autoFit;
+        return { ...b, cx: b.cx - (dx * 2 * b.rx) / PW, cy: b.cy + (dy * 2 * b.ry) / PH };
+      });
+      return;
+    }
+    if (e.pointerType !== 'mouse') return;
+    const hit = nearestPoint(e);
+    setHoverPt((prev) => {
+      if (!hit) return null;
+      return prev && prev.sym === hit.sym && prev.idx === hit.idx ? prev : { sym: hit.sym, idx: hit.idx };
     });
+    setHoverSym(hit ? hit.sym : null);
+  };
+  const endDrag = () => {
+    movedRef.current = !!dragRef.current?.moved;
+    dragRef.current = null;
+  };
+  const onPlotClick = (e) => {
+    if (movedRef.current) {
+      movedRef.current = false;
+      return;
+    }
+    const hit = nearestPoint(e);
+    if (!hit) {
+      setHoverPt(null);
+      return;
+    }
+    setHoverPt({ sym: hit.sym, idx: hit.idx });
+    if (hit.isHead) togglePin(hit.sym);
+  };
+  // Pinch on a trackpad (ctrlKey wheel) or Ctrl/Cmd+scroll zooms; a plain
+  // scroll wheel scrolls the page as normal. React's onWheel is passive, so
+  // this needs a native listener to be able to preventDefault.
+  const autoFitRef = useRef(autoFit);
+  autoFitRef.current = autoFit;
+  const wheelCleanupRef = useRef(null);
+  const svgRef = useCallback((node) => {
+    wheelCleanupRef.current?.();
+    wheelCleanupRef.current = null;
+    if (!node) return;
+    const onWheel = (e) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      const k = e.deltaY > 0 ? 1.1 : 0.9;
+      setManualView((v) => {
+        const b = v || autoFitRef.current;
+        return { ...b, rx: clamp(b.rx * k, 0.05, 500), ry: clamp(b.ry * k, 0.05, 500) };
+      });
+    };
+    node.addEventListener('wheel', onWheel, { passive: false });
+    wheelCleanupRef.current = () => node.removeEventListener('wheel', onWheel);
+  }, []);
+
+  const toggleHidden = (sym) => setHidden((prev) => {
+    const n = new Set(prev);
+    if (n.has(sym)) n.delete(sym);
+    else n.add(sym);
+    return n;
+  });
+  const togglePin = (sym) => setPinned((p) => (p === sym ? null : sym));
+
+  // ---- per-series summary at the scrubbed day
+  const summary = useMemo(() => {
+    const out = {};
+    for (const sym of activeSymbols) {
+      const hist = historyOf(sym);
+      const tail = tailOf(sym);
+      const last = tail[tail.length - 1];
+      if (!last) continue;
+      const q = quadrantOf(last.x, last.y);
+      out[sym] = {
+        last, q,
+        streak: quadrantStreak(hist),
+        head: heading(tail, 3),
+        flips: countFlips(tail),
+        tailLen: tail.length,
+        relVol: relativeVolume(volumes?.[sym], end),
+        trend: absoluteTrend(prices?.[sym], end, TREND_WINDOW),
+        // Funding is a live reading, so it's only shown on the latest day.
+        fundingPct: end === lastIdx ? funding?.[sym]?.fundingRateAnnualized : undefined,
+      };
+      out[sym].fundingFlag = fundingFlag(out[sym].fundingPct);
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seriesByTicker, end, tailLength, warm, volumes, funding, lastIdx]);
 
   if (!prices || activeSymbols.length === 0) {
     return (
       <section style={{ marginTop: 32 }}>
-        <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: TEXT_PRIMARY }}>
-          Relative Rotation Graph
-        </h2>
+        <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: TEXT_PRIMARY }}>Relative Rotation Graph</h2>
         <p style={{ fontSize: 12, color: TEXT_MUTED, marginTop: 16 }}>Waiting for historical data…</p>
       </section>
     );
   }
 
+  const notEnoughHistory = lastIdx < minEnd || lastIdx < warm;
+
+  const byQuadrant = { leading: [], weakening: [], lagging: [], improving: [] };
+  for (const sym of activeSymbols) if (summary[sym]) byQuadrant[summary[sym].q].push(sym);
+  for (const q of Object.keys(byQuadrant)) byQuadrant[q].sort((a, b) => summary[b].last.x - summary[a].last.x);
+  const recent = activeSymbols
+    .filter((s) => summary[s]?.streak.from && summary[s].streak.days <= RECENT_DAYS)
+    .sort((a, b) => summary[a].streak.days - summary[b].streak.days);
+
+  const volumeOn = overlays.volume && !!volumes;
+  const trendOn = overlays.trend;
+  const fundingOn = overlays.funding && !!funding;
+  const headRadius = (sym) => {
+    const base = pinned === sym ? 6.5 : 5.5;
+    const rv = summary[sym]?.relVol;
+    return volumeOn && rv ? clamp(base * Math.sqrt(rv), 3.5, 11) : base;
+  };
+
+  // Draw order: dimmed series first, focused series last (on top).
+  const drawOrder = [...shownSymbols].sort((a, b) => (a === focus) - (b === focus));
+  const heads = shownSymbols
+    .map((sym) => {
+      const tail = tailOf(sym);
+      if (!tail.length) return null;
+      const [x, y] = toPx(tail[tail.length - 1].x, tail[tail.length - 1].y);
+      return { sym, x, y, text: labelFor(sym), r: headRadius(sym) };
+    })
+    .filter(Boolean)
+    .filter((h) => h.x >= M.left && h.x <= M.left + PW && h.y >= M.top && h.y <= M.top + PH);
+  const labelPlacement = placeLabels(
+    [...heads].sort((a, b) => (b.sym === focus) - (a.sym === focus)),
+    { x0: M.left + 2, y0: M.top + 2, x1: M.left + PW - 2, y1: M.top + PH - 2 },
+  );
+
+  const xTicks = ticksFor(view.cx - view.rx, view.cx + view.rx);
+  const yTicks = ticksFor(view.cy - view.ry, view.cy + view.ry);
+
+  const hoverInfo = (() => {
+    if (!hoverPt) return null;
+    const s = seriesByTicker[hoverPt.sym];
+    const p = s?.[hoverPt.idx];
+    if (!p) return null;
+    const [px, py] = toPx(p.x, p.y);
+    return { ...hoverPt, p, px, py, q: quadrantOf(p.x, p.y) };
+  })();
+
+  const btn = (active) => ({
+    background: active ? '#1E252A' : CARD_BG,
+    border: `1px solid ${active ? ACCENT : CARD_BORDER}`,
+    color: active ? ACCENT : TEXT_SECONDARY,
+    borderRadius: 4, padding: '4px 10px', fontSize: 11, cursor: 'pointer',
+  });
+
   return (
     <section style={{ marginTop: 32 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: TEXT_PRIMARY }}>
-            Relative Rotation Graph
-          </h2>
+          <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: TEXT_PRIMARY }}>Relative Rotation Graph</h2>
           <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '4px 0 0' }}>
-            Measured against {benchmark} · drag to pan, scroll to zoom
+            vs {benchmark} · as of {days[end]} · {smoothing > 1 ? `${smoothing}-day smoothing` : 'no smoothing'}
           </p>
         </div>
-        <button
-          onClick={() => setTableView((v) => !v)}
-          style={{
-            background: tableView ? '#1E252A' : CARD_BG,
-            border: `1px solid ${tableView ? '#C9A66B' : CARD_BORDER}`,
-            color: tableView ? '#C9A66B' : TEXT_SECONDARY,
-            borderRadius: 4,
-            padding: '4px 10px',
-            fontSize: 11,
-            cursor: 'pointer',
-          }}
-        >
+        <button onClick={() => setTableView((v) => !v)} style={btn(tableView)}>
           {tableView ? 'Chart' : 'Table'}
         </button>
       </div>
 
-      <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: TEXT_SECONDARY, cursor: 'pointer', margin: '10px 0 16px' }}>
-        <input type="checkbox" checked={zscore} onChange={(e) => setZscore(e.target.checked)} />
-        Volatility-normalized (JdK-style z-score, vs simple ratio-to-average)
-      </label>
+      {/* Answer first: who is where right now, laid out like the chart. */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 12 }}>
+        {QUADRANT_GRID.map((q) => (
+          <div key={q} style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: '7px 10px', minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
+              <span style={{ width: 8, height: 8, borderRadius: 2, background: QUADRANTS[q].color, flexShrink: 0 }} />
+              <span style={{ color: TEXT_PRIMARY, fontWeight: 600 }}>{QUADRANTS[q].name}</span>
+              <span style={{ color: TEXT_MUTED }}>{byQuadrant[q].length}</span>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 8px', marginTop: 4, fontSize: 11, lineHeight: 1.5 }}>
+              {byQuadrant[q].length === 0 && <span style={{ color: TEXT_MUTED }}>—</span>}
+              {byQuadrant[q].map((sym) => (
+                <button
+                  key={sym}
+                  onClick={() => togglePin(sym)}
+                  onPointerEnter={mouseOnly(() => setHoverSym(sym))}
+                  onPointerLeave={mouseOnly(() => setHoverSym(null))}
+                  title={`${sym}: RS-Ratio ${summary[sym].last.x.toFixed(2)}, RS-Momentum ${summary[sym].last.y.toFixed(2)} — click to focus`}
+                  style={{
+                    background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 11,
+                    color: pinned === sym ? ACCENT : TEXT_SECONDARY, fontFamily: 'ui-monospace,monospace',
+                    textDecoration: hidden.has(sym) ? 'line-through' : 'none',
+                  }}
+                >
+                  {labelFor(sym)}{summary[sym].head ? ` ${summary[sym].head.arrow}` : ''}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '8px 0 0', lineHeight: 1.6 }}>
+        {recent.length === 0
+          ? `No quadrant changes in the last ${RECENT_DAYS} days.`
+          : (
+            <>
+              Recent changes:{' '}
+              {recent.slice(0, RECENT_MAX).map((sym, i) => (
+                <span key={sym}>
+                  {i > 0 && ' · '}
+                  <span style={{ color: TEXT_SECONDARY }}>{labelFor(sym)}</span>{' '}
+                  {QUADRANTS[summary[sym].streak.from].name} → <span style={{ color: QUADRANTS[summary[sym].q].color }}>{QUADRANTS[summary[sym].q].name}</span>
+                  {' '}({summary[sym].streak.days} day{summary[sym].streak.days === 1 ? '' : 's'})
+                </span>
+              ))}
+              {recent.length > RECENT_MAX && ` · +${recent.length - RECENT_MAX} more`}
+            </>
+          )}
+      </p>
 
-      {tableView ? (
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-          <thead>
-            <tr style={{ textAlign: 'left', color: TEXT_MUTED, fontSize: 11 }}>
-              <th style={{ padding: '6px 8px', fontWeight: 500 }}>Asset</th>
-              <th style={{ padding: '6px 8px', fontWeight: 500 }}>RS-Ratio</th>
-              <th style={{ padding: '6px 8px', fontWeight: 500 }}>RS-Momentum</th>
-              <th style={{ padding: '6px 8px', fontWeight: 500 }}>Quadrant</th>
-            </tr>
-          </thead>
-          <tbody>
-            {activeSymbols.map((sym) => {
-              const tail = tailOf(sym);
-              const c = tail[tail.length - 1];
-              if (!c) return null;
-              const q = quadrantOf(c.x, c.y);
-              return (
-                <tr key={sym} style={{ borderTop: `1px solid ${CARD_BORDER}` }}>
-                  <td style={{ padding: '8px', color: TEXT_PRIMARY, fontWeight: 600 }}>{sym}</td>
-                  <td style={{ padding: '8px', color: TEXT_PRIMARY, fontVariantNumeric: 'tabular-nums' }}>{c.x.toFixed(2)}</td>
-                  <td style={{ padding: '8px', color: TEXT_PRIMARY, fontVariantNumeric: 'tabular-nums' }}>{c.y.toFixed(2)}</td>
-                  <td style={{ padding: '8px', color: QUADRANTS[q].color }}>{QUADRANTS[q].name}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      ) : (
-        <div style={{ display: 'flex', gap: 26, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-          <div style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: 18, maxWidth: SIZE + 36 }}>
-            <div style={{ position: 'relative' }}>
-              <svg
-                width={SIZE}
-                height={SIZE}
-                viewBox={`0 0 ${SIZE} ${SIZE}`}
-                onWheel={onWheel}
-                onMouseDown={onMouseDown}
-                onMouseMove={onMouseMove}
-                onMouseUp={stopDrag}
-                onMouseLeave={() => {
-                  stopDrag();
-                  setHover(null);
-                }}
-                style={{ cursor: 'grab', touchAction: 'none', display: 'block', width: '100%', height: 'auto' }}
-              >
-                <rect x={MARGIN} y={MARGIN} width={PLOT} height={PLOT} fill={PLOT_BG} />
-                <rect x={cx0} y={MARGIN} width={MARGIN + PLOT - cx0} height={cy0 - MARGIN} fill={QUADRANTS.leading.color} opacity={0.08} />
-                <rect x={cx0} y={cy0} width={MARGIN + PLOT - cx0} height={MARGIN + PLOT - cy0} fill={QUADRANTS.weakening.color} opacity={0.08} />
-                <rect x={MARGIN} y={cy0} width={cx0 - MARGIN} height={MARGIN + PLOT - cy0} fill={QUADRANTS.lagging.color} opacity={0.08} />
-                <rect x={MARGIN} y={MARGIN} width={cx0 - MARGIN} height={cy0 - MARGIN} fill={QUADRANTS.improving.color} opacity={0.08} />
-                <line x1={MARGIN} y1={cy0} x2={MARGIN + PLOT} y2={cy0} stroke={GRID} strokeDasharray="3 3" />
-                <line x1={cx0} y1={MARGIN} x2={cx0} y2={MARGIN + PLOT} stroke={GRID} strokeDasharray="3 3" />
-                <rect x={MARGIN} y={MARGIN} width={PLOT} height={PLOT} fill="none" stroke={CARD_BORDER} />
-
-                <text x={MARGIN + PLOT - 8} y={MARGIN + 16} textAnchor="end" fill={QUADRANTS.leading.color} fontSize={12}>Leading</text>
-                <text x={MARGIN + PLOT - 8} y={MARGIN + PLOT - 8} textAnchor="end" fill={QUADRANTS.weakening.color} fontSize={12}>Weakening</text>
-                <text x={MARGIN + 8} y={MARGIN + PLOT - 8} fill={QUADRANTS.lagging.color} fontSize={12}>Lagging</text>
-                <text x={MARGIN + 8} y={MARGIN + 16} fill={QUADRANTS.improving.color} fontSize={12}>Improving</text>
-
-                {shownSymbols.map((sym) => {
-                  const { color, shape } = styleOf(sym);
-                  const tail = tailOf(sym);
-                  if (tail.length === 0) return null;
-                  const px = tail.map((p) => toPx(p.x, p.y));
-                  const d = px.map((p, i) => `${i ? 'L' : 'M'}${p[0]},${p[1]}`).join(' ');
-                  const [lx, ly] = px[px.length - 1];
-                  const firstIdx = Math.max(0, endIdx - tailLength + 1);
-
+      {notEnoughHistory ? (
+        <p style={{ fontSize: 12, color: TEXT_MUTED, marginTop: 16 }}>
+          Not enough history for these settings — lower Trend, Momentum or Smoothing.
+        </p>
+      ) : tableView ? (
+        <div style={{ overflowX: 'auto', marginTop: 14 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <thead>
+              <tr style={{ textAlign: 'left', color: TEXT_MUTED, fontSize: 11 }}>
+                <th style={{ padding: '6px 8px', fontWeight: 500 }}>Asset</th>
+                <th style={{ padding: '6px 8px', fontWeight: 500 }}>Quadrant</th>
+                <th style={{ padding: '6px 8px', fontWeight: 500 }}>Days there</th>
+                <th style={{ padding: '6px 8px', fontWeight: 500 }}>Heading</th>
+                <th style={{ padding: '6px 8px', fontWeight: 500 }}>RS-Ratio</th>
+                <th style={{ padding: '6px 8px', fontWeight: 500 }}>RS-Momentum</th>
+                {volumeOn && <th style={{ padding: '6px 8px', fontWeight: 500 }}>Rel. volume</th>}
+                {trendOn && <th style={{ padding: '6px 8px', fontWeight: 500 }}>vs {TREND_WINDOW}d avg</th>}
+                {fundingOn && <th style={{ padding: '6px 8px', fontWeight: 500 }}>Funding %/yr</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {[...activeSymbols]
+                .filter((s) => summary[s])
+                .sort((a, b) => QUADRANT_SORT[summary[a].q] - QUADRANT_SORT[summary[b].q] || summary[b].last.x - summary[a].last.x)
+                .map((sym) => {
+                  const s = summary[sym];
                   return (
-                    <g key={sym}>
-                      <path d={d} fill="none" stroke={color} strokeWidth={1.5} opacity={0.85} />
-                      {px.slice(0, -1).map((p, i) => (
-                        <g
-                          key={i}
-                          tabIndex={0}
-                          role="img"
-                          aria-label={`${sym} on ${days[firstIdx + i]}: RS-Ratio ${tail[i].x.toFixed(1)}, RS-Momentum ${tail[i].y.toFixed(1)}`}
-                          onMouseEnter={() => setHover({ sym, day: days[firstIdx + i], x: tail[i].x, y: tail[i].y, px: p[0], py: p[1] })}
-                          onMouseLeave={() => setHover(null)}
-                          onFocus={() => setHover({ sym, day: days[firstIdx + i], x: tail[i].x, y: tail[i].y, px: p[0], py: p[1] })}
-                          onBlur={() => setHover(null)}
-                          style={{ outline: 'none', cursor: 'pointer' }}
-                        >
-                          <circle cx={p[0]} cy={p[1]} r={10} fill="transparent" />
-                          <Marker shape={shape} x={p[0]} y={p[1]} r={3.4} color={color} ring={PLOT_BG} />
-                        </g>
-                      ))}
-                      <g
-                        tabIndex={0}
-                        role="img"
-                        aria-label={`${sym} current: RS-Ratio ${tail[tail.length - 1].x.toFixed(1)}, RS-Momentum ${tail[tail.length - 1].y.toFixed(1)}, ${quadrantOf(tail[tail.length - 1].x, tail[tail.length - 1].y)}`}
-                        onMouseEnter={() => setHover({ sym, day: days[endIdx], x: tail[tail.length - 1].x, y: tail[tail.length - 1].y, px: lx, py: ly })}
-                        onMouseLeave={() => setHover(null)}
-                        onFocus={() => setHover({ sym, day: days[endIdx], x: tail[tail.length - 1].x, y: tail[tail.length - 1].y, px: lx, py: ly })}
-                        onBlur={() => setHover(null)}
-                        style={{ outline: 'none', cursor: 'pointer' }}
-                      >
-                        <circle cx={lx} cy={ly} r={14} fill="transparent" />
-                        <Marker shape={shape} x={lx} y={ly} r={5} color={color} ring={PLOT_BG} />
-                        <text x={lx + 8} y={ly + 4} fill={color} fontSize={11} fontFamily="ui-monospace,monospace">{sym}</text>
-                      </g>
-                    </g>
+                    <tr key={sym} style={{ borderTop: `1px solid ${CARD_BORDER}` }}>
+                      <td style={{ padding: '8px', color: TEXT_PRIMARY, fontWeight: 600 }}>{sym}</td>
+                      <td style={{ padding: '8px', color: QUADRANTS[s.q].color }}>{QUADRANTS[s.q].name}</td>
+                      <td style={{ padding: '8px', color: TEXT_SECONDARY, fontVariantNumeric: 'tabular-nums' }}>
+                        {s.streak.days}{s.streak.from ? '' : '+'}
+                      </td>
+                      <td style={{ padding: '8px', color: TEXT_SECONDARY }}>{s.head?.arrow || '—'}</td>
+                      <td style={{ padding: '8px', color: TEXT_PRIMARY, fontVariantNumeric: 'tabular-nums' }}>{s.last.x.toFixed(2)}</td>
+                      <td style={{ padding: '8px', color: TEXT_PRIMARY, fontVariantNumeric: 'tabular-nums' }}>{s.last.y.toFixed(2)}</td>
+                      {volumeOn && <td style={{ padding: '8px', color: TEXT_SECONDARY, fontVariantNumeric: 'tabular-nums' }}>{s.relVol != null ? `${s.relVol.toFixed(2)}×` : '—'}</td>}
+                      {trendOn && <td style={{ padding: '8px', color: TEXT_SECONDARY, fontVariantNumeric: 'tabular-nums' }}>{s.trend ? `${s.trend.pct >= 0 ? '+' : ''}${s.trend.pct.toFixed(1)}%` : '—'}</td>}
+                      {fundingOn && <td style={{ padding: '8px', color: TEXT_SECONDARY, fontVariantNumeric: 'tabular-nums' }}>{Number.isFinite(s.fundingPct) ? `${s.fundingPct.toFixed(1)}%` : '—'}</td>}
+                    </tr>
                   );
                 })}
+            </tbody>
+          </table>
+          <p style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 8 }}>
+            &quot;Days there&quot; with a + means it hasn&apos;t left that quadrant within the available history.
+          </p>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'flex-start', marginTop: 14 }}>
+          <div style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: 12, flex: '1 1 480px', maxWidth: 584, minWidth: 0 }}>
+            <div ref={wrapRef} style={{ position: 'relative', width: '100%' }}>
+              <svg
+                ref={svgRef}
+                width={W}
+                height={H}
+                viewBox={`0 0 ${W} ${H}`}
+                onPointerDown={onPointerDown}
+                onPointerMove={onPointerMove}
+                onPointerUp={endDrag}
+                onClick={onPlotClick}
+                onPointerLeave={() => {
+                  endDrag();
+                  setHoverPt(null);
+                  setHoverSym(null);
+                }}
+                role="img"
+                aria-label={`Relative rotation graph of ${activeSymbols.length} assets vs ${benchmark} as of ${days[end]}. Use the table view for exact values.`}
+                style={{ display: 'block', cursor: 'grab', userSelect: 'none' }}
+              >
+                <defs>
+                  <clipPath id="rrg-plot-clip">
+                    <rect x={M.left} y={M.top} width={PW} height={PH} />
+                  </clipPath>
+                </defs>
+                <rect x={M.left} y={M.top} width={PW} height={PH} fill={PLOT_BG} />
 
-                {hover && (
-                  <g pointerEvents="none">
-                    <rect
-                      x={clamp(hover.px + 10, MARGIN, MARGIN + PLOT - 130)}
-                      y={clamp(hover.py - 38, MARGIN, MARGIN + PLOT - 36)}
-                      width={128}
-                      height={34}
-                      rx={3}
-                      fill="#0E1316"
-                      stroke={styleOf(hover.sym).color}
-                      opacity={0.97}
-                    />
-                    <text
-                      x={clamp(hover.px + 10, MARGIN, MARGIN + PLOT - 130) + 8}
-                      y={clamp(hover.py - 38, MARGIN, MARGIN + PLOT - 36) + 14}
-                      fill={TEXT_PRIMARY}
-                      fontSize={11}
-                      fontFamily="ui-monospace,monospace"
-                    >
-                      {hover.sym} · {hover.day}
+                <g clipPath="url(#rrg-plot-clip)">
+                  {/* quadrant washes */}
+                  <rect x={cxc} y={M.top} width={M.left + PW - cxc} height={cyc - M.top} fill={QUADRANTS.leading.color} opacity={0.07} />
+                  <rect x={cxc} y={cyc} width={M.left + PW - cxc} height={M.top + PH - cyc} fill={QUADRANTS.weakening.color} opacity={0.07} />
+                  <rect x={M.left} y={cyc} width={cxc - M.left} height={M.top + PH - cyc} fill={QUADRANTS.lagging.color} opacity={0.07} />
+                  <rect x={M.left} y={M.top} width={cxc - M.left} height={cyc - M.top} fill={QUADRANTS.improving.color} opacity={0.07} />
+
+                  {/* gridlines: solid hairlines */}
+                  {xTicks.map((t) => {
+                    const [x] = toPx(t.v, 100);
+                    return <line key={`gx${t.label}`} x1={x} y1={M.top} x2={x} y2={M.top + PH} stroke={GRID} strokeWidth={1} />;
+                  })}
+                  {yTicks.map((t) => {
+                    const [, y] = toPx(100, t.v);
+                    return <line key={`gy${t.label}`} x1={M.left} y1={y} x2={M.left + PW} y2={y} stroke={GRID} strokeWidth={1} />;
+                  })}
+                  <line x1={M.left} y1={cy0} x2={M.left + PW} y2={cy0} stroke={AXIS_100} strokeWidth={1} />
+                  <line x1={cx0} y1={M.top} x2={cx0} y2={M.top + PH} stroke={AXIS_100} strokeWidth={1} />
+
+                  {/* series: faint old tail -> bold current head */}
+                  {drawOrder.map((sym) => {
+                    const { color, shape } = styleOf(sym);
+                    const tail = tailOf(sym);
+                    if (tail.length === 0) return null;
+                    const dim = focus && focus !== sym;
+                    const baseOpacity = dim ? 0.14 : 1;
+                    const px = tail.map((p) => toPx(p.x, p.y));
+                    const n = px.length;
+                    const [lx, ly] = px[n - 1];
+                    return (
+                      <g key={sym} opacity={baseOpacity}>
+                        {px.slice(1).map((p, i) => {
+                          const t = n > 2 ? i / (n - 2) : 1;
+                          return (
+                            <line
+                              key={i}
+                              x1={px[i][0]} y1={px[i][1]} x2={p[0]} y2={p[1]}
+                              stroke={color}
+                              strokeWidth={1.4 + t * 1}
+                              strokeLinecap="round"
+                              opacity={0.3 + t * 0.6}
+                            />
+                          );
+                        })}
+                        {px.slice(0, -1).map((p, i) => {
+                          const t = n > 1 ? i / (n - 1) : 1;
+                          return (
+                            <Marker key={i} shape={shape} x={p[0]} y={p[1]} r={2 + t * 1.2} color={color} ring={PLOT_BG} ringWidth={1} opacity={0.35 + t * 0.5} />
+                          );
+                        })}
+                        <g
+                          tabIndex={0}
+                          role="button"
+                          aria-label={`${sym}: ${QUADRANTS[quadrantOf(tail[n - 1].x, tail[n - 1].y)].name}, RS-Ratio ${tail[n - 1].x.toFixed(2)}, RS-Momentum ${tail[n - 1].y.toFixed(2)}. Press to focus.`}
+                          onFocus={() => setHoverPt({ sym, idx: end })}
+                          onBlur={() => setHoverPt(null)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              togglePin(sym);
+                            }
+                          }}
+                          style={{ outline: 'none', cursor: 'pointer' }}
+                        >
+                          <Marker
+                            shape={shape}
+                            x={lx}
+                            y={ly}
+                            r={headRadius(sym)}
+                            color={color}
+                            ring={pinned === sym ? ACCENT : PLOT_BG}
+                            ringWidth={2}
+                            hollow={trendOn && summary[sym]?.trend?.above === false}
+                          />
+                          {fundingOn && summary[sym]?.fundingFlag === 'crowded-long' && (() => {
+                            const r = headRadius(sym);
+                            const fx = lx + r + 1;
+                            const fy = ly - r - 1;
+                            return <path d={`M ${fx} ${fy - 6} L ${fx + 4} ${fy + 1} L ${fx - 4} ${fy + 1} Z`} fill={ACCENT} stroke={PLOT_BG} strokeWidth={1} />;
+                          })()}
+                          {fundingOn && summary[sym]?.fundingFlag === 'shorts-paying' && (() => {
+                            const r = headRadius(sym);
+                            const fx = lx + r + 1;
+                            const fy = ly - r - 1;
+                            return <path d={`M ${fx} ${fy + 1} L ${fx + 4} ${fy - 6} L ${fx - 4} ${fy - 6} Z`} fill="#5E8FA8" stroke={PLOT_BG} strokeWidth={1} />;
+                          })()}
+                        </g>
+                      </g>
+                    );
+                  })}
+
+                  {/* labels: text ink with a surface halo, placed to avoid collisions */}
+                  {heads.map((h) => {
+                    const pl = labelPlacement[h.sym];
+                    if (!pl) return null;
+                    const dim = focus && focus !== h.sym;
+                    return (
+                      <text
+                        key={`lbl-${h.sym}`}
+                        x={pl.tx}
+                        y={pl.ty}
+                        textAnchor={pl.anchor}
+                        fill={TEXT_PRIMARY}
+                        stroke={PLOT_BG}
+                        strokeWidth={3}
+                        paintOrder="stroke"
+                        fontSize={11}
+                        fontWeight={focus === h.sym ? 700 : 500}
+                        fontFamily="ui-monospace,monospace"
+                        opacity={dim ? 0.2 : 1}
+                        pointerEvents="none"
+                      >
+                        {h.text}
+                      </text>
+                    );
+                  })}
+                </g>
+
+                {/* quadrant names, pinned to the plot corners */}
+                <text x={M.left + PW - 6} y={M.top + 14} textAnchor="end" fill={QUADRANTS.leading.color} fontSize={11} fontWeight={600}>Leading</text>
+                <text x={M.left + PW - 6} y={M.top + PH - 6} textAnchor="end" fill={QUADRANTS.weakening.color} fontSize={11} fontWeight={600}>Weakening</text>
+                <text x={M.left + 6} y={M.top + PH - 6} fill={QUADRANTS.lagging.color} fontSize={11} fontWeight={600}>Lagging</text>
+                <text x={M.left + 6} y={M.top + 14} fill={QUADRANTS.improving.color} fontSize={11} fontWeight={600}>Improving</text>
+
+                <rect x={M.left} y={M.top} width={PW} height={PH} fill="none" stroke={CARD_BORDER} />
+
+                {/* axes */}
+                {xTicks.map((t) => {
+                  const [x] = toPx(t.v, 100);
+                  return (
+                    <text key={`tx${t.label}`} x={x} y={M.top + PH + 13} textAnchor="middle" fill={TEXT_MUTED} fontSize={10} fontFamily="ui-monospace,monospace">
+                      {t.label}
                     </text>
-                    <text
-                      x={clamp(hover.px + 10, MARGIN, MARGIN + PLOT - 130) + 8}
-                      y={clamp(hover.py - 38, MARGIN, MARGIN + PLOT - 36) + 27}
-                      fill={TEXT_SECONDARY}
-                      fontSize={10}
-                      fontFamily="ui-monospace,monospace"
-                    >
-                      RS {hover.x.toFixed(2)} / Mom {hover.y.toFixed(2)}
+                  );
+                })}
+                {yTicks.map((t) => {
+                  const [, y] = toPx(100, t.v);
+                  return (
+                    <text key={`ty${t.label}`} x={M.left - 5} y={y + 3} textAnchor="end" fill={TEXT_MUTED} fontSize={10} fontFamily="ui-monospace,monospace">
+                      {t.label}
                     </text>
-                  </g>
-                )}
+                  );
+                })}
+                <text x={M.left + PW / 2} y={H - 6} textAnchor="middle" fill={TEXT_SECONDARY} fontSize={11}>
+                  RS-Ratio (trend vs {benchmark}) →
+                </text>
+                <text
+                  x={10}
+                  y={M.top + PH / 2}
+                  textAnchor="middle"
+                  fill={TEXT_SECONDARY}
+                  fontSize={11}
+                  transform={`rotate(-90 10 ${M.top + PH / 2})`}
+                >
+                  RS-Momentum →
+                </text>
               </svg>
 
-              <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <button onClick={() => setViewRadius((r) => clamp(r * 0.8, 0.2, 200))} style={zoomBtnStyle}>+</button>
-                <button onClick={() => setViewRadius((r) => clamp(r * 1.25, 0.2, 200))} style={zoomBtnStyle}>−</button>
-                <button onClick={resetView} style={zoomBtnStyle} title="Reset view">⤢</button>
-              </div>
+              {hoverInfo && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: clamp(hoverInfo.px + 12, 0, W - 176),
+                    top: clamp(hoverInfo.py - 58, 0, H - 64),
+                    width: 170,
+                    background: '#0E1316',
+                    border: `1px solid ${CARD_BORDER}`,
+                    borderRadius: 4,
+                    padding: '6px 8px',
+                    pointerEvents: 'none',
+                    fontSize: 11,
+                    lineHeight: 1.45,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ width: 10, height: 2, background: styleOf(hoverInfo.sym).color, flexShrink: 0 }} />
+                    <span style={{ color: TEXT_PRIMARY, fontWeight: 600, fontFamily: 'ui-monospace,monospace' }}>
+                      {hoverInfo.p.x.toFixed(2)} / {hoverInfo.p.y.toFixed(2)}
+                    </span>
+                  </div>
+                  <div style={{ color: TEXT_SECONDARY }}>
+                    {labelFor(hoverInfo.sym)} · {days[hoverInfo.idx]}
+                  </div>
+                  <div style={{ color: QUADRANTS[hoverInfo.q].color }}>{QUADRANTS[hoverInfo.q].name}</div>
+                  {hoverInfo.idx === end && overlayNotes(summary[hoverInfo.sym]).map((n) => (
+                    <div key={n} style={{ color: TEXT_SECONDARY }}>{n}</div>
+                  ))}
+                </div>
+              )}
+
             </div>
 
-            <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${CARD_BORDER}` }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontSize: 12, color: TEXT_SECONDARY, minWidth: 50 }}>Day of</span>
+            <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${CARD_BORDER}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button onClick={togglePlay} style={{ ...zoomBtnStyle, width: 28 }} aria-label={playing ? 'Pause' : 'Play rotation over time'} title={playing ? 'Pause' : 'Play the rotation day by day'}>
+                  {playing ? '❚❚' : '▶'}
+                </button>
                 <input
                   type="range"
-                  min={Math.min(tailLength, lastIdx)}
-                  max={Math.max(0, lastIdx)}
-                  value={endIdx}
-                  onChange={(e) => setEndIdx(parseInt(e.target.value, 10))}
-                  style={{ flex: 1 }}
+                  min={minEnd}
+                  max={Math.max(minEnd, lastIdx)}
+                  value={end}
+                  onChange={(e) => {
+                    setPlaying(false);
+                    setEndIdx(parseInt(e.target.value, 10));
+                  }}
+                  style={{ flex: 1, minWidth: 0 }}
+                  aria-label="Day"
                 />
-                <span style={{ fontSize: 12, fontFamily: 'ui-monospace,monospace', minWidth: 58 }}>{days[endIdx]}</span>
-                {endIdx !== lastIdx && (
-                  <button onClick={() => setEndIdx(lastIdx)} style={linkBtnStyle}>now</button>
+                <span style={{ fontSize: 12, fontFamily: 'ui-monospace,monospace', color: TEXT_PRIMARY, whiteSpace: 'nowrap' }}>{days[end]}</span>
+                {end !== lastIdx && (
+                  <button onClick={() => { setPlaying(false); setEndIdx(lastIdx); }} style={linkBtnStyle}>now</button>
                 )}
               </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 18, marginTop: 12 }}>
-                <SliderControl label="Tail" unit="d" value={tailLength} min={5} max={Math.max(6, Math.min(60, days.length - 1))} onChange={setTailLength} />
-                <SliderControl label="Trend" unit="d" value={trendWindow} min={5} max={40} onChange={setTrendWindow} />
-                <SliderControl label="Momentum" unit="d" value={momentumWindow} min={2} max={15} onChange={setMomentumWindow} />
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 12 }}>
+                <span style={{ fontSize: 12, color: TEXT_SECONDARY, marginRight: 2 }}>Read</span>
+                {RRG_PRESETS.map((pr) => (
+                  <button
+                    key={pr.key}
+                    onClick={() => setSettings((st) => ({ ...st, ...pr.settings }))}
+                    title={`${pr.blurb} — Trend ${pr.settings.trendWindow}d, Momentum ${pr.settings.momentumWindow}d, Smoothing ${pr.settings.smoothing}d, Tail ${pr.settings.tailLength}d`}
+                    style={btn(presetMatching(settings)?.key === pr.key)}
+                  >
+                    {pr.label}
+                  </button>
+                ))}
+                {!presetMatching(settings) && <span style={{ fontSize: 11, color: TEXT_MUTED, marginLeft: 4 }}>Custom</span>}
               </div>
+              <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '6px 0 0', lineHeight: 1.5 }}>
+                {presetMatching(settings)
+                  ? {
+                    fast: 'Fast: catches turns about a day sooner, with more false flips. For short-term reads.',
+                    balanced: 'Balanced: the default — same speed as the old settings with about a third fewer false quadrant flips.',
+                    steady: 'Steady: the calmest tails, for the bigger picture; slower, and can miss short-lived moves.',
+                  }[presetMatching(settings).key]
+                  : 'Custom settings — pick a preset to reset the sliders.'}
+              </p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px 16px', marginTop: 10 }}>
+                <SliderControl label="Tail" unit="d" value={tailLength} min={3} max={Math.max(4, Math.min(30, lastIdx - warm + 1))} onChange={(v) => setSetting('tailLength', v)} />
+                <SliderControl label="Trend" unit="d" value={trendWindow} min={5} max={40} onChange={(v) => setSetting('trendWindow', v)} />
+                <SliderControl label="Momentum" unit="d" value={momentumWindow} min={2} max={15} onChange={(v) => setSetting('momentumWindow', v)} />
+                <SliderControl label="Smoothing" unit="d" value={smoothing} min={1} max={7} onChange={(v) => setSetting('smoothing', v)} format={(v) => (v <= 1 ? 'off' : `${v}d`)} />
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12, marginTop: 10 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: TEXT_SECONDARY, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={zscore} onChange={(e) => setSetting('zscore', e.target.checked)} />
+                  Volatility-normalized (JdK-style)
+                </label>
+                <button onClick={() => setSettings(DEFAULT_SETTINGS)} style={linkBtnStyle}>Reset settings</button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
+                  <span style={{ fontSize: 12, color: TEXT_SECONDARY, marginRight: 2 }}>Zoom</span>
+                  <button onClick={() => zoomBy(1.25)} style={zoomBtnStyle} aria-label="Zoom out">−</button>
+                  <button onClick={() => zoomBy(0.8)} style={zoomBtnStyle} aria-label="Zoom in">+</button>
+                  <button onClick={() => setManualView(null)} style={{ ...zoomBtnStyle, width: 'auto', padding: '0 7px', fontSize: 11, color: manualView ? ACCENT : TEXT_MUTED }} title="Fit to data" aria-label="Fit to data">Fit</button>
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px 14px', marginTop: 10, paddingTop: 10, borderTop: `1px solid ${CARD_BORDER}` }}>
+                <span style={{ fontSize: 12, color: TEXT_SECONDARY }}>Overlays</span>
+                <OverlayToggle
+                  label="Volume"
+                  checked={overlays.volume}
+                  disabled={!volumes}
+                  onChange={(v) => setOverlay('volume', v)}
+                  title="Head dot size = last 7 days' volume vs its 30-day average"
+                />
+                <OverlayToggle
+                  label="Trend filter"
+                  checked={overlays.trend}
+                  onChange={(v) => setOverlay('trend', v)}
+                  title={`Hollow head dot = below its own ${TREND_WINDOW}-day average (falling in absolute terms)`}
+                />
+                {funding && (
+                  <OverlayToggle
+                    label="Funding"
+                    checked={overlays.funding}
+                    onChange={(v) => setOverlay('funding', v)}
+                    title={`Flag heads with extreme Hyperliquid perp funding: ▲ ≥ ${FUNDING_HOT}%/yr (crowded longs), ▼ negative`}
+                  />
+                )}
+                {capAvailable && (
+                  <OverlayToggle
+                    label="Cap-weighted sectors"
+                    checked={overlays.capWeighted}
+                    onChange={(v) => setOverlay('capWeighted', v)}
+                    title="Weight each sector's members by market cap instead of equally"
+                  />
+                )}
+              </div>
+              {(volumeOn || trendOn || fundingOn || (overlays.capWeighted && capAvailable)) && (
+                <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '6px 0 0', lineHeight: 1.55 }}>
+                  {[
+                    volumeOn && 'Bigger head = above-normal volume (7d vs 30d; CoinGecko volume includes some exchanges with inflated volume, so compare a coin with its own history).',
+                    trendOn && `Hollow head = below its own ${TREND_WINDOW}-day average — leading ${benchmark} but still falling.`,
+                    fundingOn && `▲ funding ≥ ${FUNDING_HOT}%/yr (crowded longs) · ▼ negative funding (shorts paying) — live Hyperliquid reading, shown on the latest day only.`,
+                    overlays.capWeighted && capAvailable && 'Sectors weighted by each member’s market cap on the first day, instead of equally.',
+                  ].filter(Boolean).join(' ')}
+                </p>
+              )}
+              <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '10px 0 0', lineHeight: 1.55 }}>
+                Hover or tap a ticker to focus it · drag to pan · pinch or Ctrl/⌘+scroll to zoom
+              </p>
             </div>
           </div>
 
-          <div style={{ minWidth: 240, flex: '1 1 240px' }}>
+          <div style={{ minWidth: 220, flex: '1 1 220px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-              <span style={{ fontSize: 12, color: TEXT_MUTED }}>Click to hide · flips over tail</span>
+              <span style={{ fontSize: 11, color: TEXT_MUTED }}>Click to hide · 🔍 to focus</span>
               <div style={{ display: 'flex', gap: 10 }}>
                 <button onClick={() => setHidden(new Set())} style={linkBtnStyle}>All</button>
                 <button onClick={() => setHidden(new Set(activeSymbols))} style={linkBtnStyle}>None</button>
               </div>
             </div>
             {activeSymbols.map((sym) => {
+              const s = summary[sym];
+              if (!s) return null;
               const { color, shape } = styleOf(sym);
-              const tail = tailOf(sym);
-              const last = tail[tail.length - 1];
-              if (!last) return null;
-              const q = quadrantOf(last.x, last.y);
-              const flips = countFlips(tail);
-              const noisy = flips >= Math.max(3, Math.floor(tail.length / 3));
+              const noisy = s.flips >= Math.max(3, Math.floor(s.tailLen / 3));
               const on = !hidden.has(sym);
               return (
                 <div
                   key={sym}
-                  onClick={() => toggleTicker(sym)}
+                  onClick={() => toggleHidden(sym)}
+                  onPointerEnter={mouseOnly(() => on && setHoverSym(sym))}
+                  onPointerLeave={mouseOnly(() => setHoverSym(null))}
                   style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '7px 0', borderBottom: `1px solid ${CARD_BORDER}`, fontSize: 13,
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+                    padding: '6px 4px', borderBottom: `1px solid ${CARD_BORDER}`, fontSize: 13,
                     cursor: 'pointer', opacity: on ? 1 : 0.36, userSelect: 'none',
+                    background: focus === sym ? '#1B2226' : 'transparent',
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <svg width={10} height={10} aria-hidden="true">
-                      {shape === 'diamond' ? (
-                        <path d="M 5 0.5 L 9.5 5 L 5 9.5 L 0.5 5 Z" fill={color} />
-                      ) : (
-                        <circle cx={5} cy={5} r={4.5} fill={color} />
-                      )}
-                    </svg>
-                    <span style={{ color: TEXT_PRIMARY }}>{sym}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                    <Swatch shape={shape} color={color} />
+                    <span title={sym} style={{ color: TEXT_PRIMARY, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{labelFor(sym)}</span>
+                    <span style={{ color: TEXT_SECONDARY, fontSize: 12 }} title="Direction of travel over the last 3 days">{s.head?.arrow || ''}</span>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        setPinned(pinned === sym ? null : sym);
+                        togglePin(sym);
                       }}
-                      title="Pin for detail view"
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, lineHeight: 0, color: pinned === sym ? '#C9A66B' : '#4A5257' }}
+                      title="Focus this ticker and show its day-by-day detail"
+                      aria-label={`Focus ${sym}`}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, lineHeight: 0, opacity: pinned === sym ? 1 : 0.45 }}
                     >
                       🔍
                     </button>
-                    <span style={{ fontSize: 11, fontFamily: 'ui-monospace,monospace', color: noisy ? '#C9A66B' : TEXT_MUTED }} title={`${flips} quadrant change(s) across ${tail.length} days`}>
-                      {flips}⤢
+                    <span
+                      style={{ fontSize: 11, fontFamily: 'ui-monospace,monospace', color: noisy ? ACCENT : TEXT_MUTED }}
+                      title={`${s.flips} quadrant change(s) across the ${s.tailLen}-day tail${noisy ? ' — noisy, treat with caution' : ''}`}
+                    >
+                      {s.flips}⤢
                     </span>
-                    <div style={{ textAlign: 'right', minWidth: 78 }}>
-                      <div style={{ color: QUADRANTS[q].color, fontSize: 12 }}>{QUADRANTS[q].name}</div>
+                    <div style={{ textAlign: 'right', minWidth: 76 }}>
+                      <div style={{ color: QUADRANTS[s.q].color, fontSize: 12 }}>{QUADRANTS[s.q].name}</div>
                       <div style={{ fontFamily: 'ui-monospace,monospace', fontSize: 11, color: TEXT_SECONDARY }}>
-                        {last.x.toFixed(2)} / {last.y.toFixed(2)}
+                        {s.last.x.toFixed(2)} / {s.last.y.toFixed(2)}
                       </div>
+                      {(volumeOn || trendOn || fundingOn) && (
+                        <div style={{ fontFamily: 'ui-monospace,monospace', fontSize: 10, color: TEXT_MUTED }}>
+                          {[
+                            volumeOn && s.relVol != null && `vol ${s.relVol.toFixed(1)}×`,
+                            trendOn && s.trend && `${s.trend.above ? '▲' : '▽'}${TREND_WINDOW}d`,
+                            fundingOn && Number.isFinite(s.fundingPct) && `f ${s.fundingPct >= 0 ? '+' : ''}${s.fundingPct.toFixed(0)}%`,
+                          ].filter(Boolean).join(' · ')}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
               );
             })}
-            <p style={{ fontSize: 11, color: TEXT_MUTED, lineHeight: 1.55, marginTop: 12 }}>
-              The flip count is how many times an asset changed quadrant across the visible tail —
-              high counts mean noise, not signal.
+            <p style={{ fontSize: 11, color: TEXT_MUTED, lineHeight: 1.55, marginTop: 10 }}>
+              Arrows show direction of travel over the last 3 days. ⤢ counts quadrant changes across
+              the tail — a high count means noise, not signal.
             </p>
           </div>
         </div>
       )}
 
-      {pinned && !tableView && (() => {
+      {pinned && !tableView && summary[pinned] && (() => {
         const sym = pinned;
         const { color } = styleOf(sym);
         const tail = tailOf(sym);
-        const startIdx = Math.max(0, endIdx - tailLength + 1);
         if (tail.length === 0) return null;
         return (
-          <div style={{ marginTop: 16, background: CARD_BG, border: `1px solid ${color}`, borderRadius: 6, padding: '16px 18px' }}>
+          <div style={{ marginTop: 16, background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: '14px 16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={{ width: 10, height: 10, borderRadius: '50%', background: color }} />
                 <span style={{ fontSize: 15, color: TEXT_PRIMARY, fontWeight: 600 }}>{sym}</span>
+                <span style={{ fontSize: 12, color: QUADRANTS[summary[sym].q].color }}>
+                  {QUADRANTS[summary[sym].q].name} · {summary[sym].streak.days}{summary[sym].streak.from ? '' : '+'} day{summary[sym].streak.days === 1 ? '' : 's'}
+                </span>
               </div>
-              <button
-                onClick={() => setPinned(null)}
-                style={{ background: 'none', border: `1px solid ${CARD_BORDER}`, borderRadius: 4, color: TEXT_SECONDARY, fontSize: 11, padding: '3px 9px', cursor: 'pointer' }}
-              >
-                Close
-              </button>
+              <button onClick={() => setPinned(null)} style={{ ...btn(false), padding: '3px 9px' }}>Close</button>
             </div>
-            <p style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 10, lineHeight: 1.5 }}>
-              {sym} vs {benchmark}, {tail.length} days visible at current tail length. RS-Ratio/Momentum
-              use the {trendWindow}/{momentumWindow}-day windows set above.
+            <p style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 8, lineHeight: 1.5 }}>
+              {sym} vs {benchmark}, last {tail.length} days. RS-Ratio/Momentum use the {trendWindow}/{momentumWindow}-day
+              windows{smoothing > 1 ? ` on a ${smoothing}-day smoothed ratio` : ''}. Prices are the raw daily closes.
             </p>
-            <div style={{ overflowX: 'auto', marginTop: 14 }}>
+            <div style={{ overflowX: 'auto', marginTop: 10 }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
                 <thead>
                   <tr style={{ borderBottom: `1px solid ${CARD_BORDER}`, color: TEXT_MUTED, textAlign: 'left' }}>
@@ -520,16 +1059,14 @@ export default function RelativeRotationGraph({ data, symbols, benchmark, assetL
                 </thead>
                 <tbody>
                   {tail.map((pt, i) => {
-                    const idx = startIdx + i;
+                    const idx = tailStart + i;
                     const q = quadrantOf(pt.x, pt.y);
                     const prevQ = i > 0 ? quadrantOf(tail[i - 1].x, tail[i - 1].y) : null;
                     const flipped = prevQ !== null && prevQ !== q;
                     return (
-                      <tr key={days[idx]} style={{ borderTop: `1px solid #1D2226` }}>
+                      <tr key={days[idx]} style={{ borderTop: '1px solid #1D2226' }}>
                         <td style={{ padding: '4px 8px 4px 0', color: TEXT_SECONDARY, fontFamily: 'ui-monospace,monospace' }}>{days[idx]}</td>
-                        <td style={{ padding: '4px 8px', color: TEXT_PRIMARY, fontFamily: 'ui-monospace,monospace' }}>
-                          {assetFormat(prices[sym][idx])}
-                        </td>
+                        <td style={{ padding: '4px 8px', color: TEXT_PRIMARY, fontFamily: 'ui-monospace,monospace' }}>{assetFormat(prices[sym][idx])}</td>
                         <td style={{ padding: '4px 8px', color: TEXT_PRIMARY, fontFamily: 'ui-monospace,monospace' }}>
                           ${prices[benchmark][idx]?.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                         </td>
@@ -537,7 +1074,7 @@ export default function RelativeRotationGraph({ data, symbols, benchmark, assetL
                         <td style={{ padding: '4px 8px', color: TEXT_PRIMARY, fontFamily: 'ui-monospace,monospace' }}>{pt.y.toFixed(2)}</td>
                         <td style={{ padding: '4px 0', color: QUADRANTS[q].color }}>
                           {QUADRANTS[q].name}
-                          {flipped && <span style={{ color: '#C9A66B' }}> ← flip</span>}
+                          {flipped && <span style={{ color: ACCENT }}> ← flip</span>}
                         </td>
                       </tr>
                     );
@@ -550,9 +1087,11 @@ export default function RelativeRotationGraph({ data, symbols, benchmark, assetL
       })()}
 
       <p style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 12, lineHeight: 1.6 }}>
-        RS-Ratio and RS-Momentum are a standard open approximation of the JdK RRG method, not the
-        exact proprietary formula. BTC and ETH are wired up as benchmarks — Gold/USD from the
-        prototype would need a non-crypto data source.
+        How to read it: right of center = outperforming {benchmark} on trend, above center = that trend is
+        gaining. Assets usually rotate clockwise — Improving → Leading → Weakening → Lagging. Tails run from
+        faint (oldest) to the bold dot (the selected day). RS-Ratio and RS-Momentum are a standard open
+        approximation of the JdK RRG method, not the exact proprietary formula; the first {warm} days of
+        history are warm-up for the rolling windows and aren&apos;t plotted.
       </p>
     </section>
   );
@@ -580,12 +1119,32 @@ const linkBtnStyle = {
   padding: 0,
 };
 
-function SliderControl({ label, unit, value, min, max, onChange }) {
+function SliderControl({ label, unit, value, min, max, onChange, format }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+    <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       <span style={{ fontSize: 12, color: TEXT_SECONDARY }}>{label}</span>
-      <input type="range" min={min} max={max} value={value} onChange={(e) => onChange(parseInt(e.target.value, 10))} style={{ width: 88 }} />
-      <span style={{ fontSize: 12, fontFamily: 'ui-monospace,monospace' }}>{value}{unit}</span>
-    </div>
+      <input type="range" min={min} max={max} value={clamp(value, min, max)} onChange={(e) => onChange(parseInt(e.target.value, 10))} style={{ width: 84 }} />
+      <span style={{ fontSize: 12, fontFamily: 'ui-monospace,monospace', color: TEXT_PRIMARY, minWidth: 26 }}>
+        {format ? format(value) : `${value}${unit}`}
+      </span>
+    </label>
+  );
+}
+
+function overlayNotes(s) {
+  if (!s) return [];
+  const out = [];
+  if (s.relVol != null) out.push(`Volume ${s.relVol.toFixed(1)}× its 30-day average`);
+  if (s.trend) out.push(`${s.trend.pct >= 0 ? '+' : ''}${s.trend.pct.toFixed(1)}% vs its ${TREND_WINDOW}-day average`);
+  if (Number.isFinite(s.fundingPct)) out.push(`Funding ${s.fundingPct.toFixed(1)}%/yr`);
+  return out;
+}
+
+function OverlayToggle({ label, checked, onChange, disabled = false, title }) {
+  return (
+    <label title={title} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: disabled ? TEXT_MUTED : TEXT_SECONDARY, cursor: disabled ? 'default' : 'pointer' }}>
+      <input type="checkbox" checked={checked && !disabled} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
+      {label}
+    </label>
   );
 }
