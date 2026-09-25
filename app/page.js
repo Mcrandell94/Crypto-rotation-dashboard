@@ -260,6 +260,7 @@ export default function DashboardHome() {
               <RelativeRotationGraph
                 data={rotation.rrgSectorsData}
                 symbols={SECTORS.map((s) => s.label)}
+                labelFor={(label) => SECTORS.find((s) => s.label === label)?.short || label}
                 benchmark={benchmark}
                 assetLabel="index"
                 assetFormat={(v) => v?.toFixed(3)}
