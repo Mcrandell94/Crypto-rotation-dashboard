@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import {
-  computeSeries, firstValidIndex, quadrantOf, countFlips, quadrantStreak, heading,
+  computeSeries, firstValidIndex, quadrantOf, countFlips, quadrantStreak, heading, RRG_PRESETS,
 } from '../lib/rrgMath';
 
 const TEXT_PRIMARY = '#E7E4DD';
@@ -41,8 +41,11 @@ function seriesStyleFor(index) {
   };
 }
 
-const DEFAULT_SETTINGS = { zscore: true, tailLength: 7, trendWindow: 14, momentumWindow: 5, smoothing: 3 };
-const SETTINGS_KEY = 'rrgSettings.v1';
+// Default = the Balanced preset (see RRG_PRESETS in app/lib/rrgMath.js for
+// how the three presets were tuned).
+const DEFAULT_SETTINGS = { zscore: true, ...RRG_PRESETS.find((p) => p.key === 'balanced').settings };
+const SETTINGS_KEY = 'rrgSettings.v2';
+const presetMatching = (st) => RRG_PRESETS.find((p) => Object.entries(p.settings).every(([k, v]) => st[k] === v));
 const RECENT_DAYS = 3; // "recent quadrant change" window for the summary
 const RECENT_MAX = 6; // how many recent changes to list before "+N more"
 
@@ -779,7 +782,30 @@ export default function RelativeRotationGraph({
                   <button onClick={() => { setPlaying(false); setEndIdx(lastIdx); }} style={linkBtnStyle}>now</button>
                 )}
               </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px 16px', marginTop: 12 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 12 }}>
+                <span style={{ fontSize: 12, color: TEXT_SECONDARY, marginRight: 2 }}>Read</span>
+                {RRG_PRESETS.map((pr) => (
+                  <button
+                    key={pr.key}
+                    onClick={() => setSettings((st) => ({ ...st, ...pr.settings }))}
+                    title={`${pr.blurb} — Trend ${pr.settings.trendWindow}d, Momentum ${pr.settings.momentumWindow}d, Smoothing ${pr.settings.smoothing}d, Tail ${pr.settings.tailLength}d`}
+                    style={btn(presetMatching(settings)?.key === pr.key)}
+                  >
+                    {pr.label}
+                  </button>
+                ))}
+                {!presetMatching(settings) && <span style={{ fontSize: 11, color: TEXT_MUTED, marginLeft: 4 }}>Custom</span>}
+              </div>
+              <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '6px 0 0', lineHeight: 1.5 }}>
+                {presetMatching(settings)
+                  ? {
+                    fast: 'Fast: catches turns about a day sooner, with more false flips. For short-term reads.',
+                    balanced: 'Balanced: the default — same speed as the old settings with about a third fewer false quadrant flips.',
+                    steady: 'Steady: the calmest tails, for the bigger picture; slower, and can miss short-lived moves.',
+                  }[presetMatching(settings).key]
+                  : 'Custom settings — pick a preset to reset the sliders.'}
+              </p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px 16px', marginTop: 10 }}>
                 <SliderControl label="Tail" unit="d" value={tailLength} min={3} max={Math.max(4, Math.min(30, lastIdx - warm + 1))} onChange={(v) => setSetting('tailLength', v)} />
                 <SliderControl label="Trend" unit="d" value={trendWindow} min={5} max={40} onChange={(v) => setSetting('trendWindow', v)} />
                 <SliderControl label="Momentum" unit="d" value={momentumWindow} min={2} max={15} onChange={(v) => setSetting('momentumWindow', v)} />

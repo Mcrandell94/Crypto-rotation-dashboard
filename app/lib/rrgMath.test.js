@@ -98,3 +98,12 @@ test('heading uses the net move over the lookback', () => {
   assert.equal(heading([{ x: 1, y: 1 }]), null);
   assert.equal(heading([{ x: 1, y: 1 }, { x: 1, y: 1 }]), null);
 });
+
+test('presets leave most of the 100-day history plottable', () => {
+  const { RRG_PRESETS } = require('./rrgMath');
+  assert.deepEqual(RRG_PRESETS.map((p) => p.key), ['fast', 'balanced', 'steady']);
+  for (const p of RRG_PRESETS) {
+    const warm = firstValidIndex(p.settings);
+    assert.ok(warm + p.settings.tailLength <= 50, `${p.key} warm-up ${warm} + tail ${p.settings.tailLength}`);
+  }
+});

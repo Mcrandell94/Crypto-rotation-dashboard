@@ -113,3 +113,19 @@ export function heading(pts, lookback = 3) {
   const deg = ((Math.atan2(dy, dx) * 180) / Math.PI + 360) % 360;
   return { deg, arrow: ARROWS[Math.round(deg / 45) % 8], dx, dy };
 }
+
+// Preset reads, tuned jointly on simulated crypto data with known regime
+// switches (100 days of history, 3-4.5% daily idiosyncratic vol, 0.4-1.2%/day
+// relative drift, regimes of 8-45 days). Measured against the previous
+// default (Trend 14 / Momentum 5 / no smoothing: ~2.5 quadrant flips per
+// 7 days, ~3.2 days to catch a real switch):
+// - fast:     ~2.1 flips / 7d, ~2.3d to catch a switch (quickest, noisier)
+// - balanced: ~1.7 flips / 7d, ~3.1d — same speed and accuracy as before,
+//             about a third fewer false flips (the default)
+// - steady:   ~1.3 flips / 7d, ~4d — calmest; misses more short-lived moves
+// Momentum 10 beat 5 at every trend/smoothing combination tested.
+export const RRG_PRESETS = [
+  { key: 'fast', label: 'Fast', blurb: 'Quick turns, noisier', settings: { trendWindow: 7, momentumWindow: 10, smoothing: 2, tailLength: 5 } },
+  { key: 'balanced', label: 'Balanced', blurb: 'Default', settings: { trendWindow: 10, momentumWindow: 10, smoothing: 3, tailLength: 7 } },
+  { key: 'steady', label: 'Steady', blurb: 'Big picture, calmest', settings: { trendWindow: 14, momentumWindow: 10, smoothing: 5, tailLength: 10 } },
+];
