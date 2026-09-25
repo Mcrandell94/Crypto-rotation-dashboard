@@ -47,3 +47,19 @@ test('drops paid press releases', () => {
   assert.equal(isAdvertorial({ link: 'https://advertorial.cryptonews.com/press-releases/whisper' }), true);
   assert.equal(isAdvertorial({ link: 'https://cryptonews.com/news/x' }), false);
 });
+
+// Spanish items that got through after #49, live on 2026-09-25.
+test('drops Spanish headlines without flagging an English one with a single accent', () => {
+  const es = [
+    'Microsoft y fabricantes dejan atrás la marca Copilot+ PC',
+    'Qualcomm lleva agentes de IA a auriculares y gafas inteligentes',
+    'MNT sostiene impulso técnico mientras su capitalización se ubica en USD $2,19 mil millones',
+  ];
+  for (const title of es) assert.equal(looksNonEnglish({ title, source: 'DiarioBitcoin', link: 'https://www.diariobitcoin.com/x' }), true, title);
+  const en = [
+    'Pokémon cards go onchain as Courtyard volume jumps',
+    'Ex-CFTC leader to leave Blockchain Association after CLARITY vote fails',
+    'Bitcoin Slips Below $84,000 as Ethereum Holds $2,600, XRP and Dogecoin Rise on Rate-Hike Fears',
+  ];
+  for (const title of en) assert.equal(looksNonEnglish({ title, source: 'X', link: 'https://example.com/x' }), false, title);
+});

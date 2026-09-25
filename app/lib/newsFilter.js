@@ -6,19 +6,21 @@
 // - The feed mixes in non-English outlets (e.g. Cryptoast.fr, Cointurk
 //   News TR). They're spotted by a country-code domain, a source name
 //   marked as another language ("... TR", "... Turkish"), letters only
-//   Turkish uses (ı, ş, ğ), or several common foreign function words.
+//   Turkish uses (ı, ş, ğ), or several common foreign function words or
+//   accented words.
 // - Paid press releases (hosts like advertorial.cryptonews.com).
 
 const NON_ENGLISH_TLDS = ['fr', 'de', 'es', 'it', 'pt', 'br', 'nl', 'ru', 'jp', 'kr', 'cn', 'tr', 'pl', 'vn', 'id'];
 const FOREIGN_WORDS = new Set([
   'le', 'la', 'les', 'des', 'du', 'sur', 'pour', 'avec', 'est', 'une', 'dans', 'meilleurs',
-  'el', 'los', 'las', 'para', 'con', 'por', 'del', 'una', 'que',
+  'el', 'los', 'las', 'de', 'para', 'con', 'por', 'del', 'una', 'que', 'y', 'en', 'su', 'se', 'al', 'mientras', 'sobre', 'entre',
   'der', 'die', 'das', 'und', 'mit', 'auf', 'ist', 'für',
   'os', 'em', 'uma', 'não', 'il', 'di', 'della', 'che', 'per',
   've', 'için', 'bir', 'ile', 'bu', 'işte',
 ]);
 const FOREIGN_SOURCE = /\b(tr|turkish|türkçe|español|deutsch|français)\b/i;
 const TURKISH_LETTERS = /[ıİşŞğĞ]/;
+const ACCENTED = /[áéíóúñãõâêôàèìòùç]/;
 
 function hostOf(link) {
   try {
@@ -38,8 +40,11 @@ export function looksNonEnglish(article) {
   if (NON_ENGLISH_TLDS.includes(tld)) return true;
   if (FOREIGN_SOURCE.test(article.source || '')) return true;
   if (TURKISH_LETTERS.test(article.title || '')) return true;
+  // Two or more signals: a foreign function word, or a word with an
+  // accented letter (a single "Pokémon" or "café" doesn't count).
   const words = (article.title || '').toLowerCase().split(/[^\p{L}]+/u);
-  return words.filter((w) => FOREIGN_WORDS.has(w)).length >= 2;
+  const hits = words.filter((w) => FOREIGN_WORDS.has(w) || ACCENTED.test(w)).length;
+  return hits >= 2;
 }
 
 export function isAdvertorial(article) {
