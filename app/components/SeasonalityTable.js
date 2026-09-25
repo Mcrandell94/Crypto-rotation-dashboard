@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { monthStats, isInProgress } from '../lib/seasonality';
 
 const TEXT_PRIMARY = '#E7E4DD';
 const TEXT_SECONDARY = '#8B9298';
@@ -72,20 +73,16 @@ export default function SeasonalityTable({ data }) {
   const allVals = years.flatMap((y) => monthlyReturns[y]).filter((v) => v != null);
   const maxAbs = Math.max(1, ...allVals.map(Math.abs));
 
-  const avgByMonth = MONTHS.map((_, mi) => {
-    const vals = years.map((y) => monthlyReturns[y][mi]).filter((v) => v != null);
-    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
-  });
-
-  const curAvg = avgByMonth[currentMonth];
-  const curYearVals = years.map((y) => monthlyReturns[y][currentMonth]).filter((v) => v != null);
-  const curGreenCount = curYearVals.filter((v) => v > 0).length;
+  // Averages leave out the current, still-running month (see lib/seasonality).
+  const avgByMonth = MONTHS.map((_, mi) => monthStats(assetData, mi).avg);
+  const cur = monthStats(assetData, currentMonth);
+  const curAvg = cur.avg;
 
   return (
     <section style={{ marginTop: 20, background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: '16px 18px' }}>
       <AssetPicker asset={asset} setAsset={setAsset} />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-        <div style={{ fontSize: 12, color: TEXT_SECONDARY }}>{asset} monthly returns, last {years.length} years</div>
+        <div style={{ fontSize: 12, color: TEXT_SECONDARY }}>{asset} monthly returns since {years[0]}</div>
         <div style={{ fontSize: 11, color: TEXT_MUTED }}>
           Computed live from Kraken weekly closes — month boundaries are approximate to the nearest week
         </div>
@@ -115,9 +112,11 @@ export default function SeasonalityTable({ data }) {
                 {monthlyReturns[y].map((v, mi) => (
                   <td
                     key={mi}
+                    title={isInProgress(y, mi, currentYear, currentMonth) ? 'Month in progress — not counted in the averages' : undefined}
                     style={{
                       padding: '5px 6px', textAlign: 'center', fontFamily: 'ui-monospace,monospace',
                       background: heatColor(v, maxAbs), color: TEXT_PRIMARY,
+                      fontStyle: isInProgress(y, mi, currentYear, currentMonth) ? 'italic' : 'normal',
                       outline: mi === currentMonth ? `1px solid ${TEXT_PRIMARY}` : 'none', outlineOffset: -1,
                     }}
                   >
@@ -151,7 +150,8 @@ export default function SeasonalityTable({ data }) {
           <strong style={{ color: curAvg >= 0 ? `rgb(${GAIN})` : `rgb(${LOSS})` }}>
             {curAvg > 0 ? '+' : ''}{curAvg.toFixed(0)}%
           </strong>{' '}
-          across the {curYearVals.length} prior years with data ({curGreenCount} of {curYearVals.length} closed green).
+          across the {cur.count} completed years with data ({cur.green} of {cur.count} closed green).
+          {' '}{currentYear} so far (italic) isn&apos;t counted until the month ends.
         </p>
       )}
     </section>

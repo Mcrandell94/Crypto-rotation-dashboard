@@ -3,19 +3,15 @@
 import { useState, useCallback, useEffect } from 'react';
 
 // Levels & Liquidations tab's own data — loads once, the first time that
-// tab is opened. EMA and funding are fetched by useHeaderData /
-// useRotationData instead, since the always-visible header needs them
+// tab is opened. EMA, open interest, liquidations and funding are fetched
+// by useHeaderData / useRotationData instead, since the always-visible header needs them
 // too — this hook only covers what's exclusive to this tab.
 export default function useLevelsTabData(isActive) {
   const [loaded, setLoaded] = useState(false);
   const [timeframesData, setTimeframesData] = useState(null);
   const [timeframesError, setTimeframesError] = useState(null);
-  const [openInterestData, setOpenInterestData] = useState(null);
-  const [openInterestError, setOpenInterestError] = useState(null);
   const [takerFlowData, setTakerFlowData] = useState(null);
   const [takerFlowError, setTakerFlowError] = useState(null);
-  const [liquidationsData, setLiquidationsData] = useState(null);
-  const [liquidationsError, setLiquidationsError] = useState(null);
   const [liquidationHeatmapData, setLiquidationHeatmapData] = useState(null);
   const [liquidationHeatmapError, setLiquidationHeatmapError] = useState(null);
   const [liquidationHeatmapCoinalyzeData, setLiquidationHeatmapCoinalyzeData] = useState(null);
@@ -43,18 +39,6 @@ export default function useLevelsTabData(isActive) {
     }
   }, []);
 
-  const fetchOpenInterest = useCallback(async () => {
-    setOpenInterestError(null);
-    try {
-      const res = await fetch('/api/openinterest');
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Unknown error');
-      setOpenInterestData(json);
-    } catch (e) {
-      setOpenInterestError(e.message);
-    }
-  }, []);
-
   const fetchTakerFlow = useCallback(async () => {
     setTakerFlowError(null);
     try {
@@ -64,18 +48,6 @@ export default function useLevelsTabData(isActive) {
       setTakerFlowData(json);
     } catch (e) {
       setTakerFlowError(e.message);
-    }
-  }, []);
-
-  const fetchLiquidations = useCallback(async () => {
-    setLiquidationsError(null);
-    try {
-      const res = await fetch('/api/liquidations');
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Unknown error');
-      setLiquidationsData(json);
-    } catch (e) {
-      setLiquidationsError(e.message);
     }
   }, []);
 
@@ -178,14 +150,12 @@ export default function useLevelsTabData(isActive) {
   // both calls back into refetch() and its dependency array.
   const refetch = useCallback(() => {
     fetchTimeframes();
-    fetchOpenInterest();
-    fetchLiquidations();
     fetchLiquidationHeatmap();
     fetchLiquidationHeatmapCoinalyze();
     fetchLiquidationFeed();
     fetchBtcPrice();
     fetchEthPrice();
-  }, [fetchTimeframes, fetchOpenInterest, fetchLiquidations, fetchLiquidationHeatmap, fetchLiquidationHeatmapCoinalyze, fetchLiquidationFeed, fetchBtcPrice, fetchEthPrice]);
+  }, [fetchTimeframes, fetchLiquidationHeatmap, fetchLiquidationHeatmapCoinalyze, fetchLiquidationFeed, fetchBtcPrice, fetchEthPrice]);
 
   useEffect(() => {
     if (isActive && !loaded) {
@@ -196,9 +166,7 @@ export default function useLevelsTabData(isActive) {
 
   return {
     timeframesData, timeframesError,
-    openInterestData, openInterestError,
     takerFlowData, takerFlowError,
-    liquidationsData, liquidationsError,
     liquidationHeatmapData, liquidationHeatmapError,
     liquidationHeatmapCoinalyzeData, liquidationHeatmapCoinalyzeError,
     liquidationHeatmapBcfData, liquidationHeatmapBcfError,

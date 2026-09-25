@@ -94,7 +94,6 @@ void DISABLED_WATCHED_WALLETS; // kept for its documentation value, not read any
 const ETH_PER_WALLET_FETCH = 25;
 // Solscan's page_size only accepts 10/20/30/40/60/100 — 25 isn't valid.
 const SOLANA_PAGE_SIZE = 20;
-const DISPLAY_LIMIT = 40;
 
 // Etherscan's free-tier rate limit (observed live: "Max calls per sec
 // rate limit reached (3/sec)") is per API key, shared across every
@@ -250,10 +249,14 @@ async function handler() {
       );
     }
 
+    // Every wallet's rows are kept (at most ETH_PER_WALLET_FETCH per token)
+    // rather than the newest 40 overall (as before): Binance's hot wallet
+    // takes a steady stream of small customer deposits, so a global cut
+    // left only Binance and Jump and dropped Wintermute and GSR entirely.
+    // The panel's size filter does the narrowing.
     const activity = succeeded
       .flatMap((r) => r.rows)
-      .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
-      .slice(0, DISPLAY_LIMIT);
+      .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
     return Response.json({
       activity,

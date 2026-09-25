@@ -60,6 +60,7 @@ export default function MarketNews({ data }) {
         <>
           <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '4px 0 16px 20px' }}>
             Live crypto headlines via CoinStats
+            {data.filteredOut > 0 ? ` · ${data.filteredOut} auto-generated or non-English item${data.filteredOut === 1 ? '' : 's'} hidden` : ''}
           </p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>

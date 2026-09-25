@@ -16,8 +16,6 @@ import { withCdnCache } from '../../lib/cdnCache';
 
 export const dynamic = 'force-dynamic';
 
-const YEARS_SHOWN = 5;
-
 async function seasonalityForPair(pair) {
   const candles = await fetchCandles(pair, 10080); // weekly
   const sorted = [...candles].sort((a, b) => a[0] - b[0]);
@@ -34,8 +32,11 @@ async function seasonalityForPair(pair) {
   const curYear = now.getUTCFullYear();
   const curMonth = now.getUTCMonth();
 
+  // Every year Kraken's weekly history reaches (BTC back to 2013). The
+  // first month of the history has no prior close, so it stays empty.
+  const firstYear = sorted.length ? new Date(sorted[0][0] * 1000).getUTCFullYear() : curYear;
   const years = [];
-  for (let i = YEARS_SHOWN - 1; i >= 0; i--) years.push(curYear - i);
+  for (let y = firstYear; y <= curYear; y++) years.push(y);
 
   const monthlyReturns = {};
   for (const year of years) {

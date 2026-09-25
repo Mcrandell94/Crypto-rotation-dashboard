@@ -17,6 +17,7 @@
 
 import { FOMC_MEETINGS, decisionDateTime } from '../../lib/fomc-calendar';
 import { withCdnCache } from '../../lib/cdnCache';
+import { callWalls as callWallsFor, downsideInsuranceStrike as downsideInsuranceFor } from '../../lib/optionsLevels';
 
 export const dynamic = 'force-dynamic';
 
@@ -175,16 +176,10 @@ async function fetchOptionsForCurrency(currency) {
         openInterest: Math.round(i.openInterest * 10) / 10,
       }));
 
-    // Call walls: the strikes with the heaviest call open interest — a
-    // cluster of written calls tends to act as resistance/a price magnet.
-    const callWalls = [...new Set(
-      [...instruments].filter((i) => i.type === 'call').sort((a, b) => b.openInterest - a.openInterest).slice(0, 6).map((i) => i.strike)
-    )].sort((a, b) => a - b).slice(0, 2);
-
-    // Downside insurance: the heaviest put open interest below current spot.
-    const downsideInsuranceStrike = [...instruments]
-      .filter((i) => i.type === 'put' && (!price || i.strike < price))
-      .sort((a, b) => b.openInterest - a.openInterest)[0]?.strike ?? null;
+    // Call walls (heaviest call OI above spot) and downside insurance
+    // (heaviest put OI below spot), summed per strike across expiries.
+    const callWalls = callWallsFor(instruments, price);
+    const downsideInsuranceStrike = downsideInsuranceFor(instruments, price);
 
     return {
       price,
