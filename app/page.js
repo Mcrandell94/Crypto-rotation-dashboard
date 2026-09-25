@@ -126,6 +126,9 @@ export default function DashboardHome() {
         etfFlowsData={header.etfFlowsData}
         fundingData={rotation.fundingData}
         seasonalityData={header.seasonalityData}
+        openInterestData={header.openInterestData}
+        liquidationsData={header.liquidationsData}
+        rrgSectorsData={header.rrgSectorsData}
       />
 
       <div style={{
@@ -445,26 +448,26 @@ export default function DashboardHome() {
             ethPriceError={levels.ethPriceError}
           />
 
-          {levels.openInterestError ? (
+          {header.openInterestError ? (
             <div style={{ marginTop: 20, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-              <strong>Cross-exchange open interest fetch failed:</strong> {levels.openInterestError}
+              <strong>Cross-exchange open interest fetch failed:</strong> {header.openInterestError}
               <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
                 Most likely cause: COINGLASS_API_KEY isn't set yet, or the key's plan doesn't include this endpoint.
               </div>
             </div>
           ) : (
-            <OpenInterestPanel data={levels.openInterestData} />
+            <OpenInterestPanel data={header.openInterestData} />
           )}
 
-          {levels.liquidationsError ? (
+          {header.liquidationsError ? (
             <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
-              <strong>Liquidations fetch failed:</strong> {levels.liquidationsError}
+              <strong>Liquidations fetch failed:</strong> {header.liquidationsError}
               <div style={{ fontSize: 12, color: '#8B9298', marginTop: 8 }}>
                 Most likely cause: COINGLASS_API_KEY isn't set yet in this environment's variables.
               </div>
             </div>
           ) : (
-            <LiquidationsPanel data={levels.liquidationsData} />
+            <LiquidationsPanel data={header.liquidationsData} />
           )}
 
           {levels.liquidationFeedError ? (

@@ -132,3 +132,26 @@ export function runLiquidationHeatmap(rows, barHours) {
   const withPrices = computeLiquidationPrices(withFeatures);
   return computeHeatmap(withPrices);
 }
+
+// Nearest meaningful cluster on each side of `price`. A bin only counts if
+// its weight is at least `minShare` of the heaviest bin on the same side
+// within ±`windowPct` of price. The window stops a huge, long-stale level
+// far away from making every nearby cluster look negligible; the share
+// stops a near-empty sliver next to spot from being called a "cluster".
+export function nearestClusters(bins, price, { minShare = 0.25, windowPct = 0.25 } = {}) {
+  const lo = price * (1 - windowPct);
+  const hi = price * (1 + windowPct);
+  const below = bins.filter((b) => b.priceHigh <= price && b.longWeight > 0);
+  const above = bins.filter((b) => b.priceLow >= price && b.shortWeight > 0);
+  // Nothing inside the window: fall back to the whole side.
+  const maxOf = (arr, key) => Math.max(0, ...arr.map((b) => b[key]));
+  const maxLong = maxOf(below.filter((b) => b.priceLow >= lo), 'longWeight') || maxOf(below, 'longWeight');
+  const maxShort = maxOf(above.filter((b) => b.priceHigh <= hi), 'shortWeight') || maxOf(above, 'shortWeight');
+  const long = below
+    .filter((b) => b.longWeight >= minShare * maxLong)
+    .sort((a, b) => b.priceHigh - a.priceHigh)[0] || null;
+  const short = above
+    .filter((b) => b.shortWeight >= minShare * maxShort)
+    .sort((a, b) => a.priceLow - b.priceLow)[0] || null;
+  return { nearestLongCluster: long, nearestShortCluster: short };
+}

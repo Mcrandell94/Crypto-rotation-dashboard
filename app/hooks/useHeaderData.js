@@ -17,6 +17,11 @@ export default function useHeaderData() {
   const [optionsError, setOptionsError] = useState(null);
   const [seasonalityData, setSeasonalityData] = useState(null);
   const [seasonalityError, setSeasonalityError] = useState(null);
+  const [openInterestData, setOpenInterestData] = useState(null);
+  const [openInterestError, setOpenInterestError] = useState(null);
+  const [liquidationsData, setLiquidationsData] = useState(null);
+  const [liquidationsError, setLiquidationsError] = useState(null);
+  const [rrgSectorsData, setRrgSectorsData] = useState(null);
 
   const fetchEma = useCallback(async () => {
     setEmaError(null);
@@ -78,13 +83,55 @@ export default function useHeaderData() {
     }
   }, []);
 
+  // Open interest and liquidations feed MarketRead's leverage lines and the
+  // Levels tab's panels (which read them from here rather than refetching).
+  const fetchOpenInterest = useCallback(async () => {
+    setOpenInterestError(null);
+    try {
+      const res = await fetch('/api/openinterest');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setOpenInterestData(json);
+    } catch (e) {
+      setOpenInterestError(e.message);
+    }
+  }, []);
+
+  const fetchLiquidations = useCallback(async () => {
+    setLiquidationsError(null);
+    try {
+      const res = await fetch('/api/liquidations');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setLiquidationsData(json);
+    } catch (e) {
+      setLiquidationsError(e.message);
+    }
+  }, []);
+
+  // Sector composites vs BTC for MarketRead's sector-rotation line. A
+  // failure just leaves that line out; the Rotation tab's own sectors RRG
+  // fetches and reports this separately.
+  const fetchRrgSectors = useCallback(async () => {
+    try {
+      const res = await fetch('/api/rrg-sectors?benchmark=BTC');
+      const json = await res.json();
+      if (res.ok) setRrgSectorsData(json);
+    } catch {
+      // leave rrgSectorsData as it was
+    }
+  }, []);
+
   const refetch = useCallback(() => {
     fetchEma();
     fetchCot();
     fetchEtfFlows();
     fetchOptions();
     fetchSeasonality();
-  }, [fetchEma, fetchCot, fetchEtfFlows, fetchOptions, fetchSeasonality]);
+    fetchOpenInterest();
+    fetchLiquidations();
+    fetchRrgSectors();
+  }, [fetchEma, fetchCot, fetchEtfFlows, fetchOptions, fetchSeasonality, fetchOpenInterest, fetchLiquidations, fetchRrgSectors]);
 
   useEffect(() => {
     refetch();
@@ -96,6 +143,9 @@ export default function useHeaderData() {
     etfFlowsData, etfFlowsError,
     optionsData, optionsError,
     seasonalityData, seasonalityError,
+    openInterestData, openInterestError,
+    liquidationsData, liquidationsError,
+    rrgSectorsData,
     refetch,
   };
 }

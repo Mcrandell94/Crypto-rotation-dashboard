@@ -1,9 +1,8 @@
 // Server-side only — requires an Etherscan API key (etherscan.io) for the
-// Ethereum leg; a TronScan key (optional) adds Tron coverage. A stablecoin
-// "mint" is, on Ethereum and Tron, an ERC-20/TRC20 Transfer from the
-// chain's null/black-hole address to the issuer's treasury or an end
-// wallet — a real on-chain fact read live from each chain's own explorer
-// API, not a guessed or derived signal.
+// Ethereum leg; the Tron leg uses TronGrid's keyless public API. A USDC
+// "mint" is an ERC-20 Transfer from the null address; a USDT mint is
+// Tether's own Issue event (see ISSUE_TOPIC below). Both are real on-chain
+// facts read live, not a guessed or derived signal.
 //
 // Multi-chain: both USDT and USDC mint on several chains, and most of
 // USDT's supply is actually minted on Tron, not Ethereum — so Ethereum
@@ -27,9 +26,6 @@
 // recalled from memory:
 //   - ETH USDT/USDC: see addresses below (unchanged from original).
 //   - Tron USDT contract: TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t
-//   - Tron black-hole/null address: T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb
-//     (TRON's address(0) equivalent — no private key exists for it; real
-//     new-supply events are TRC20 Transfers FROM this address)
 //   - Solana USDC mint: EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v
 //
 // Uses Etherscan's V2 API (api.etherscan.io/v2/api, chainid=1 for
@@ -37,14 +33,6 @@
 // (api.etherscan.io/api) — Etherscan unified all their per-chain
 // explorers behind one multichain key on V2, and newer API keys are
 // increasingly V2-only, so V1 is the wrong endpoint to build against now.
-//
-// TronScan's exact response field names are NOT confirmed against a live
-// response — its docs and host are both unreachable from this sandbox, so
-// unlike the Ethereum leg (which decodes raw getLogs topics, no
-// field-name guessing involved), the Tron parser below tries several
-// plausible field names defensively (same pattern used for CoinLobster
-// elsewhere in this codebase) and fails loudly with the raw response
-// embedded in the error if the expected array shape isn't found.
 //
 // Solscan's response shape IS now confirmed, via its full reference page
 // for the sibling /v2.0/account/transfer endpoint (pasted in by the
@@ -81,9 +69,8 @@ const ZERO_TOPIC = `0x${'0'.repeat(64)}`;
 // sorting everything actually returned ourselves, never by trusting the
 // API to have handed us the right end of the list.
 const FETCH_LIMIT = 1000;
-// How many of the most-recent, freshly-sorted rows the feed actually
-// shows, after the panel's own size filter narrows things further. Raised
-// from 30 now that three chains contribute instead of one.
+// How many of the most-recent, freshly-sorted rows each chain/token
+// contributes, before the panel's own size filter narrows things further.
 const DISPLAY_LIMIT = 45;
 
 // USDT and USDC's null-address Transfer events happen at wildly different
@@ -97,70 +84,68 @@ const DISPLAY_LIMIT = 45;
 // count vastly exceeded FETCH_LIMIT even after sorting, so nothing recent
 // was ever actually fetched in the first place. Each token's window here
 // is sized to its own real frequency instead of a shared guess.
+//
+// USDT is different: Tether's contract (TetherToken) never emits a
+// Transfer from the zero address. Its issue() adds to the owner's balance
+// and emits only `Issue(uint amount)`, so a null-address Transfer filter
+// can't see a single USDT mint. USDT is read from its Issue events
+// instead: rare (days apart), always to Tether's own treasury (the
+// contract owner), so a ~30-day window stays small.
+const ISSUE_TOPIC = '0xcb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a'; // keccak256("Issue(uint256)")
 const TOKENS = [
-  { symbol: 'USDT', label: 'Tether', address: '0xdAC17F958D2ee523a2206206994597C13D831ec7', decimals: 6, color: '#26A17B', blockWindow: 50_400 }, // ~7 days
-  { symbol: 'USDC', label: 'USD Coin', address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', decimals: 6, color: '#2775CA', blockWindow: 900 }, // ~3 hours
+  { symbol: 'USDT', label: 'Tether', address: '0xdAC17F958D2ee523a2206206994597C13D831ec7', decimals: 6, color: '#26A17B', blockWindow: 216_000, mintEvent: 'issue' }, // ~30 days
+  { symbol: 'USDC', label: 'USD Coin', address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', decimals: 6, color: '#2775CA', blockWindow: 900, mintEvent: 'transfer' }, // ~3 hours
 ];
 
-const TRON_BASE = 'https://apilist.tronscanapi.com/api';
+// Tron USDT (TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t) is the same TetherToken
+// contract, so its mints are Issue events too. They're read from TronGrid's
+// public contract-events API (no key needed), last ~30 days.
+//
+// This replaced a scan of TronScan's ~300 most recent USDT transfers for
+// ones from the black-hole address: Tron USDT moves dozens of transfers a
+// second, so that window covered a few seconds and never caught a mint.
+//
+// TronGrid's event shape ({ data: [{ event_name, block_timestamp,
+// transaction_id, result: { amount } }] }) isn't confirmed against a live
+// response from this sandbox (TronGrid is unreachable here), so the
+// parser tries a couple of field names and fails loudly with the raw
+// response if the list isn't found.
+const TRONGRID_BASE = 'https://api.trongrid.io';
 const TRON_USDT_CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
-const TRON_BLACK_HOLE = 'T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb';
 const TRON_DECIMALS = 6;
-// The /token_trc20/transfers endpoint has a documented quirk (confirmed
-// via a GitHub issue against the tronscan-api repo) of always capping at
-// 20 rows per page regardless of the requested `limit` — so recent-window
-// coverage comes from paginating with `start`, not from one large `limit`.
-const TRON_PAGE_SIZE = 20;
-const TRON_PAGES = 15; // ~300 most-recent contract-wide transfers scanned
+const TRON_WINDOW_MS = 30 * 86400000;
 
-async function fetchTronMints(apiKey) {
-  if (!apiKey) return { chain: 'Tron', symbol: 'USDT', mints: [], skipped: true };
-
-  const allRows = [];
-  for (let page = 0; page < TRON_PAGES; page++) {
-    const start = page * TRON_PAGE_SIZE;
-    const url = `${TRON_BASE}/token_trc20/transfers?limit=${TRON_PAGE_SIZE}&start=${start}&contract_address=${TRON_USDT_CONTRACT}`;
-    const res = await fetch(url, { headers: { 'TRON-PRO-API-KEY': apiKey }, next: { revalidate: 60 } });
-
-    if (!res.ok) {
-      const detail = await res.text();
-      return { chain: 'Tron', symbol: 'USDT', error: `TronScan returned ${res.status} for USDT transfers. Raw response: ${detail.slice(0, 300)}` };
-    }
-
-    const json = await res.json();
-    const rows = extractRows(json, ['token_transfers', 'data', 'transfers', 'results']);
-    if (!rows) {
-      return { chain: 'Tron', symbol: 'USDT', error: `TronScan's token_trc20/transfers response didn't match the expected shape. Raw sample: ${JSON.stringify(json).slice(0, 500)}` };
-    }
-    if (rows.length === 0) break;
-    allRows.push(...rows);
-    if (rows.length < TRON_PAGE_SIZE) break; // short page = no more data
+async function fetchTronMints() {
+  const since = Date.now() - TRON_WINDOW_MS;
+  const url = `${TRONGRID_BASE}/v1/contracts/${TRON_USDT_CONTRACT}/events?event_name=Issue&only_confirmed=true&order_by=block_timestamp,desc&limit=50&min_block_timestamp=${since}`;
+  const res = await fetch(url, { headers: { Accept: 'application/json' }, next: { revalidate: 300 } });
+  if (!res.ok) {
+    const detail = await res.text();
+    return { chain: 'Tron', symbol: 'USDT', error: `TronGrid returned ${res.status} for USDT Issue events. Raw response: ${detail.slice(0, 300)}` };
+  }
+  const json = await res.json();
+  const rows = extractRows(json, ['data', 'events', 'result']);
+  if (!rows) {
+    return { chain: 'Tron', symbol: 'USDT', error: `TronGrid's events response didn't match the expected shape. Raw sample: ${JSON.stringify(json).slice(0, 500)}` };
   }
 
-  const mints = allRows
+  const mints = rows
+    .filter((r) => (pickField(r, ['event_name', 'eventName']) || 'Issue') === 'Issue')
     .map((r) => {
-      const from = pickField(r, ['from_address', 'from', 'fromAddress']);
-      const to = pickField(r, ['to_address', 'to', 'toAddress']);
-      const rawAmount = pickField(r, ['quant', 'amount', 'value']);
-      const amount = scaleAmount(rawAmount, TRON_DECIMALS);
-      const timestamp = normalizeMs(pickField(r, ['block_ts', 'timestamp', 'block_timestamp']));
-      const txHash = pickField(r, ['transaction_id', 'hash', 'tx_hash', 'transactionHash']);
-      return { from, to, amount, timestamp, txHash };
-    })
-    // Real new-supply events are TRC20 Transfers FROM the black-hole
-    // address — the same "from the null address" pattern as Ethereum's
-    // mint detection, just under Tron's own zero-address equivalent.
-    .filter((r) => r.from === TRON_BLACK_HOLE)
-    .map((r) => ({
-      chain: 'Tron',
-      symbol: 'USDT',
-      label: 'Tether (Tron)',
-      color: '#26A17B',
-      to: r.to,
-      amount: r.amount,
-      txHash: r.txHash,
-      timestamp: r.timestamp,
-    }));
+      const result = r.result || {};
+      const rawAmount = pickField(result, ['amount', '0', 'value']);
+      return {
+        chain: 'Tron',
+        symbol: 'USDT',
+        label: 'Tether (Tron)',
+        color: '#26A17B',
+        to: null,
+        toLabel: 'Tether treasury',
+        amount: scaleAmount(rawAmount, TRON_DECIMALS),
+        txHash: pickField(r, ['transaction_id', 'transactionId', 'txID']),
+        timestamp: normalizeMs(pickField(r, ['block_timestamp', 'timestamp'])),
+      };
+    });
 
   return { chain: 'Tron', symbol: 'USDT', mints };
 }
@@ -234,7 +219,8 @@ async function fetchMints(token, apiKey, latestBlock) {
   const fromBlock = Math.max(0, latestBlock - token.blockWindow);
   const url =
     `${ETHERSCAN_BASE}?chainid=${ETHEREUM_CHAIN_ID}&module=logs&action=getLogs&fromBlock=${fromBlock}&toBlock=latest` +
-    `&address=${token.address}&topic0=${TRANSFER_TOPIC}&topic0_1_opr=and&topic1=${ZERO_TOPIC}` +
+    `&address=${token.address}` +
+    (token.mintEvent === 'issue' ? `&topic0=${ISSUE_TOPIC}` : `&topic0=${TRANSFER_TOPIC}&topic0_1_opr=and&topic1=${ZERO_TOPIC}`) +
     `&page=1&offset=${FETCH_LIMIT}&sort=desc&apikey=${apiKey}`;
 
   const res = await fetch(url, { next: { revalidate: 60 } });
@@ -253,7 +239,8 @@ async function fetchMints(token, apiKey, latestBlock) {
 
   const rows = Array.isArray(json.result) ? json.result : [];
   const mints = rows.map((log) => {
-    const toTopic = log.topics?.[2];
+    // Issue events carry only the amount; the tokens go to the treasury.
+    const toTopic = token.mintEvent === 'transfer' ? log.topics?.[2] : null;
     const to = toTopic ? `0x${toTopic.slice(-40)}` : null;
     const amount = scaleAmount(log.data, token.decimals);
     return {
@@ -262,6 +249,7 @@ async function fetchMints(token, apiKey, latestBlock) {
       label: token.label,
       color: token.color,
       to,
+      toLabel: token.mintEvent === 'issue' ? 'Tether treasury' : null,
       amount,
       txHash: log.transactionHash,
       blockNumber: log.blockNumber ? parseInt(log.blockNumber, 16) : null,
@@ -278,7 +266,6 @@ async function fetchMints(token, apiKey, latestBlock) {
 
 async function handler() {
   const etherscanKey = process.env.ETHERSCAN_API_KEY;
-  const tronscanKey = process.env.TRONSCAN_API_KEY;
 
   if (!etherscanKey) {
     return Response.json(
@@ -305,7 +292,7 @@ async function handler() {
 
     const [ethResults, tronResult] = await Promise.all([
       fetchEthSequential(),
-      fetchTronMints(tronscanKey),
+      fetchTronMints(),
       // Solana (Solscan) is disabled here for now — see header comment.
       // fetchSolanaMints below is untouched; re-enable by adding
       // `fetchSolanaMints(process.env.SOLSCAN_API_KEY)` back into this
@@ -328,10 +315,12 @@ async function handler() {
       );
     }
 
+    // Capped per token before merging: USDC's frequent small bridge mints
+    // would otherwise push every (rarer, older) USDT issuance off the list.
+    const newestFirst = (a, b) => (b.timestamp || 0) - (a.timestamp || 0);
     const mints = succeeded
-      .flatMap((r) => r.mints)
-      .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
-      .slice(0, DISPLAY_LIMIT);
+      .flatMap((r) => [...r.mints].sort(newestFirst).slice(0, DISPLAY_LIMIT))
+      .sort(newestFirst);
 
     return Response.json({
       mints,

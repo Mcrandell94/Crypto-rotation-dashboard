@@ -5,12 +5,15 @@
 // the next FOMC outcome (hold / 25bp hike / 25bp cut / etc.), used by the
 // CB Calendar instead of a hand-guessed forward probability.
 //
-// Polymarket structures Fed-decision markets as one event with several
-// outcome tokens (one per possible decision, e.g. "No Change", "25 bps
-// decrease", "50+ bps decrease"), not a single Yes/No — so every outcome
-// and its live price is returned, not just one side.
+// Polymarket structures a Fed-decision event as several binary Yes/No
+// markets, one per possible decision ("No change", "25 bps decrease", ...),
+// each labeled by its `groupItemTitle` (the same field /api/polymarket
+// reads for its price ladders). Each decision's probability is its
+// market's "Yes" price. Reading only the first market (the original
+// version) returned a bare "No 99.8% / Yes 0.3%" with no decision named.
 
 import { withCdnCache } from '../../lib/cdnCache';
+import { decisionOutcomes } from '../../lib/fedOdds';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,20 +37,6 @@ async function fetchEvents() {
   return res.json();
 }
 
-// Same Gamma API quirk as /api/polymarket: outcomes/outcomePrices arrive
-// as JSON-stringified arrays.
-function parseOutcomes(market) {
-  try {
-    const outcomes = JSON.parse(market.outcomes || '[]');
-    const prices = JSON.parse(market.outcomePrices || '[]');
-    return outcomes
-      .map((label, i) => ({ label, pct: Math.round(parseFloat(prices[i]) * 1000) / 10 }))
-      .filter((o) => Number.isFinite(o.pct));
-  } catch {
-    return [];
-  }
-}
-
 async function handler() {
   try {
     const events = await fetchEvents();
@@ -57,21 +46,17 @@ async function handler() {
       return Response.json({ market: null, fetchedAt: new Date().toISOString() });
     }
 
-    const event = candidates[0];
-    const market = (event.markets || [])[0];
-    if (!market) {
-      const detail = JSON.stringify(event).slice(0, 500);
-      return Response.json(
-        { error: "Found a Fed decision event but it carried no market data. Raw sample: " + detail, detail },
-        { status: 502 }
-      );
-    }
+    // The next meeting: the soonest-resolving open Fed decision event.
+    const now = Date.now();
+    const event = [...candidates]
+      .filter((e) => !e.endDate || Date.parse(e.endDate) > now)
+      .sort((a, b) => Date.parse(a.endDate || 0) - Date.parse(b.endDate || 0))[0] || candidates[0];
 
-    const outcomes = parseOutcomes(market).sort((a, b) => b.pct - a.pct);
+    const outcomes = decisionOutcomes(event.markets);
     if (outcomes.length === 0) {
-      const detail = JSON.stringify(market).slice(0, 500);
+      const detail = JSON.stringify(event.markets || event).slice(0, 500);
       return Response.json(
-        { error: "Fed decision market's outcomes didn't match the expected shape. Raw sample: " + detail, detail },
+        { error: "Found a Fed decision event but couldn't read a Yes price for any of its decision markets. Raw sample: " + detail, detail },
         { status: 502 }
       );
     }

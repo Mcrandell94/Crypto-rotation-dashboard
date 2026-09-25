@@ -17,6 +17,7 @@
 // sample if none match, rather than silently rendering something broken.
 
 import { withCdnCache } from '../../lib/cdnCache';
+import { nearestClusters } from '../../lib/liquidationHeatmap';
 
 export const dynamic = 'force-dynamic';
 
@@ -108,12 +109,7 @@ async function handler() {
     // use their own last-close price.
     const price = rows[Math.floor(rows.length / 2)].price;
 
-    const nearestLongCluster = bins
-      .filter((b) => b.priceHigh <= price && b.longWeight > 0)
-      .sort((a, b) => b.priceHigh - a.priceHigh)[0] || null;
-    const nearestShortCluster = bins
-      .filter((b) => b.priceLow >= price && b.shortWeight > 0)
-      .sort((a, b) => a.priceLow - b.priceLow)[0] || null;
+    const { nearestLongCluster, nearestShortCluster } = nearestClusters(bins, price);
 
     return Response.json({
       price,

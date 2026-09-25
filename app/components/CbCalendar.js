@@ -299,9 +299,13 @@ export default function CbCalendar({ optionsData, fedOddsData, fedOddsError, con
   let events = [...buildCentralBankEvents(now), ...buildEconomicDataEvents(now), ...buildClosureEvents(now), ...buildOptionsEvents(optionsData), ...buildLegislativeEvents(congressData)];
 
   // Attach live Polymarket odds to the nearest upcoming Fed meeting only —
-  // the market tracks "the next decision," not a specific date.
+  // the market tracks "the next decision," not a specific date. Skipped if
+  // the market resolves more than ~10 days from that meeting (it's for a
+  // different one).
   const nextFomc = events.find((e) => e.shortName === 'Fed' && !e.resolved);
-  if (nextFomc && fedOddsData?.market) {
+  const marketEnd = Date.parse(fedOddsData?.market?.endDate || '');
+  const sameMeeting = !Number.isFinite(marketEnd) || Math.abs(marketEnd - nextFomc?.date) < 10 * 86400000;
+  if (nextFomc && fedOddsData?.market && sameMeeting) {
     nextFomc.marketOutcomes = fedOddsData.market.outcomes;
   }
 

@@ -51,7 +51,9 @@ function formatRelative(ts) {
 }
 
 export default function StablecoinMintFeed({ data }) {
-  const [minSize, setMinSize] = useState(0);
+  // Defaults to $1M+: most USDC "mints" are small CCTP bridge deliveries
+  // (often under $1), which buried the treasury-sized ones under "All".
+  const [minSize, setMinSize] = useState(1_000_000);
 
   if (!data) {
     return (
@@ -74,14 +76,11 @@ export default function StablecoinMintFeed({ data }) {
         Stablecoin Mint Feed — Ethereum · Tron
       </h2>
       <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '4px 0 16px', maxWidth: 680, lineHeight: 1.5 }}>
-        Real on-chain USDT/USDC mints — an ERC-20/TRC20 Transfer from each chain's null/black-hole
-        address — read live from Etherscan and TronScan. Ethereum USDT's window looks back ~7 days
-        (rare, treasury-sized events); Ethereum USDC's looks back only ~3 hours, because most of what
-        shows up as a USDC "mint" there is Circle's CCTP cross-chain bridge minting directly to an
-        end-user's address on arrival, not a treasury re-supply — frequent and usually small, so a
-        wide window would bury recent activity under old bridge traffic. Tron scans the most recent
-        ~300 USDT contract transfers for black-hole activity. Use the size filter to focus on the
-        bigger ones.
+        Real on-chain stablecoin mints, read live from Etherscan and TronGrid. USDT: Tether&apos;s own
+        Issue events (new supply to the Tether treasury) on Ethereum and Tron, last ~30 days. USDC: a
+        Transfer from Ethereum&apos;s null address, last ~3 hours only, because most USDC &quot;mints&quot;
+        are Circle&apos;s CCTP bridge delivering to an end user on arrival, not a treasury re-supply:
+        frequent and usually small. Showing $1M+ by default; pick &quot;All&quot; to see everything.
       </p>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
@@ -133,7 +132,9 @@ export default function StablecoinMintFeed({ data }) {
                 </span>
                 <span style={{ fontSize: 11, color: TEXT_SECONDARY, flex: 1 }}>
                   to{' '}
-                  {m.to ? (
+                  {m.toLabel ? (
+                    m.toLabel
+                  ) : m.to ? (
                     <a href={links.addr(m.to)} target="_blank" rel="noopener noreferrer" style={{ color: TEXT_SECONDARY }}>
                       {shortAddr(m.to)}
                     </a>

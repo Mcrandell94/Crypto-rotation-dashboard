@@ -12,10 +12,13 @@
 // rather than silently rendering an empty or broken list.
 
 import { withCdnCache } from '../../lib/cdnCache';
+import { filterNews } from '../../lib/newsFilter';
 
 export const dynamic = 'force-dynamic';
 
 const BASE_URL = 'https://openapiv1.coinstats.app';
+const FETCH_LIMIT = 50;
+const SHOW = 20;
 
 function pick(obj, keys) {
   for (const k of keys) {
@@ -34,7 +37,9 @@ async function handler() {
   }
 
   try {
-    const url = `${BASE_URL}/news?page=1&limit=20`;
+    // Pull extra: auto-generated and non-English items are filtered out
+    // below (see app/lib/newsFilter.js), and 20 are kept.
+    const url = `${BASE_URL}/news?page=1&limit=${FETCH_LIMIT}`;
     const res = await fetch(url, {
       headers: { 'X-API-KEY': apiKey, Accept: 'application/json' },
       next: { revalidate: 900 },
@@ -80,7 +85,15 @@ async function handler() {
       );
     }
 
-    return Response.json({ articles, fetchedAt: new Date().toISOString() });
+    const kept = filterNews(articles);
+    if (kept.length === 0) {
+      return Response.json(
+        { error: `All ${articles.length} CoinStats news items were auto-generated or non-English, so none are shown.` },
+        { status: 502 }
+      );
+    }
+
+    return Response.json({ articles: kept.slice(0, SHOW), filteredOut: articles.length - kept.length, fetchedAt: new Date().toISOString() });
   } catch (err) {
     return Response.json({ error: 'Fetch failed', detail: String(err) }, { status: 500 });
   }

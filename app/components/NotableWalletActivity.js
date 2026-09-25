@@ -47,7 +47,9 @@ function explorerLinks(chain) {
 }
 
 export default function NotableWalletActivity({ data }) {
-  const [minSize, setMinSize] = useState(0);
+  // $100K+ by default: Binance's hot wallet takes a constant stream of
+  // small customer deposits that would otherwise fill the list.
+  const [minSize, setMinSize] = useState(100_000);
 
   if (!data) {
     return (
@@ -64,6 +66,11 @@ export default function NotableWalletActivity({ data }) {
   const activity = allActivity.filter((a) => a.amount == null || a.amount >= minSize);
   const hiddenCount = allActivity.length - activity.length;
   const trackedList = (data.watchedWallets || []).map((w) => `${w.entity} (${w.chain})`).join(', ');
+  // Per wallet: how many transfers pass the size filter, out of those fetched.
+  const perWallet = (data.watchedWallets || []).map((w) => {
+    const rows = allActivity.filter((a) => a.entity === w.entity && a.chain === w.chain);
+    return { entity: w.entity, shown: rows.filter((a) => a.amount == null || a.amount >= minSize).length, fetched: rows.length };
+  });
 
   return (
     <section style={{ marginTop: 32 }}>
@@ -93,6 +100,13 @@ export default function NotableWalletActivity({ data }) {
           </button>
         ))}
       </div>
+
+      {perWallet.length > 0 && (
+        <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '0 0 10px' }}>
+          {perWallet.map((w) => `${w.entity} ${w.shown}/${w.fetched}`).join(' · ')}
+          <span> (shown / latest fetched per wallet)</span>
+        </p>
+      )}
 
       {activity.length === 0 ? (
         <p style={{ fontSize: 12, color: TEXT_MUTED }}>

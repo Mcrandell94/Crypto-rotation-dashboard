@@ -9,6 +9,11 @@
 // backing data hasn't loaded, so the read only ever speaks to what's
 // actually in front of it right now.
 
+import { monthStats } from './seasonality.js';
+import { FUNDING_HOT } from './rrgOverlays.js';
+import { computeSeries, quadrantOf, RRG_PRESETS } from './rrgMath.js';
+import { SECTORS } from './sectors.js';
+
 const THRESHOLDS = [
   { max: -2, verdict: 'Bearish', color: '#A85D4F' },
   { max: -0.5, verdict: 'Leaning Bearish', color: '#C9866F' },
@@ -21,9 +26,50 @@ function headlineExpiry(expiries) {
   return expiries?.find((e) => e.type === 'quarterly') || expiries?.[0] || null;
 }
 
+// Total BTC open interest now vs 24h ago across every exchange in the
+// Coinglass breakdown (each venue's 24h ago = now / (1 + change24h%)).
+export function openInterestChange24h(openInterestData) {
+  const venues = openInterestData?.assets?.BTC?.byExchange;
+  if (!Array.isArray(venues) || venues.length === 0) return null;
+  let now = 0;
+  let before = 0;
+  for (const v of venues) {
+    if (!(v.openInterestUsd > 0) || !Number.isFinite(v.change24h)) continue;
+    now += v.openInterestUsd;
+    before += v.openInterestUsd / (1 + v.change24h / 100);
+  }
+  return before > 0 ? (now / before - 1) * 100 : null;
+}
+
+// Where each sector sits on the sectors-vs-BTC RRG today, using the chart's
+// default (Balanced, z-score) settings. Not scored: rotation between
+// sectors doesn't say which way the market goes.
+export function sectorQuadrants(rrgSectorsData) {
+  const prices = rrgSectorsData?.prices;
+  const bench = prices?.[rrgSectorsData?.benchmark];
+  if (!prices || !Array.isArray(bench)) return null;
+  const settings = { zscore: true, ...RRG_PRESETS.find((p) => p.key === 'balanced').settings };
+  const out = { leading: [], improving: [], weakening: [], lagging: [] };
+  for (const sector of SECTORS) {
+    const series = prices[sector.label];
+    if (!Array.isArray(series) || series.length !== bench.length) continue;
+    const last = computeSeries(series, bench, settings).at(-1);
+    if (!last || !Number.isFinite(last.x) || !Number.isFinite(last.y)) continue;
+    out[quadrantOf(last.x, last.y)].push(sector.short);
+  }
+  return Object.values(out).some((l) => l.length) ? out : null;
+}
+
 export function computeMarketRead({
   btcTicker, macroData, emaData, cotData, optionsData, etfFlowsData, fundingData, seasonalityData,
+  openInterestData, liquidationsData, rrgSectorsData,
 }) {
+  // Options and seasonality responses are per asset ({ assets: { BTC, ETH } })
+  // since ETH was added; the read is about BTC. Reading them flat (as this
+  // did before) silently skipped both factors.
+  const btcOptions = optionsData?.assets?.BTC ?? optionsData;
+  const btcSeasonality = seasonalityData?.assets?.BTC ?? seasonalityData;
+
   const factors = [];
   let score = 0;
   const add = (bull, text, weight = 1) => {
@@ -64,15 +110,15 @@ export function computeMarketRead({
     add(holding, holding ? 'Holding above the weekly 50 EMA' : 'Sitting on/below the weekly 50 EMA — key support being tested', 0.5);
   }
 
-  if (optionsData?.callsPct != null) {
-    const bullTilt = optionsData.callsPct > 50;
-    if (optionsData.callsPct !== 50) {
-      add(bullTilt, `Options book is ${optionsData.callsPct}% calls`, 0.5);
+  if (btcOptions?.callsPct != null) {
+    const bullTilt = btcOptions.callsPct > 50;
+    if (btcOptions.callsPct !== 50) {
+      add(bullTilt, `Options book is ${btcOptions.callsPct}% calls`, 0.5);
     }
   }
-  const headline = headlineExpiry(optionsData?.expiries);
-  if (headline?.maxPain != null && optionsData?.price) {
-    const dist = ((headline.maxPain - optionsData.price) / optionsData.price) * 100;
+  const headline = headlineExpiry(btcOptions?.expiries);
+  if (headline?.maxPain != null && btcOptions?.price) {
+    const dist = ((headline.maxPain - btcOptions.price) / btcOptions.price) * 100;
     if (Math.abs(dist) >= 1) {
       add(dist >= 0, `Max pain for the ${headline.type === 'quarterly' ? 'nearest quarterly' : headline.date} sits ${Math.abs(dist).toFixed(1)}% ${dist >= 0 ? 'above' : 'below'} spot`, 0.5);
     }
@@ -91,18 +137,37 @@ export function computeMarketRead({
 
   const fundingAnnualized = fundingData?.data?.BTC?.fundingRateAnnualized;
   if (fundingAnnualized != null) {
-    if (fundingAnnualized >= 20) add(false, `BTC funding running hot at ${fundingAnnualized.toFixed(1)}% annualized — crowded long`, 0.5);
+    if (fundingAnnualized >= FUNDING_HOT) add(false, `BTC funding running hot at ${fundingAnnualized.toFixed(1)}% annualized — crowded long`, 0.5);
     else if (fundingAnnualized <= -10) add(true, `BTC funding negative at ${fundingAnnualized.toFixed(1)}% annualized — crowded short, squeeze risk`, 0.5);
   }
 
-  if (seasonalityData?.monthlyReturns && seasonalityData?.currentMonth != null) {
-    const vals = Object.values(seasonalityData.monthlyReturns)
-      .map((row) => row[seasonalityData.currentMonth])
-      .filter((v) => v != null);
-    if (vals.length > 0) {
-      const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
-      add(avg >= 0, `Current month historically averages ${avg >= 0 ? '+' : ''}${avg.toFixed(1)}% over ${vals.length} years — seasonal ${avg >= 0 ? 'tailwind' : 'headwind'}`, 0.25);
-    }
+  // Leverage: is open interest building behind the day's move? Rising OI
+  // with price up = new positions backing the rally; rising OI with price
+  // down = shorts pressing. Falling OI (positions closing) isn't scored.
+  const oiChange = openInterestChange24h(openInterestData);
+  const dayMove = btcTicker?.percentChange24h;
+  if (oiChange != null && dayMove != null && oiChange >= 2 && Math.abs(dayMove) >= 0.5) {
+    const up = dayMove > 0;
+    add(up, `BTC open interest up ${oiChange.toFixed(1)}% in 24h with price ${up ? 'up — new positions backing the move' : 'down — shorts pressing'}`, 0.5);
+  }
+
+  // Liquidations over the last 7 days: a lopsided flush shows which side
+  // is being forced out.
+  const liq = liquidationsData?.assets?.BTC;
+  if (liq?.last7dLong > 0 && liq?.last7dShort > 0) {
+    const fmt = (v) => `$${Math.round(v / 1e6)}M`;
+    if (liq.last7dShort >= 2 * liq.last7dLong) add(true, `Shorts squeezed: ${fmt(liq.last7dShort)} short vs ${fmt(liq.last7dLong)} long liquidations over 7 days`, 0.25);
+    else if (liq.last7dLong >= 2 * liq.last7dShort) add(false, `Longs flushed: ${fmt(liq.last7dLong)} long vs ${fmt(liq.last7dShort)} short liquidations over 7 days`, 0.25);
+  }
+
+  // Seasonality uses completed years only: the current month's partial
+  // return isn't history yet (see lib/seasonality).
+  const season = btcSeasonality?.monthlyReturns && btcSeasonality?.currentMonth != null
+    ? monthStats(btcSeasonality, btcSeasonality.currentMonth)
+    : null;
+  if (season?.avg != null) {
+    const { avg, count } = season;
+    add(avg >= 0, `Current month historically averages ${avg >= 0 ? '+' : ''}${avg.toFixed(1)}% over ${count} completed years — seasonal ${avg >= 0 ? 'tailwind' : 'headwind'}`, 0.25);
   }
 
   const bucket = THRESHOLDS.find((t) => score <= t.max) || BULLISH_FALLBACK;
@@ -116,6 +181,8 @@ export function computeMarketRead({
     { label: 'COT', ok: !!cotData },
     { label: 'Funding rates', ok: !!fundingData },
     { label: 'Seasonality', ok: !!seasonalityData },
+    { label: 'Open interest', ok: !!openInterestData },
+    { label: 'Liquidations', ok: !!liquidationsData },
   ];
   const missingSources = sources.filter((s) => !s.ok).map((s) => s.label);
 
@@ -125,5 +192,6 @@ export function computeMarketRead({
     color: bucket.color,
     factors,
     missingSources,
+    sectors: sectorQuadrants(rrgSectorsData),
   };
 }

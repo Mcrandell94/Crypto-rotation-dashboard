@@ -11,7 +11,7 @@
 // roughly 120 days of lookback.
 
 import { PAIRS, fetchCandles } from '../../lib/kraken';
-import { runLiquidationHeatmap } from '../../lib/liquidationHeatmap';
+import { runLiquidationHeatmap, nearestClusters } from '../../lib/liquidationHeatmap';
 import { withCdnCache } from '../../lib/cdnCache';
 
 export const dynamic = 'force-dynamic';
@@ -95,12 +95,7 @@ async function handler() {
     const bins = runLiquidationHeatmap(rows, BAR_HOURS);
     const price = rows[rows.length - 1].close;
 
-    const nearestLongCluster = bins
-      .filter((b) => b.priceHigh <= price && b.longWeight > 0)
-      .sort((a, b) => b.priceHigh - a.priceHigh)[0] || null;
-    const nearestShortCluster = bins
-      .filter((b) => b.priceLow >= price && b.shortWeight > 0)
-      .sort((a, b) => a.priceLow - b.priceLow)[0] || null;
+    const { nearestLongCluster, nearestShortCluster } = nearestClusters(bins, price);
 
     return Response.json({
       price,

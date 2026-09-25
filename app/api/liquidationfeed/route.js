@@ -19,6 +19,7 @@
 // property rather than a hardcoded key.
 
 import { withCdnCache } from '../../lib/cdnCache';
+import { isNonCryptoMarket } from '../../lib/nonCryptoMarkets';
 
 export const dynamic = 'force-dynamic';
 
@@ -86,11 +87,18 @@ async function handler() {
       );
     }
 
+    // Stock/commodity/FX perps are dropped from the list and taken out of
+    // the market totals (which include every market in the feed; the listed
+    // coins sum to less than the totals, so they're part of them).
+    const nonCrypto = coins.filter((c) => isNonCryptoMarket(c.symbol));
+    const sum = (key) => nonCrypto.reduce((a, c) => a + c[key], 0);
+
     return Response.json({
       asOf: data.ts ? new Date(Number(data.ts)).toISOString() : new Date().toISOString(),
-      marketLongUsd: Number(market.long) || 0,
-      marketShortUsd: Number(market.short) || 0,
-      coins,
+      marketLongUsd: Math.max(0, (Number(market.long) || 0) - sum('longUsd')),
+      marketShortUsd: Math.max(0, (Number(market.short) || 0) - sum('shortUsd')),
+      coins: coins.filter((c) => !isNonCryptoMarket(c.symbol)),
+      excludedNonCrypto: nonCrypto.map((c) => c.symbol),
       fetchedAt: new Date().toISOString(),
     });
   } catch (err) {

@@ -96,6 +96,9 @@ export default function LiveLiquidationFeed({ data }) {
         <span style={{ color: LOSS }}>Red</span> = long liquidations (forced selling) ·{' '}
         <span style={{ color: GAIN }}>green</span> = short liquidations (forced buying), within each
         coin's bar.
+        {data.excludedNonCrypto?.length > 0 && (
+          <> Stock, commodity and FX markets ({data.excludedNonCrypto.join(', ')}) are left out of the list and the totals.</>
+        )}
       </p>
     </section>
   );
