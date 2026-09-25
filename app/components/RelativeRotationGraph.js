@@ -59,7 +59,7 @@ function clamp(v, lo, hi) {
 // Axis ticks on a 1/2/5 step ladder (~4-6 per axis), labelled with just
 // enough decimals for the step.
 function ticksFor(lo, hi) {
-  const raw = (hi - lo) / 4;
+  const raw = (hi - lo) / 5;
   const pow = 10 ** Math.floor(Math.log10(raw));
   const f = raw / pow;
   const step = (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * pow;
@@ -106,22 +106,24 @@ function Swatch({ shape, color, size = 10 }) {
 
 // Greedy label placement: try positions around each series' head and take
 // the first that stays inside the plot and clear of other labels and heads.
-// A label with nowhere to go is dropped — the legend, tooltip and table
-// still carry that series — rather than stacked on top of another one.
+// Labels that don't fit next to their head get a second pass further out,
+// joined back to the head by a thin leader line. A label with nowhere to go
+// is still dropped — the legend, tooltip and table carry that series —
+// rather than stacked on top of another one.
 function placeLabels(items, bounds) {
   const obstacles = items.map((it) => {
     const r = (it.r || 5.5) + 2;
     return { x0: it.x - r, y0: it.y - r, x1: it.x + r, y1: it.y + r, owner: it.sym, head: true };
   });
   const overlaps = (a, b) => !(a.x1 <= b.x0 || a.x0 >= b.x1 || a.y1 <= b.y0 || a.y0 >= b.y1);
-  const out = {};
-  for (const it of items) {
-    const w = it.text.length * 6.7 + 2;
-    const h = 13;
+  const h = 13;
+  const width = (it) => it.text.length * 6.7 + 2;
+  const near = (it) => {
+    const w = width(it);
     const { x, y } = it;
     const extra = Math.max(0, (it.r || 5.5) - 5.5);
     const g = extra > 0 ? extra + 3 : 0; // push labels out past bigger heads
-    const candidates = [
+    return [
       { x0: x + 8 + g, y0: y - h / 2, anchor: 'start', tx: x + 9 + g, ty: y + 4 },
       { x0: x - 8 - g - w, y0: y - h / 2, anchor: 'end', tx: x - 9 - g, ty: y + 4 },
       { x0: x - w / 2, y0: y - 9 - h, anchor: 'middle', tx: x, ty: y - 12 },
@@ -131,6 +133,34 @@ function placeLabels(items, bounds) {
       { x0: x - 6 - w, y0: y - 6 - h, anchor: 'end', tx: x - 7, ty: y - 9 },
       { x0: x - 6 - w, y0: y + 6, anchor: 'end', tx: x - 7, ty: y + 16 },
     ];
+  };
+  // Further out, in 8 directions at two distances. The label's near edge
+  // sits `d` px from the head; the leader runs from the head's rim to it.
+  const far = (it) => {
+    const w = width(it);
+    const { x, y } = it;
+    const r = it.r || 5.5;
+    const out = [];
+    for (const d of [22, 36]) {
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, -1], [0, 1], [1, -1], [1, 1], [-1, -1], [-1, 1]]) {
+        const k = dx && dy ? Math.SQRT1_2 : 1;
+        const ax = x + dx * d * k; // point on the label nearest the head
+        const ay = y + dy * d * k;
+        const x0 = dx > 0 ? ax : dx < 0 ? ax - w : ax - w / 2;
+        const y0 = dy > 0 ? ay : dy < 0 ? ay - h : ay - h / 2;
+        const anchor = dx > 0 ? 'start' : dx < 0 ? 'end' : 'middle';
+        const tx = dx > 0 ? x0 + 1 : dx < 0 ? x0 + w - 1 : x0 + w / 2;
+        out.push({
+          x0, y0, anchor, tx, ty: y0 + h - 3,
+          leader: { x1: x + dx * (r + 1) * k, y1: y + dy * (r + 1) * k, x2: ax - dx * 1, y2: ay - dy * 1 },
+        });
+      }
+    }
+    return out;
+  };
+  const out = {};
+  const tryPlace = (it, candidates) => {
+    const w = width(it);
     for (const c of candidates) {
       const r = { x0: c.x0, y0: c.y0, x1: c.x0 + w, y1: c.y0 + h };
       const inside = r.x0 >= bounds.x0 && r.x1 <= bounds.x1 && r.y0 >= bounds.y0 && r.y1 <= bounds.y1;
@@ -138,10 +168,12 @@ function placeLabels(items, bounds) {
       if (inside && !blocked) {
         obstacles.push({ ...r, owner: it.sym, head: false });
         out[it.sym] = c;
-        break;
+        return;
       }
     }
-  }
+  };
+  for (const it of items) tryPlace(it, near(it));
+  for (const it of items) if (!out[it.sym]) tryPlace(it, far(it));
   return out;
 }
 
@@ -284,21 +316,28 @@ export default function RelativeRotationGraph({
   const PW = W - M.left - M.right;
   const PH = H - M.top - M.bottom;
 
-  // ---- view: auto-fit around 100/100 unless the viewer has panned/zoomed.
+  // ---- view: auto-fit to where the data is, unless the viewer has
+  // panned/zoomed. The 100/100 cross is always kept in frame, but the view
+  // is no longer centred on it: when every ticker sits in one quadrant the
+  // plot zooms onto that quadrant instead of leaving three near-empty.
   // While playing, fit the whole playback range so the frame holds still.
   const autoFit = useMemo(() => {
-    let rx = zscore ? 1.2 : 2;
-    let ry = zscore ? 1.2 : 2;
+    let x0 = 100; let x1 = 100; let y0 = 100; let y1 = 100;
     const from = playing ? warm : tailStart;
     for (const sym of shownSymbols.length ? shownSymbols : activeSymbols) {
       const s = seriesByTicker[sym];
       if (!s) continue;
       for (let i = from; i <= end && i < s.length; i++) {
-        rx = Math.max(rx, Math.abs(s[i].x - 100));
-        ry = Math.max(ry, Math.abs(s[i].y - 100));
+        x0 = Math.min(x0, s[i].x); x1 = Math.max(x1, s[i].x);
+        y0 = Math.min(y0, s[i].y); y1 = Math.max(y1, s[i].y);
       }
     }
-    return { cx: 100, cy: 100, rx: rx * 1.15, ry: ry * 1.15 };
+    // Half-spans: 10% padding each side, with a floor so a quiet market
+    // isn't blown up into noise.
+    const minHalf = zscore ? 1 : 1.5;
+    const rx = Math.max(((x1 - x0) / 2) * 1.2, minHalf);
+    const ry = Math.max(((y1 - y0) / 2) * 1.2, minHalf);
+    return { cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, rx, ry };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seriesByTicker, hidden, tailStart, end, zscore, playing, warm]);
   const [manualView, setManualView] = useState(null);
@@ -740,32 +779,39 @@ export default function RelativeRotationGraph({
                     if (!pl) return null;
                     const dim = focus && focus !== h.sym;
                     return (
-                      <text
-                        key={`lbl-${h.sym}`}
-                        x={pl.tx}
-                        y={pl.ty}
-                        textAnchor={pl.anchor}
-                        fill={TEXT_PRIMARY}
-                        stroke={PLOT_BG}
-                        strokeWidth={3}
-                        paintOrder="stroke"
-                        fontSize={11}
-                        fontWeight={focus === h.sym ? 700 : 500}
-                        fontFamily="ui-monospace,monospace"
-                        opacity={dim ? 0.2 : 1}
-                        pointerEvents="none"
-                      >
-                        {h.text}
-                      </text>
+                      <g key={`lbl-${h.sym}`} opacity={dim ? 0.2 : 1} pointerEvents="none">
+                        {pl.leader && (
+                          <line x1={pl.leader.x1} y1={pl.leader.y1} x2={pl.leader.x2} y2={pl.leader.y2} stroke={TEXT_MUTED} strokeWidth={1} />
+                        )}
+                        <text
+                          x={pl.tx}
+                          y={pl.ty}
+                          textAnchor={pl.anchor}
+                          fill={TEXT_PRIMARY}
+                          stroke={PLOT_BG}
+                          strokeWidth={3}
+                          paintOrder="stroke"
+                          fontSize={11}
+                          fontWeight={focus === h.sym ? 700 : 500}
+                          fontFamily="ui-monospace,monospace"
+                        >
+                          {h.text}
+                        </text>
+                      </g>
                     );
                   })}
                 </g>
 
-                {/* quadrant names, pinned to the plot corners */}
-                <text x={M.left + PW - 6} y={M.top + 14} textAnchor="end" fill={QUADRANTS.leading.color} fontSize={11} fontWeight={600}>Leading</text>
-                <text x={M.left + PW - 6} y={M.top + PH - 6} textAnchor="end" fill={QUADRANTS.weakening.color} fontSize={11} fontWeight={600}>Weakening</text>
-                <text x={M.left + 6} y={M.top + PH - 6} fill={QUADRANTS.lagging.color} fontSize={11} fontWeight={600}>Lagging</text>
-                <text x={M.left + 6} y={M.top + 14} fill={QUADRANTS.improving.color} fontSize={11} fontWeight={600}>Improving</text>
+                {/* quadrant names, in the outer corner of each quadrant's
+                    visible area; hidden when that area is too small to hold one */}
+                {[
+                  { q: 'leading', x: M.left + PW - 6, y: M.top + 14, anchor: 'end', w: M.left + PW - cxc, h: cyc - M.top },
+                  { q: 'weakening', x: M.left + PW - 6, y: M.top + PH - 6, anchor: 'end', w: M.left + PW - cxc, h: M.top + PH - cyc },
+                  { q: 'lagging', x: M.left + 6, y: M.top + PH - 6, anchor: 'start', w: cxc - M.left, h: M.top + PH - cyc },
+                  { q: 'improving', x: M.left + 6, y: M.top + 14, anchor: 'start', w: cxc - M.left, h: cyc - M.top },
+                ].filter((c) => c.w >= QUADRANTS[c.q].name.length * 6.5 + 12 && c.h >= 20).map((c) => (
+                  <text key={c.q} x={c.x} y={c.y} textAnchor={c.anchor} fill={QUADRANTS[c.q].color} fontSize={11} fontWeight={600}>{QUADRANTS[c.q].name}</text>
+                ))}
 
                 <rect x={M.left} y={M.top} width={PW} height={PH} fill="none" stroke={CARD_BORDER} />
 
