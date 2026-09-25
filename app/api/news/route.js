@@ -88,7 +88,7 @@ async function handler() {
     const kept = filterNews(articles);
     if (kept.length === 0) {
       return Response.json(
-        { error: `All ${articles.length} CoinStats news items were auto-generated or non-English, so none are shown.` },
+        { error: `All ${articles.length} CoinStats news items were auto-generated, promotional or non-English, so none are shown.` },
         { status: 502 }
       );
     }
