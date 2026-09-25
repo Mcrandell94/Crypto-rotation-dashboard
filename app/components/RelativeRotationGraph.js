@@ -4,6 +4,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import {
   computeSeries, firstValidIndex, quadrantOf, countFlips, quadrantStreak, heading, RRG_PRESETS,
 } from '../lib/rrgMath';
+import { relativeVolume, absoluteTrend, fundingFlag, FUNDING_HOT } from '../lib/rrgOverlays';
 
 const TEXT_PRIMARY = '#E7E4DD';
 const TEXT_SECONDARY = '#8B9298';
@@ -45,6 +46,8 @@ function seriesStyleFor(index) {
 // how the three presets were tuned).
 const DEFAULT_SETTINGS = { zscore: true, ...RRG_PRESETS.find((p) => p.key === 'balanced').settings };
 const SETTINGS_KEY = 'rrgSettings.v2';
+const OVERLAYS_KEY = 'rrgOverlays.v1';
+const TREND_WINDOW = 20; // absolute-trend overlay: price vs its own 20-day average
 const presetMatching = (st) => RRG_PRESETS.find((p) => Object.entries(p.settings).every(([k, v]) => st[k] === v));
 const RECENT_DAYS = 3; // "recent quadrant change" window for the summary
 const RECENT_MAX = 6; // how many recent changes to list before "+N more"
@@ -76,13 +79,17 @@ const mouseOnly = (fn) => (e) => {
   if (e.pointerType === 'mouse') fn(e);
 };
 
-function Marker({ shape, x, y, r, color, ring, ringWidth = 1.5, opacity = 1 }) {
+// `hollow` draws the marker as an outline (used by the trend overlay).
+function Marker({ shape, x, y, r, color, ring, ringWidth = 1.5, opacity = 1, hollow = false }) {
+  const fill = hollow ? PLOT_BG : color;
+  const stroke = hollow ? color : ring;
+  const sw = hollow ? 2.2 : ringWidth;
   if (shape === 'diamond') {
     const rr = r * 1.15;
     const d = `M ${x} ${y - rr} L ${x + rr} ${y} L ${x} ${y + rr} L ${x - rr} ${y} Z`;
-    return <path d={d} fill={color} stroke={ring} strokeWidth={ringWidth} opacity={opacity} />;
+    return <path d={d} fill={fill} stroke={stroke} strokeWidth={sw} opacity={opacity} />;
   }
-  return <circle cx={x} cy={y} r={r} fill={color} stroke={ring} strokeWidth={ringWidth} opacity={opacity} />;
+  return <circle cx={x} cy={y} r={r} fill={fill} stroke={stroke} strokeWidth={sw} opacity={opacity} />;
 }
 
 function Swatch({ shape, color, size = 10 }) {
@@ -102,16 +109,21 @@ function Swatch({ shape, color, size = 10 }) {
 // A label with nowhere to go is dropped — the legend, tooltip and table
 // still carry that series — rather than stacked on top of another one.
 function placeLabels(items, bounds) {
-  const obstacles = items.map((it) => ({ x0: it.x - 7, y0: it.y - 7, x1: it.x + 7, y1: it.y + 7, owner: it.sym, head: true }));
+  const obstacles = items.map((it) => {
+    const r = (it.r || 5.5) + 2;
+    return { x0: it.x - r, y0: it.y - r, x1: it.x + r, y1: it.y + r, owner: it.sym, head: true };
+  });
   const overlaps = (a, b) => !(a.x1 <= b.x0 || a.x0 >= b.x1 || a.y1 <= b.y0 || a.y0 >= b.y1);
   const out = {};
   for (const it of items) {
     const w = it.text.length * 6.7 + 2;
     const h = 13;
     const { x, y } = it;
+    const extra = Math.max(0, (it.r || 5.5) - 5.5);
+    const g = extra > 0 ? extra + 3 : 0; // push labels out past bigger heads
     const candidates = [
-      { x0: x + 8, y0: y - h / 2, anchor: 'start', tx: x + 9, ty: y + 4 },
-      { x0: x - 8 - w, y0: y - h / 2, anchor: 'end', tx: x - 9, ty: y + 4 },
+      { x0: x + 8 + g, y0: y - h / 2, anchor: 'start', tx: x + 9 + g, ty: y + 4 },
+      { x0: x - 8 - g - w, y0: y - h / 2, anchor: 'end', tx: x - 9 - g, ty: y + 4 },
       { x0: x - w / 2, y0: y - 9 - h, anchor: 'middle', tx: x, ty: y - 12 },
       { x0: x - w / 2, y0: y + 9, anchor: 'middle', tx: x, ty: y + 19 },
       { x0: x + 6, y0: y - 6 - h, anchor: 'start', tx: x + 7, ty: y - 9 },
@@ -137,6 +149,7 @@ const defaultAssetFormat = (v) => `$${v?.toLocaleString(undefined, { maximumFrac
 
 export default function RelativeRotationGraph({
   data, symbols, benchmark, assetLabel = 'price', assetFormat = defaultAssetFormat, labelFor = (s) => s,
+  funding = null, // { [sym]: { fundingRateAnnualized } } from /api/funding (tickers view only)
 }) {
   const [tableView, setTableView] = useState(false);
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
@@ -157,13 +170,31 @@ export default function RelativeRotationGraph({
     } catch {}
   }, [settings]);
 
+  // Optional overlays (all off by default, remembered per browser). None
+  // move a ticker's position — see app/lib/rrgOverlays.js.
+  const [overlays, setOverlays] = useState({ volume: false, trend: false, funding: false, capWeighted: false });
+  const setOverlay = (key, value) => setOverlays((o) => ({ ...o, [key]: value }));
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(OVERLAYS_KEY) || 'null');
+      if (saved && typeof saved === 'object') setOverlays((o) => ({ ...o, ...saved }));
+    } catch {}
+  }, []);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(OVERLAYS_KEY, JSON.stringify(overlays));
+    } catch {}
+  }, [overlays]);
+
   const [hidden, setHidden] = useState(new Set());
   const [pinned, setPinned] = useState(null);
   const [hoverSym, setHoverSym] = useState(null); // legend/series hover -> focus
   const [hoverPt, setHoverPt] = useState(null); // { sym, idx } -> tooltip
 
   const days = data?.days || [];
-  const prices = data?.prices;
+  const capAvailable = !!data?.pricesCapWeighted;
+  const prices = overlays.capWeighted && capAvailable ? data.pricesCapWeighted : data?.prices;
+  const volumes = data?.volumes;
   const activeSymbols = symbols.filter((s) => prices?.[s]?.length);
   const styleOf = (sym) => seriesStyleFor(symbols.indexOf(sym));
   const lastIdx = days.length - 1;
@@ -271,7 +302,7 @@ export default function RelativeRotationGraph({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seriesByTicker, hidden, tailStart, end, zscore, playing, warm]);
   const [manualView, setManualView] = useState(null);
-  useEffect(() => setManualView(null), [symbolsKey, benchmark, zscore]);
+  useEffect(() => setManualView(null), [symbolsKey, benchmark, zscore, overlays.capWeighted]);
   const view = manualView || autoFit;
 
   const toPx = (x, y) => [
@@ -398,11 +429,16 @@ export default function RelativeRotationGraph({
         head: heading(tail, 3),
         flips: countFlips(tail),
         tailLen: tail.length,
+        relVol: relativeVolume(volumes?.[sym], end),
+        trend: absoluteTrend(prices?.[sym], end, TREND_WINDOW),
+        // Funding is a live reading, so it's only shown on the latest day.
+        fundingPct: end === lastIdx ? funding?.[sym]?.fundingRateAnnualized : undefined,
       };
+      out[sym].fundingFlag = fundingFlag(out[sym].fundingPct);
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seriesByTicker, end, tailLength, warm]);
+  }, [seriesByTicker, end, tailLength, warm, volumes, funding, lastIdx]);
 
   if (!prices || activeSymbols.length === 0) {
     return (
@@ -422,6 +458,15 @@ export default function RelativeRotationGraph({
     .filter((s) => summary[s]?.streak.from && summary[s].streak.days <= RECENT_DAYS)
     .sort((a, b) => summary[a].streak.days - summary[b].streak.days);
 
+  const volumeOn = overlays.volume && !!volumes;
+  const trendOn = overlays.trend;
+  const fundingOn = overlays.funding && !!funding;
+  const headRadius = (sym) => {
+    const base = pinned === sym ? 6.5 : 5.5;
+    const rv = summary[sym]?.relVol;
+    return volumeOn && rv ? clamp(base * Math.sqrt(rv), 3.5, 11) : base;
+  };
+
   // Draw order: dimmed series first, focused series last (on top).
   const drawOrder = [...shownSymbols].sort((a, b) => (a === focus) - (b === focus));
   const heads = shownSymbols
@@ -429,7 +474,7 @@ export default function RelativeRotationGraph({
       const tail = tailOf(sym);
       if (!tail.length) return null;
       const [x, y] = toPx(tail[tail.length - 1].x, tail[tail.length - 1].y);
-      return { sym, x, y, text: labelFor(sym) };
+      return { sym, x, y, text: labelFor(sym), r: headRadius(sym) };
     })
     .filter(Boolean)
     .filter((h) => h.x >= M.left && h.x <= M.left + PW && h.y >= M.top && h.y <= M.top + PH);
@@ -536,6 +581,9 @@ export default function RelativeRotationGraph({
                 <th style={{ padding: '6px 8px', fontWeight: 500 }}>Heading</th>
                 <th style={{ padding: '6px 8px', fontWeight: 500 }}>RS-Ratio</th>
                 <th style={{ padding: '6px 8px', fontWeight: 500 }}>RS-Momentum</th>
+                {volumeOn && <th style={{ padding: '6px 8px', fontWeight: 500 }}>Rel. volume</th>}
+                {trendOn && <th style={{ padding: '6px 8px', fontWeight: 500 }}>vs {TREND_WINDOW}d avg</th>}
+                {fundingOn && <th style={{ padding: '6px 8px', fontWeight: 500 }}>Funding %/yr</th>}
               </tr>
             </thead>
             <tbody>
@@ -554,6 +602,9 @@ export default function RelativeRotationGraph({
                       <td style={{ padding: '8px', color: TEXT_SECONDARY }}>{s.head?.arrow || '—'}</td>
                       <td style={{ padding: '8px', color: TEXT_PRIMARY, fontVariantNumeric: 'tabular-nums' }}>{s.last.x.toFixed(2)}</td>
                       <td style={{ padding: '8px', color: TEXT_PRIMARY, fontVariantNumeric: 'tabular-nums' }}>{s.last.y.toFixed(2)}</td>
+                      {volumeOn && <td style={{ padding: '8px', color: TEXT_SECONDARY, fontVariantNumeric: 'tabular-nums' }}>{s.relVol != null ? `${s.relVol.toFixed(2)}×` : '—'}</td>}
+                      {trendOn && <td style={{ padding: '8px', color: TEXT_SECONDARY, fontVariantNumeric: 'tabular-nums' }}>{s.trend ? `${s.trend.pct >= 0 ? '+' : ''}${s.trend.pct.toFixed(1)}%` : '—'}</td>}
+                      {fundingOn && <td style={{ padding: '8px', color: TEXT_SECONDARY, fontVariantNumeric: 'tabular-nums' }}>{Number.isFinite(s.fundingPct) ? `${s.fundingPct.toFixed(1)}%` : '—'}</td>}
                     </tr>
                   );
                 })}
@@ -656,7 +707,28 @@ export default function RelativeRotationGraph({
                           }}
                           style={{ outline: 'none', cursor: 'pointer' }}
                         >
-                          <Marker shape={shape} x={lx} y={ly} r={pinned === sym ? 6.5 : 5.5} color={color} ring={pinned === sym ? ACCENT : PLOT_BG} ringWidth={2} />
+                          <Marker
+                            shape={shape}
+                            x={lx}
+                            y={ly}
+                            r={headRadius(sym)}
+                            color={color}
+                            ring={pinned === sym ? ACCENT : PLOT_BG}
+                            ringWidth={2}
+                            hollow={trendOn && summary[sym]?.trend?.above === false}
+                          />
+                          {fundingOn && summary[sym]?.fundingFlag === 'crowded-long' && (() => {
+                            const r = headRadius(sym);
+                            const fx = lx + r + 1;
+                            const fy = ly - r - 1;
+                            return <path d={`M ${fx} ${fy - 6} L ${fx + 4} ${fy + 1} L ${fx - 4} ${fy + 1} Z`} fill={ACCENT} stroke={PLOT_BG} strokeWidth={1} />;
+                          })()}
+                          {fundingOn && summary[sym]?.fundingFlag === 'shorts-paying' && (() => {
+                            const r = headRadius(sym);
+                            const fx = lx + r + 1;
+                            const fy = ly - r - 1;
+                            return <path d={`M ${fx} ${fy + 1} L ${fx + 4} ${fy - 6} L ${fx - 4} ${fy - 6} Z`} fill="#5E8FA8" stroke={PLOT_BG} strokeWidth={1} />;
+                          })()}
                         </g>
                       </g>
                     );
@@ -755,6 +827,9 @@ export default function RelativeRotationGraph({
                     {labelFor(hoverInfo.sym)} · {days[hoverInfo.idx]}
                   </div>
                   <div style={{ color: QUADRANTS[hoverInfo.q].color }}>{QUADRANTS[hoverInfo.q].name}</div>
+                  {hoverInfo.idx === end && overlayNotes(summary[hoverInfo.sym]).map((n) => (
+                    <div key={n} style={{ color: TEXT_SECONDARY }}>{n}</div>
+                  ))}
                 </div>
               )}
 
@@ -824,6 +899,48 @@ export default function RelativeRotationGraph({
                   <button onClick={() => setManualView(null)} style={{ ...zoomBtnStyle, width: 'auto', padding: '0 7px', fontSize: 11, color: manualView ? ACCENT : TEXT_MUTED }} title="Fit to data" aria-label="Fit to data">Fit</button>
                 </div>
               </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px 14px', marginTop: 10, paddingTop: 10, borderTop: `1px solid ${CARD_BORDER}` }}>
+                <span style={{ fontSize: 12, color: TEXT_SECONDARY }}>Overlays</span>
+                <OverlayToggle
+                  label="Volume"
+                  checked={overlays.volume}
+                  disabled={!volumes}
+                  onChange={(v) => setOverlay('volume', v)}
+                  title="Head dot size = last 7 days' volume vs its 30-day average"
+                />
+                <OverlayToggle
+                  label="Trend filter"
+                  checked={overlays.trend}
+                  onChange={(v) => setOverlay('trend', v)}
+                  title={`Hollow head dot = below its own ${TREND_WINDOW}-day average (falling in absolute terms)`}
+                />
+                {funding && (
+                  <OverlayToggle
+                    label="Funding"
+                    checked={overlays.funding}
+                    onChange={(v) => setOverlay('funding', v)}
+                    title={`Flag heads with extreme Hyperliquid perp funding: ▲ ≥ ${FUNDING_HOT}%/yr (crowded longs), ▼ negative`}
+                  />
+                )}
+                {capAvailable && (
+                  <OverlayToggle
+                    label="Cap-weighted sectors"
+                    checked={overlays.capWeighted}
+                    onChange={(v) => setOverlay('capWeighted', v)}
+                    title="Weight each sector's members by market cap instead of equally"
+                  />
+                )}
+              </div>
+              {(volumeOn || trendOn || fundingOn || (overlays.capWeighted && capAvailable)) && (
+                <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '6px 0 0', lineHeight: 1.55 }}>
+                  {[
+                    volumeOn && 'Bigger head = above-normal volume (7d vs 30d; CoinGecko volume includes some exchanges with inflated volume, so compare a coin with its own history).',
+                    trendOn && `Hollow head = below its own ${TREND_WINDOW}-day average — leading ${benchmark} but still falling.`,
+                    fundingOn && `▲ funding ≥ ${FUNDING_HOT}%/yr (crowded longs) · ▼ negative funding (shorts paying) — live Hyperliquid reading, shown on the latest day only.`,
+                    overlays.capWeighted && capAvailable && 'Sectors weighted by each member’s market cap on the first day, instead of equally.',
+                  ].filter(Boolean).join(' ')}
+                </p>
+              )}
               <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '10px 0 0', lineHeight: 1.55 }}>
                 Hover or tap a ticker to focus it · drag to pan · pinch or Ctrl/⌘+scroll to zoom
               </p>
@@ -885,6 +1002,15 @@ export default function RelativeRotationGraph({
                       <div style={{ fontFamily: 'ui-monospace,monospace', fontSize: 11, color: TEXT_SECONDARY }}>
                         {s.last.x.toFixed(2)} / {s.last.y.toFixed(2)}
                       </div>
+                      {(volumeOn || trendOn || fundingOn) && (
+                        <div style={{ fontFamily: 'ui-monospace,monospace', fontSize: 10, color: TEXT_MUTED }}>
+                          {[
+                            volumeOn && s.relVol != null && `vol ${s.relVol.toFixed(1)}×`,
+                            trendOn && s.trend && `${s.trend.above ? '▲' : '▽'}${TREND_WINDOW}d`,
+                            fundingOn && Number.isFinite(s.fundingPct) && `f ${s.fundingPct >= 0 ? '+' : ''}${s.fundingPct.toFixed(0)}%`,
+                          ].filter(Boolean).join(' · ')}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1001,6 +1127,24 @@ function SliderControl({ label, unit, value, min, max, onChange, format }) {
       <span style={{ fontSize: 12, fontFamily: 'ui-monospace,monospace', color: TEXT_PRIMARY, minWidth: 26 }}>
         {format ? format(value) : `${value}${unit}`}
       </span>
+    </label>
+  );
+}
+
+function overlayNotes(s) {
+  if (!s) return [];
+  const out = [];
+  if (s.relVol != null) out.push(`Volume ${s.relVol.toFixed(1)}× its 30-day average`);
+  if (s.trend) out.push(`${s.trend.pct >= 0 ? '+' : ''}${s.trend.pct.toFixed(1)}% vs its ${TREND_WINDOW}-day average`);
+  if (Number.isFinite(s.fundingPct)) out.push(`Funding ${s.fundingPct.toFixed(1)}%/yr`);
+  return out;
+}
+
+function OverlayToggle({ label, checked, onChange, disabled = false, title }) {
+  return (
+    <label title={title} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: disabled ? TEXT_MUTED : TEXT_SECONDARY, cursor: disabled ? 'default' : 'pointer' }}>
+      <input type="checkbox" checked={checked && !disabled} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
+      {label}
     </label>
   );
 }
