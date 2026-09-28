@@ -10,6 +10,7 @@
 // guessed.
 
 import { withCdnCache } from '../../lib/cdnCache';
+import { dropUnreported } from '../../lib/etfFlows';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,12 +48,17 @@ async function handler() {
       return Response.json({ error: 'Coinglass returned no Ethereum ETF flow data' }, { status: 502 });
     }
 
-    const days = [...rows]
+    // A missing flow stays missing (NaN, then dropped) rather than becoming
+    // a fake $0; today's row is dropped until the funds have reported.
+    const days = dropUnreported([...rows]
       .sort((a, b) => a.timestamp - b.timestamp)
       .map((d) => ({
         date: new Date(Number(d.timestamp)).toISOString().slice(0, 10),
-        netInflow: Number(d.flow_usd) || 0,
-      }));
+        netInflow: d.flow_usd == null ? NaN : Number(d.flow_usd),
+      })));
+    if (days.length === 0) {
+      return Response.json({ error: 'Coinglass returned no reported Ethereum ETF flow days' }, { status: 502 });
+    }
 
     const latest = days[days.length - 1];
     const last5 = days.slice(-5);

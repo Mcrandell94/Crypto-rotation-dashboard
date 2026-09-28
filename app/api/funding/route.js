@@ -15,6 +15,7 @@
 // results aren't cached, so an outage clears on the next request.
 
 import { unstable_cache } from 'next/cache';
+import { toProviderSymbol } from '../../lib/symbolAliases';
 import { withCdnCache } from '../../lib/cdnCache';
 
 export const dynamic = 'force-dynamic';
@@ -55,16 +56,22 @@ async function handler(request) {
     const [meta, assetCtxs] = await fetchMetaAndAssetCtxs();
     const universe = meta?.universe || [];
 
+    // Delisted markets stay in Hyperliquid's universe (flagged isDelisted)
+    // with a frozen mark price and zero open interest and volume; they
+    // count as not listed rather than as a live 0% funding rate.
     const bySymbol = {};
     universe.forEach((asset, i) => {
-      bySymbol[asset.name] = assetCtxs[i];
+      if (!asset.isDelisted) bySymbol[asset.name] = assetCtxs[i];
     });
 
     const data = {};
     const notListed = [];
     for (const sym of requested) {
-      const ctx = bySymbol[sym];
-      if (!ctx) {
+      const ctx = bySymbol[sym] || bySymbol[toProviderSymbol(sym)];
+      // Belt and braces for a delisted market missing the flag: no open
+      // interest and no volume at all means nothing is trading.
+      const dead = ctx && !(parseFloat(ctx.openInterest) > 0) && !(parseFloat(ctx.dayNtlVlm) > 0);
+      if (!ctx || dead) {
         notListed.push(sym);
         continue;
       }

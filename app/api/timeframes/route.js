@@ -90,8 +90,14 @@ async function handler() {
           const volumes = candles.map((c) => parseFloat(c[6]));
           const price = closes[closes.length - 1];
           const sma50 = sma(closes, 50);
-          const avgVol20 = sma(volumes, 20);
-          const lastVol = volumes[volumes.length - 1];
+          // Kraken's last candle is the one still forming (its docs: "the
+          // last entry ... is for the current, not-yet-committed frame"), so
+          // its volume is partial. Compare the last *completed* candle to the
+          // 20 completed ones before it; otherwise the daily reading leans
+          // "below" for most of the day. Price, RSI and MACD stay live.
+          const done = volumes.slice(0, -1);
+          const lastVol = done[done.length - 1];
+          const avgVol20 = sma(done.slice(0, -1), 20);
           const { histogram } = macd(closes);
 
           assets[sym][key] = {

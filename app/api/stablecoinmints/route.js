@@ -317,9 +317,18 @@ async function handler() {
 
     // Capped per token before merging: USDC's frequent small bridge mints
     // would otherwise push every (rarer, older) USDT issuance off the list.
+    // Every mint of $250K+ in the window is kept regardless of the cap: the
+    // cap alone kept only the newest ~10 minutes of USDC, so larger mints
+    // from earlier in its 3-hour window were cut before the size filter.
     const newestFirst = (a, b) => (b.timestamp || 0) - (a.timestamp || 0);
+    const LARGE = 250_000;
     const mints = succeeded
-      .flatMap((r) => [...r.mints].sort(newestFirst).slice(0, DISPLAY_LIMIT))
+      .flatMap((r) => {
+        const sorted = [...r.mints].sort(newestFirst);
+        const large = sorted.filter((m) => m.amount >= LARGE);
+        const recentSmall = sorted.filter((m) => !(m.amount >= LARGE)).slice(0, DISPLAY_LIMIT);
+        return [...large, ...recentSmall];
+      })
       .sort(newestFirst);
 
     return Response.json({
