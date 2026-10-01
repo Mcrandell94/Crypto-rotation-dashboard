@@ -144,18 +144,72 @@ export const RRG_PRESETS = [
 
 // Presets per bar size. The windows are counted in bars, and the best
 // trade-off between noise and speed depends on how noisy a bar is relative
-// to the trend, so 4-hour and weekly bars get their own tuning rather than
-// reusing the daily numbers. Until that's done on real 4H/weekly data,
-// they start from the daily values and say so (`tuned: false`).
-const untuned = (presets, unitName) => presets.map((p) => ({
-  ...p,
-  settings: { ...p.settings },
-  note: `${p.label}: starting values copied from the daily preset — not yet tuned for ${unitName}.`,
-}));
+// to the trend, so 4-hour and weekly bars have their own tuning rather than
+// reusing the daily numbers.
+//
+// Tuned on real data (live /api/rrg vs BTC, 80 tickers, Oct 2026): the
+// real series' per-bar relative volatility and variance ratios (how much
+// moves add up vs reverse over 2-20 bars) were fitted with a regime-drift +
+// random-walk + mean-reverting-swing model; each Trend/Momentum/Smoothing
+// combination was scored on 300 simulated paths with those statistics
+// (quadrant flips per 7 bars, share of bars on the right side of 100, bars
+// to catch a regime change), then checked on the real series. The same
+// method run on real daily data lands on or next to the daily presets
+// above. Tails were not tuned (same 5/7/10 bars as daily).
+//
+// 4H (126 bars, ~1.7% relative vol per bar, regimes ~12-24 bars): a longer
+// momentum window (14) won throughout. vs the daily numbers reused on 4H:
+// - fast     5/14/2:  same noise (~2.1 flips / 7 bars), ~1.9 vs 2.3 bars to catch a turn
+// - balanced 7/14/3:  same noise (~1.7), ~2.7 vs 3.2 bars, fewer missed turns (0.8% vs 2.4%)
+// - steady   10/14/5: ~1.4 vs 1.4 flips, ~3.6 vs 4.2 bars, more accurate (56% vs 55%)
+//
+// 1W (53 bars, ~9.9% relative vol per week, regimes ~24-48 weeks; a
+// warm-up over ~35 weeks leaves too little to scrub). vs daily numbers on 1W:
+// - fast     7/14/3:  ~1.9 vs 2.1 real flips / 7 weeks, ~2.7 vs 2.4 weeks to catch a turn
+// - balanced 14/10/3: ~1.5 vs 1.8 real flips, ~4.7 vs 3.6 weeks, most accurate (62.5% vs 61.7%)
+// - steady   14/14/3: ~1.4 vs 1.3 real flips, ~4.7 vs 5.7 weeks, 35- vs 37-week warm-up
 export const RRG_PRESETS_BY_INTERVAL = {
   '1d': { tuned: true, presets: RRG_PRESETS },
-  '4h': { tuned: false, presets: untuned(RRG_PRESETS, '4-hour bars') },
-  '1w': { tuned: false, presets: untuned(RRG_PRESETS, 'weekly bars') },
+  '4h': {
+    tuned: true,
+    presets: [
+      {
+        key: 'fast', label: 'Fast', blurb: 'Quick turns, noisier',
+        note: 'Fast: tuned for 4-hour bars — catches a turn in about 2 bars (~8h), with the most quadrant flips. For intraday reads.',
+        settings: { trendWindow: 5, momentumWindow: 14, smoothing: 2, tailLength: 5 },
+      },
+      {
+        key: 'balanced', label: 'Balanced', blurb: 'Default',
+        note: 'Balanced: the 4H default, tuned on real 4-hour data — catches a turn in under 3 bars (~11h) with the same noise the daily settings would give here.',
+        settings: { trendWindow: 7, momentumWindow: 14, smoothing: 3, tailLength: 7 },
+      },
+      {
+        key: 'steady', label: 'Steady', blurb: 'Big picture, calmest',
+        note: 'Steady: the calmest 4H tails, for the multi-day picture; about 3-4 bars (~14h) to catch a turn.',
+        settings: { trendWindow: 10, momentumWindow: 14, smoothing: 5, tailLength: 10 },
+      },
+    ],
+  },
+  '1w': {
+    tuned: true,
+    presets: [
+      {
+        key: 'fast', label: 'Fast', blurb: 'Quick turns, noisier',
+        note: 'Fast: tuned for weekly bars — catches a turn in under 3 weeks, with more quadrant flips.',
+        settings: { trendWindow: 7, momentumWindow: 14, smoothing: 3, tailLength: 5 },
+      },
+      {
+        key: 'balanced', label: 'Balanced', blurb: 'Default',
+        note: 'Balanced: the weekly default, tuned on a year of real weekly data — fewer week-to-week quadrant flips than the daily settings would give, about a week slower to turn.',
+        settings: { trendWindow: 14, momentumWindow: 10, smoothing: 3, tailLength: 7 },
+      },
+      {
+        key: 'steady', label: 'Steady', blurb: 'Big picture, calmest',
+        note: 'Steady: the calmest weekly tails; its 35-week warm-up leaves the last ~4 months to scrub.',
+        settings: { trendWindow: 14, momentumWindow: 14, smoothing: 3, tailLength: 10 },
+      },
+    ],
+  },
 };
 
 export function presetsFor(interval) {
