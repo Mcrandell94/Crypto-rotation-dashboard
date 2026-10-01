@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 
 // Crypto price/rotation data (Rotation tab) plus macro & funding data —
 // the latter two also consumed by the always-visible MarketRead header.
@@ -12,7 +12,11 @@ import { useState, useCallback, useEffect } from 'react';
 // because sectorTickers is a new array reference every render — depending
 // on it directly in the mount/refetch effect would refetch on every
 // render, not just when the sector or benchmark actually changes.
-export default function useRotationData(sectorTickers, benchmark, activeSector, rrgMode) {
+//
+// rrgInterval ('4h' | '1d' | '1w') only affects the two RRG fetches, so
+// changing it refetches just those, not prices/macro/funding. It's null
+// until the page has read the saved choice; nothing is fetched until then.
+export default function useRotationData(sectorTickers, benchmark, activeSector, rrgMode, rrgInterval) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [rrgData, setRrgData] = useState(null);
@@ -24,6 +28,25 @@ export default function useRotationData(sectorTickers, benchmark, activeSector, 
   const [rrgSectorsData, setRrgSectorsData] = useState(null);
   const [rrgSectorsError, setRrgSectorsError] = useState(null);
   const [loading, setLoading] = useState(true);
+  const intervalRef = useRef(rrgInterval);
+  intervalRef.current = rrgInterval;
+  // Each RRG fetch gets a sequence number so a slow, older response (e.g.
+  // after a quick 4H -> 1W switch) can't overwrite a newer one.
+  const rrgSeq = useRef(0);
+  const sectorsSeq = useRef(0);
+
+  const fetchRrg = useCallback(async (symbols, bench, interval) => {
+    const seq = ++rrgSeq.current;
+    setRrgError(null);
+    try {
+      const rrgRes = await fetch(`/api/rrg?benchmark=${bench}&symbols=${symbols.join(',')}&interval=${interval}`);
+      const rrgJson = await rrgRes.json();
+      if (!rrgRes.ok) throw new Error(rrgJson.error || 'Unknown error');
+      if (seq === rrgSeq.current) setRrgData(rrgJson);
+    } catch (e) {
+      if (seq === rrgSeq.current) setRrgError(e.message);
+    }
+  }, []);
 
   const fetchData = useCallback(async (symbols, bench) => {
     setLoading(true);
@@ -42,14 +65,7 @@ export default function useRotationData(sectorTickers, benchmark, activeSector, 
       setLoading(false);
     }
 
-    try {
-      const rrgRes = await fetch(`/api/rrg?benchmark=${bench}&symbols=${symbols.join(',')}`);
-      const rrgJson = await rrgRes.json();
-      if (!rrgRes.ok) throw new Error(rrgJson.error || 'Unknown error');
-      setRrgData(rrgJson);
-    } catch (e) {
-      setRrgError(e.message);
-    }
+    await fetchRrg(symbols, bench, intervalRef.current);
 
     try {
       const macroRes = await fetch('/api/macro');
@@ -68,32 +84,50 @@ export default function useRotationData(sectorTickers, benchmark, activeSector, 
     } catch (e) {
       setFundingError(e.message);
     }
-  }, []);
+  }, [fetchRrg]);
 
-  const fetchRrgSectors = useCallback(async (bench) => {
+  const fetchRrgSectors = useCallback(async (bench, interval = intervalRef.current) => {
+    const seq = ++sectorsSeq.current;
     setRrgSectorsError(null);
     try {
-      const res = await fetch(`/api/rrg-sectors?benchmark=${bench}`);
+      const res = await fetch(`/api/rrg-sectors?benchmark=${bench}&interval=${interval}`);
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Unknown error');
-      setRrgSectorsData(json);
+      if (seq === sectorsSeq.current) setRrgSectorsData(json);
     } catch (e) {
-      setRrgSectorsError(e.message);
+      if (seq === sectorsSeq.current) setRrgSectorsError(e.message);
     }
   }, []);
 
+  const ready = rrgInterval != null;
   useEffect(() => {
-    fetchData(sectorTickers, benchmark);
+    if (ready) fetchData(sectorTickers, benchmark);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSector, benchmark]);
+  }, [activeSector, benchmark, ready]);
 
   // Sector-composite RRG data is heavier to fetch (representative tickers
   // across every sector at once) — only fetch it when that view is
   // actually in use, not alongside the per-sector ticker view.
   useEffect(() => {
-    if (rrgMode === 'sectors') fetchRrgSectors(benchmark);
+    if (ready && rrgMode === 'sectors') fetchRrgSectors(benchmark, rrgInterval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rrgMode, benchmark]);
+  }, [rrgMode, benchmark, rrgInterval]);
+
+  // Timeframe switch: clear the old bars (their labels and count no longer
+  // apply) and refetch only the ticker RRG. Skipped for the first known
+  // interval, which fetchData above already fetches.
+  const firstInterval = useRef(null);
+  useEffect(() => {
+    if (!ready) return;
+    if (firstInterval.current == null) {
+      firstInterval.current = rrgInterval;
+      return;
+    }
+    setRrgData(null);
+    setRrgSectorsData(null);
+    fetchRrg(sectorTickers, benchmark, rrgInterval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rrgInterval]);
 
   return {
     data, error,

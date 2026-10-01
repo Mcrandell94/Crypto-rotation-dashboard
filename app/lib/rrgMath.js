@@ -125,7 +125,43 @@ export function heading(pts, lookback = 3) {
 // - steady:   ~1.3 flips / 7d, ~4d — calmest; misses more short-lived moves
 // Momentum 10 beat 5 at every trend/smoothing combination tested.
 export const RRG_PRESETS = [
-  { key: 'fast', label: 'Fast', blurb: 'Quick turns, noisier', settings: { trendWindow: 7, momentumWindow: 10, smoothing: 2, tailLength: 5 } },
-  { key: 'balanced', label: 'Balanced', blurb: 'Default', settings: { trendWindow: 10, momentumWindow: 10, smoothing: 3, tailLength: 7 } },
-  { key: 'steady', label: 'Steady', blurb: 'Big picture, calmest', settings: { trendWindow: 14, momentumWindow: 10, smoothing: 5, tailLength: 10 } },
+  {
+    key: 'fast', label: 'Fast', blurb: 'Quick turns, noisier',
+    note: 'Fast: catches turns about a day sooner, with more false flips. For short-term reads.',
+    settings: { trendWindow: 7, momentumWindow: 10, smoothing: 2, tailLength: 5 },
+  },
+  {
+    key: 'balanced', label: 'Balanced', blurb: 'Default',
+    note: 'Balanced: the default — same speed as the old settings with about a third fewer false quadrant flips.',
+    settings: { trendWindow: 10, momentumWindow: 10, smoothing: 3, tailLength: 7 },
+  },
+  {
+    key: 'steady', label: 'Steady', blurb: 'Big picture, calmest',
+    note: 'Steady: the calmest tails, for the bigger picture; slower, and can miss short-lived moves.',
+    settings: { trendWindow: 14, momentumWindow: 10, smoothing: 5, tailLength: 10 },
+  },
 ];
+
+// Presets per bar size. The windows are counted in bars, and the best
+// trade-off between noise and speed depends on how noisy a bar is relative
+// to the trend, so 4-hour and weekly bars get their own tuning rather than
+// reusing the daily numbers. Until that's done on real 4H/weekly data,
+// they start from the daily values and say so (`tuned: false`).
+const untuned = (presets, unitName) => presets.map((p) => ({
+  ...p,
+  settings: { ...p.settings },
+  note: `${p.label}: starting values copied from the daily preset — not yet tuned for ${unitName}.`,
+}));
+export const RRG_PRESETS_BY_INTERVAL = {
+  '1d': { tuned: true, presets: RRG_PRESETS },
+  '4h': { tuned: false, presets: untuned(RRG_PRESETS, '4-hour bars') },
+  '1w': { tuned: false, presets: untuned(RRG_PRESETS, 'weekly bars') },
+};
+
+export function presetsFor(interval) {
+  return (RRG_PRESETS_BY_INTERVAL[interval] || RRG_PRESETS_BY_INTERVAL['1d']).presets;
+}
+
+export function defaultSettingsFor(interval) {
+  return { zscore: true, ...presetsFor(interval).find((p) => p.key === 'balanced').settings };
+}

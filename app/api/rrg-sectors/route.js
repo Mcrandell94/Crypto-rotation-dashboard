@@ -1,5 +1,6 @@
 // Server-side only — same CoinGecko Demo key as /api/rrg. Returns an
-// aligned daily "composite index" series per sector, in the same
+// aligned "composite index" series per sector (4-hour, daily or weekly bars,
+// per the `interval` param), in the same
 // {benchmark, days, prices} shape /api/rrg returns for individual tickers,
 // so the RelativeRotationGraph component can plot whole sectors against
 // each other without any changes to its own RS-Ratio/RS-Momentum math.
@@ -17,7 +18,7 @@
 // prominent names per sector in app/lib/sectors.js) rather than all of them.
 
 import { COINGECKO_IDS } from '../../lib/coingecko-ids';
-import { fetchDailyHistory } from '../../lib/coingecko-history';
+import { fetchHistory, parseInterval } from '../../lib/coingecko-history';
 import { equalWeightComposite, capWeightComposite, capWeights } from '../../lib/rrgOverlays';
 import { SECTORS } from '../../lib/sectors';
 import { withCdnCache } from '../../lib/cdnCache';
@@ -37,6 +38,7 @@ async function handler(request) {
 
   const { searchParams } = new URL(request.url);
   const benchmark = searchParams.get('benchmark') || 'BTC';
+  const interval = parseInterval(searchParams.get('interval'));
   if (!COINGECKO_IDS[benchmark]) {
     return Response.json({ error: `No CoinGecko id mapped for benchmark ${benchmark}` }, { status: 400 });
   }
@@ -47,7 +49,7 @@ async function handler(request) {
   try {
     const allSymbols = [benchmark, ...allTickers];
     const results = await Promise.allSettled(
-      allSymbols.map((sym) => fetchDailyHistory(COINGECKO_IDS[sym], apiKey))
+      allSymbols.map((sym) => fetchHistory(COINGECKO_IDS[sym], apiKey, interval))
     );
 
     const mapBySymbol = {};
@@ -89,13 +91,14 @@ async function handler(request) {
       pricesCapWeighted[sector.label] = capWeightComposite(series, day0Caps) || prices[sector.label];
       volumes[sector.label] = commonDays.map((d) => {
         const vs = tickers.map((t) => mapBySymbol[t].volumes.get(d));
-        return vs.every((v) => Number.isFinite(v)) ? vs.reduce((a, b) => a + b, 0) : null;
+        return vs.every((v) => Number.isFinite(v)) ? vs.reduce((a, b) => a + b, 0) : null; // none on 4h bars
       });
       memberWeights[sector.label] = Object.fromEntries(tickers.map((t, k) => [t, capWeights(day0Caps)[k]]));
     });
 
     return Response.json({
       benchmark,
+      interval,
       days: commonDays,
       prices,
       pricesCapWeighted,
