@@ -47,7 +47,16 @@ function seriesStyleFor(index) {
 const DEFAULT_SETTINGS = { zscore: true, ...RRG_PRESETS.find((p) => p.key === 'balanced').settings };
 const SETTINGS_KEY = 'rrgSettings.v2';
 const OVERLAYS_KEY = 'rrgOverlays.v1';
-const TREND_WINDOW = 20; // absolute-trend overlay: price vs its own 20-day average
+const TREND_WINDOW = 20; // absolute-trend overlay: price vs its own 20-bar average
+
+// Wording for the bar size the data came in (/api/rrg's `interval`). All
+// windows (trend, momentum, smoothing, tail) are counted in bars, so the
+// same settings read as days on 1D, weeks on 1W and 4-hour bars on 4H.
+const BAR_UNITS = {
+  '1d': { short: 'd', one: 'day', many: 'days', adj: 'day', Many: 'Days', bars: 'daily bars', closes: 'daily closes', fmt: (l) => l, asOf: (l) => `as of ${l}` },
+  '4h': { short: ' bars', one: '4-hour bar', many: '4-hour bars', adj: 'bar', Many: 'Bars', bars: '4-hour bars', closes: '4-hour closes (UTC)', fmt: (l) => (l ? `${l} UTC` : l), asOf: (l) => `as of ${l} UTC` },
+  '1w': { short: 'w', one: 'week', many: 'weeks', adj: 'week', Many: 'Weeks', bars: 'weekly bars', closes: 'weekly closes (weeks start Monday, UTC)', fmt: (l) => (l ? `week of ${l}` : l), asOf: (l) => `week of ${l}` },
+};
 const presetMatching = (st) => RRG_PRESETS.find((p) => Object.entries(p.settings).every(([k, v]) => st[k] === v));
 const RECENT_DAYS = 3; // "recent quadrant change" window for the summary
 const RECENT_MAX = 6; // how many recent changes to list before "+N more"
@@ -227,6 +236,11 @@ export default function RelativeRotationGraph({
   const capAvailable = !!data?.pricesCapWeighted;
   const prices = overlays.capWeighted && capAvailable ? data.pricesCapWeighted : data?.prices;
   const volumes = data?.volumes;
+  const interval = BAR_UNITS[data?.interval] ? data.interval : '1d';
+  const unit = BAR_UNITS[interval];
+  const plural = (n) => (n === 1 ? unit.one : unit.many);
+  // 4-hour bars carry no volume (see app/lib/coingecko-history.js).
+  const volAvailable = !!volumes && Object.values(volumes).some((arr) => arr?.some((v) => v != null));
   const activeSymbols = symbols.filter((s) => prices?.[s]?.length);
   const styleOf = (sym) => seriesStyleFor(symbols.indexOf(sym));
   const lastIdx = days.length - 1;
@@ -248,10 +262,10 @@ export default function RelativeRotationGraph({
   useEffect(() => {
     if (lastIdx >= 0) setEndIdx(lastIdx);
     setPlaying(false);
-  }, [lastIdx, symbolsKey, benchmark]);
+  }, [lastIdx, symbolsKey, benchmark, interval]);
   const end = clamp(endIdx, minEnd, Math.max(minEnd, lastIdx));
 
-  // Play: step the scrubber forward a day at a time to watch the rotation.
+  // Play: step the scrubber forward a bar at a time to watch the rotation.
   const endRef = useRef(end);
   endRef.current = end;
   useEffect(() => {
@@ -341,7 +355,7 @@ export default function RelativeRotationGraph({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seriesByTicker, hidden, tailStart, end, zscore, playing, warm]);
   const [manualView, setManualView] = useState(null);
-  useEffect(() => setManualView(null), [symbolsKey, benchmark, zscore, overlays.capWeighted]);
+  useEffect(() => setManualView(null), [symbolsKey, benchmark, zscore, overlays.capWeighted, interval]);
   const view = manualView || autoFit;
 
   const toPx = (x, y) => [
@@ -497,7 +511,7 @@ export default function RelativeRotationGraph({
     .filter((s) => summary[s]?.streak.from && summary[s].streak.days <= RECENT_DAYS)
     .sort((a, b) => summary[a].streak.days - summary[b].streak.days);
 
-  const volumeOn = overlays.volume && !!volumes;
+  const volumeOn = overlays.volume && volAvailable;
   const trendOn = overlays.trend;
   const fundingOn = overlays.funding && !!funding;
   const headRadius = (sym) => {
@@ -547,7 +561,7 @@ export default function RelativeRotationGraph({
         <div>
           <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: TEXT_PRIMARY }}>Relative Rotation Graph</h2>
           <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '4px 0 0' }}>
-            vs {benchmark} · as of {days[end]} · {smoothing > 1 ? `${smoothing}-day smoothing` : 'no smoothing'}
+            vs {benchmark} · {unit.bars} · {unit.asOf(days[end])} · {smoothing > 1 ? `${smoothing}-${unit.adj} smoothing` : 'no smoothing'}
           </p>
         </div>
         <button onClick={() => setTableView((v) => !v)} style={btn(tableView)}>
@@ -588,7 +602,7 @@ export default function RelativeRotationGraph({
       </div>
       <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '8px 0 0', lineHeight: 1.6 }}>
         {recent.length === 0
-          ? `No quadrant changes in the last ${RECENT_DAYS} days.`
+          ? `No quadrant changes in the last ${RECENT_DAYS} ${unit.many}.`
           : (
             <>
               Recent changes:{' '}
@@ -597,7 +611,7 @@ export default function RelativeRotationGraph({
                   {i > 0 && ' · '}
                   <span style={{ color: TEXT_SECONDARY }}>{labelFor(sym)}</span>{' '}
                   {QUADRANTS[summary[sym].streak.from].name} → <span style={{ color: QUADRANTS[summary[sym].q].color }}>{QUADRANTS[summary[sym].q].name}</span>
-                  {' '}({summary[sym].streak.days} day{summary[sym].streak.days === 1 ? '' : 's'})
+                  {' '}({summary[sym].streak.days} {plural(summary[sym].streak.days)})
                 </span>
               ))}
               {recent.length > RECENT_MAX && ` · +${recent.length - RECENT_MAX} more`}
@@ -616,7 +630,7 @@ export default function RelativeRotationGraph({
               <tr style={{ textAlign: 'left', color: TEXT_MUTED, fontSize: 11 }}>
                 <th style={{ padding: '6px 8px', fontWeight: 500 }}>Asset</th>
                 <th style={{ padding: '6px 8px', fontWeight: 500 }}>Quadrant</th>
-                <th style={{ padding: '6px 8px', fontWeight: 500 }}>Days there</th>
+                <th style={{ padding: '6px 8px', fontWeight: 500 }}>{unit.Many} there</th>
                 <th style={{ padding: '6px 8px', fontWeight: 500 }}>Heading</th>
                 <th style={{ padding: '6px 8px', fontWeight: 500 }}>RS-Ratio</th>
                 <th style={{ padding: '6px 8px', fontWeight: 500 }}>RS-Momentum</th>
@@ -650,7 +664,7 @@ export default function RelativeRotationGraph({
             </tbody>
           </table>
           <p style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 8 }}>
-            &quot;Days there&quot; with a + means it hasn&apos;t left that quadrant within the available history.
+            &quot;{unit.Many} there&quot; with a + means it hasn&apos;t left that quadrant within the available history.
           </p>
         </div>
       ) : (
@@ -672,7 +686,7 @@ export default function RelativeRotationGraph({
                   setHoverSym(null);
                 }}
                 role="img"
-                aria-label={`Relative rotation graph of ${activeSymbols.length} assets vs ${benchmark} as of ${days[end]}. Use the table view for exact values.`}
+                aria-label={`Relative rotation graph of ${activeSymbols.length} assets vs ${benchmark} on ${unit.bars}, ${unit.asOf(days[end])}. Use the table view for exact values.`}
                 style={{ display: 'block', cursor: 'grab', userSelect: 'none' }}
               >
                 <defs>
@@ -870,10 +884,10 @@ export default function RelativeRotationGraph({
                     </span>
                   </div>
                   <div style={{ color: TEXT_SECONDARY }}>
-                    {labelFor(hoverInfo.sym)} · {days[hoverInfo.idx]}
+                    {labelFor(hoverInfo.sym)} · {unit.fmt(days[hoverInfo.idx])}
                   </div>
                   <div style={{ color: QUADRANTS[hoverInfo.q].color }}>{QUADRANTS[hoverInfo.q].name}</div>
-                  {hoverInfo.idx === end && overlayNotes(summary[hoverInfo.sym]).map((n) => (
+                  {hoverInfo.idx === end && overlayNotes(summary[hoverInfo.sym], unit).map((n) => (
                     <div key={n} style={{ color: TEXT_SECONDARY }}>{n}</div>
                   ))}
                 </div>
@@ -883,7 +897,7 @@ export default function RelativeRotationGraph({
 
             <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${CARD_BORDER}` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <button onClick={togglePlay} style={{ ...zoomBtnStyle, width: 28 }} aria-label={playing ? 'Pause' : 'Play rotation over time'} title={playing ? 'Pause' : 'Play the rotation day by day'}>
+                <button onClick={togglePlay} style={{ ...zoomBtnStyle, width: 28 }} aria-label={playing ? 'Pause' : 'Play rotation over time'} title={playing ? 'Pause' : `Play the rotation ${unit.adj} by ${unit.adj}`}>
                   {playing ? '❚❚' : '▶'}
                 </button>
                 <input
@@ -896,9 +910,9 @@ export default function RelativeRotationGraph({
                     setEndIdx(parseInt(e.target.value, 10));
                   }}
                   style={{ flex: 1, minWidth: 0 }}
-                  aria-label="Day"
+                  aria-label={unit.one}
                 />
-                <span style={{ fontSize: 12, fontFamily: 'ui-monospace,monospace', color: TEXT_PRIMARY, whiteSpace: 'nowrap' }}>{days[end]}</span>
+                <span style={{ fontSize: 12, fontFamily: 'ui-monospace,monospace', color: TEXT_PRIMARY, whiteSpace: 'nowrap' }}>{unit.fmt(days[end])}</span>
                 {end !== lastIdx && (
                   <button onClick={() => { setPlaying(false); setEndIdx(lastIdx); }} style={linkBtnStyle}>now</button>
                 )}
@@ -909,7 +923,7 @@ export default function RelativeRotationGraph({
                   <button
                     key={pr.key}
                     onClick={() => setSettings((st) => ({ ...st, ...pr.settings }))}
-                    title={`${pr.blurb} — Trend ${pr.settings.trendWindow}d, Momentum ${pr.settings.momentumWindow}d, Smoothing ${pr.settings.smoothing}d, Tail ${pr.settings.tailLength}d`}
+                    title={`${pr.blurb} — Trend ${pr.settings.trendWindow}${unit.short}, Momentum ${pr.settings.momentumWindow}${unit.short}, Smoothing ${pr.settings.smoothing}${unit.short}, Tail ${pr.settings.tailLength}${unit.short}`}
                     style={btn(presetMatching(settings)?.key === pr.key)}
                   >
                     {pr.label}
@@ -920,17 +934,17 @@ export default function RelativeRotationGraph({
               <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '6px 0 0', lineHeight: 1.5 }}>
                 {presetMatching(settings)
                   ? {
-                    fast: 'Fast: catches turns about a day sooner, with more false flips. For short-term reads.',
+                    fast: `Fast: catches turns about a ${unit.adj} sooner, with more false flips. For short-term reads.`,
                     balanced: 'Balanced: the default — same speed as the old settings with about a third fewer false quadrant flips.',
                     steady: 'Steady: the calmest tails, for the bigger picture; slower, and can miss short-lived moves.',
                   }[presetMatching(settings).key]
                   : 'Custom settings — pick a preset to reset the sliders.'}
               </p>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px 16px', marginTop: 10 }}>
-                <SliderControl label="Tail" unit="d" value={tailLength} min={3} max={Math.max(4, Math.min(30, lastIdx - warm + 1))} onChange={(v) => setSetting('tailLength', v)} />
-                <SliderControl label="Trend" unit="d" value={trendWindow} min={5} max={40} onChange={(v) => setSetting('trendWindow', v)} />
-                <SliderControl label="Momentum" unit="d" value={momentumWindow} min={2} max={15} onChange={(v) => setSetting('momentumWindow', v)} />
-                <SliderControl label="Smoothing" unit="d" value={smoothing} min={1} max={7} onChange={(v) => setSetting('smoothing', v)} format={(v) => (v <= 1 ? 'off' : `${v}d`)} />
+                <SliderControl label="Tail" unit={unit.short} value={tailLength} min={3} max={Math.max(4, Math.min(30, lastIdx - warm + 1))} onChange={(v) => setSetting('tailLength', v)} />
+                <SliderControl label="Trend" unit={unit.short} value={trendWindow} min={5} max={40} onChange={(v) => setSetting('trendWindow', v)} />
+                <SliderControl label="Momentum" unit={unit.short} value={momentumWindow} min={2} max={15} onChange={(v) => setSetting('momentumWindow', v)} />
+                <SliderControl label="Smoothing" unit={unit.short} value={smoothing} min={1} max={7} onChange={(v) => setSetting('smoothing', v)} format={(v) => (v <= 1 ? 'off' : `${v}${unit.short}`)} />
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12, marginTop: 10 }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: TEXT_SECONDARY, cursor: 'pointer' }}>
@@ -950,15 +964,15 @@ export default function RelativeRotationGraph({
                 <OverlayToggle
                   label="Volume"
                   checked={overlays.volume}
-                  disabled={!volumes}
+                  disabled={!volAvailable}
                   onChange={(v) => setOverlay('volume', v)}
-                  title="Head dot size = last 7 days' volume vs its 30-day average"
+                  title={volAvailable ? `Head dot size = last 7 ${unit.many}' volume vs its 30-${unit.adj} average` : 'Not available on 4-hour bars: CoinGecko only gives a rolling 24-hour volume'}
                 />
                 <OverlayToggle
                   label="Trend filter"
                   checked={overlays.trend}
                   onChange={(v) => setOverlay('trend', v)}
-                  title={`Hollow head dot = below its own ${TREND_WINDOW}-day average (falling in absolute terms)`}
+                  title={`Hollow head dot = below its own ${TREND_WINDOW}-${unit.adj} average (falling in absolute terms)`}
                 />
                 {funding && (
                   <OverlayToggle
@@ -980,10 +994,10 @@ export default function RelativeRotationGraph({
               {(volumeOn || trendOn || fundingOn || (overlays.capWeighted && capAvailable)) && (
                 <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '6px 0 0', lineHeight: 1.55 }}>
                   {[
-                    volumeOn && 'Bigger head = above-normal volume (7d vs 30d; CoinGecko volume includes some exchanges with inflated volume, so compare a coin with its own history).',
-                    trendOn && `Hollow head = below its own ${TREND_WINDOW}-day average — leading ${benchmark} but still falling.`,
-                    fundingOn && `▲ funding ≥ ${FUNDING_HOT}%/yr (crowded longs) · ▼ negative funding (shorts paying) — live Hyperliquid reading, shown on the latest day only.`,
-                    overlays.capWeighted && capAvailable && 'Sectors weighted by each member’s market cap on the first day, instead of equally.',
+                    volumeOn && `Bigger head = above-normal volume (7 vs 30 ${unit.many}; CoinGecko volume includes some exchanges with inflated volume, so compare a coin with its own history).`,
+                    trendOn && `Hollow head = below its own ${TREND_WINDOW}-${unit.adj} average — leading ${benchmark} but still falling.`,
+                    fundingOn && `▲ funding ≥ ${FUNDING_HOT}%/yr (crowded longs) · ▼ negative funding (shorts paying) — live Hyperliquid reading, shown on the latest ${unit.adj} only.`,
+                    overlays.capWeighted && capAvailable && `Sectors weighted by each member’s market cap on the first ${unit.adj}, instead of equally.`,
                   ].filter(Boolean).join(' ')}
                 </p>
               )}
@@ -1023,7 +1037,7 @@ export default function RelativeRotationGraph({
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                     <Swatch shape={shape} color={color} />
                     <span title={sym} style={{ color: TEXT_PRIMARY, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{labelFor(sym)}</span>
-                    <span style={{ color: TEXT_SECONDARY, fontSize: 12 }} title="Direction of travel over the last 3 days">{s.head?.arrow || ''}</span>
+                    <span style={{ color: TEXT_SECONDARY, fontSize: 12 }} title={`Direction of travel over the last 3 ${unit.many}`}>{s.head?.arrow || ''}</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
                     <button
@@ -1031,7 +1045,7 @@ export default function RelativeRotationGraph({
                         e.stopPropagation();
                         togglePin(sym);
                       }}
-                      title="Focus this ticker and show its day-by-day detail"
+                      title={`Focus this ticker and show its ${unit.adj}-by-${unit.adj} detail`}
                       aria-label={`Focus ${sym}`}
                       style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, lineHeight: 0, opacity: pinned === sym ? 1 : 0.45 }}
                     >
@@ -1039,7 +1053,7 @@ export default function RelativeRotationGraph({
                     </button>
                     <span
                       style={{ fontSize: 11, fontFamily: 'ui-monospace,monospace', color: noisy ? ACCENT : TEXT_MUTED }}
-                      title={`${s.flips} quadrant change(s) across the ${s.tailLen}-day tail${noisy ? ' — noisy, treat with caution' : ''}`}
+                      title={`${s.flips} quadrant change(s) across the ${s.tailLen}-${unit.adj} tail${noisy ? ' — noisy, treat with caution' : ''}`}
                     >
                       {s.flips}⤢
                     </span>
@@ -1052,7 +1066,7 @@ export default function RelativeRotationGraph({
                         <div style={{ fontFamily: 'ui-monospace,monospace', fontSize: 10, color: TEXT_MUTED }}>
                           {[
                             volumeOn && s.relVol != null && `vol ${s.relVol.toFixed(1)}×`,
-                            trendOn && s.trend && `${s.trend.above ? '▲' : '▽'}${TREND_WINDOW}d`,
+                            trendOn && s.trend && `${s.trend.above ? '▲' : '▽'}${TREND_WINDOW}${unit.short}`,
                             fundingOn && Number.isFinite(s.fundingPct) && `f ${s.fundingPct >= 0 ? '+' : ''}${s.fundingPct.toFixed(0)}%`,
                           ].filter(Boolean).join(' · ')}
                         </div>
@@ -1063,7 +1077,7 @@ export default function RelativeRotationGraph({
               );
             })}
             <p style={{ fontSize: 11, color: TEXT_MUTED, lineHeight: 1.55, marginTop: 10 }}>
-              Arrows show direction of travel over the last 3 days. ⤢ counts quadrant changes across
+              Arrows show direction of travel over the last 3 {unit.many}. ⤢ counts quadrant changes across
               the tail — a high count means noise, not signal.
             </p>
           </div>
@@ -1082,20 +1096,20 @@ export default function RelativeRotationGraph({
                 <span style={{ width: 10, height: 10, borderRadius: '50%', background: color }} />
                 <span style={{ fontSize: 15, color: TEXT_PRIMARY, fontWeight: 600 }}>{sym}</span>
                 <span style={{ fontSize: 12, color: QUADRANTS[summary[sym].q].color }}>
-                  {QUADRANTS[summary[sym].q].name} · {summary[sym].streak.days}{summary[sym].streak.from ? '' : '+'} day{summary[sym].streak.days === 1 ? '' : 's'}
+                  {QUADRANTS[summary[sym].q].name} · {summary[sym].streak.days}{summary[sym].streak.from ? '' : '+'} {plural(summary[sym].streak.days)}
                 </span>
               </div>
               <button onClick={() => setPinned(null)} style={{ ...btn(false), padding: '3px 9px' }}>Close</button>
             </div>
             <p style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 8, lineHeight: 1.5 }}>
-              {sym} vs {benchmark}, last {tail.length} days. RS-Ratio/Momentum use the {trendWindow}/{momentumWindow}-day
-              windows{smoothing > 1 ? ` on a ${smoothing}-day smoothed ratio` : ''}. Prices are the raw daily closes.
+              {sym} vs {benchmark}, last {tail.length} {unit.many}. RS-Ratio/Momentum use the {trendWindow}/{momentumWindow}-{unit.adj}
+              windows{smoothing > 1 ? ` on a ${smoothing}-${unit.adj} smoothed ratio` : ''}. Prices are the raw {unit.closes}.
             </p>
             <div style={{ overflowX: 'auto', marginTop: 10 }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
                 <thead>
                   <tr style={{ borderBottom: `1px solid ${CARD_BORDER}`, color: TEXT_MUTED, textAlign: 'left' }}>
-                    <th style={{ padding: '4px 8px 4px 0' }}>Day</th>
+                    <th style={{ padding: '4px 8px 4px 0' }}>{interval === '1w' ? 'Week of' : interval === '4h' ? 'Bar (UTC)' : 'Day'}</th>
                     <th style={{ padding: '4px 8px' }}>{sym} {assetLabel}</th>
                     <th style={{ padding: '4px 8px' }}>{benchmark} price</th>
                     <th style={{ padding: '4px 8px' }}>RS-Ratio</th>
@@ -1135,8 +1149,8 @@ export default function RelativeRotationGraph({
       <p style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 12, lineHeight: 1.6 }}>
         How to read it: right of center = outperforming {benchmark} on trend, above center = that trend is
         gaining. Assets usually rotate clockwise — Improving → Leading → Weakening → Lagging. Tails run from
-        faint (oldest) to the bold dot (the selected day). RS-Ratio and RS-Momentum are a standard open
-        approximation of the JdK RRG method, not the exact proprietary formula; the first {warm} days of
+        faint (oldest) to the bold dot (the selected {unit.adj}). RS-Ratio and RS-Momentum are a standard open
+        approximation of the JdK RRG method, not the exact proprietary formula; the first {warm} {unit.many} of
         history are warm-up for the rolling windows and aren&apos;t plotted.
       </p>
     </section>
@@ -1177,11 +1191,11 @@ function SliderControl({ label, unit, value, min, max, onChange, format }) {
   );
 }
 
-function overlayNotes(s) {
+function overlayNotes(s, unit) {
   if (!s) return [];
   const out = [];
-  if (s.relVol != null) out.push(`Volume ${s.relVol.toFixed(1)}× its 30-day average`);
-  if (s.trend) out.push(`${s.trend.pct >= 0 ? '+' : ''}${s.trend.pct.toFixed(1)}% vs its ${TREND_WINDOW}-day average`);
+  if (s.relVol != null) out.push(`Volume ${s.relVol.toFixed(1)}× its 30-${unit.adj} average`);
+  if (s.trend) out.push(`${s.trend.pct >= 0 ? '+' : ''}${s.trend.pct.toFixed(1)}% vs its ${TREND_WINDOW}-${unit.adj} average`);
   if (Number.isFinite(s.fundingPct)) out.push(`Funding ${s.fundingPct.toFixed(1)}%/yr`);
   return out;
 }

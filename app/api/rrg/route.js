@@ -1,17 +1,18 @@
 // Server-side only — this is the one place the CoinGecko demo key is used.
-// Returns aligned daily price series for the benchmark + tracked assets. The
+// Returns aligned price series (4-hour, daily or weekly bars, per the
+// `interval` param) for the benchmark + tracked assets. The
 // RS-Ratio/RS-Momentum math itself runs client-side (see
 // RelativeRotationGraph.js) so the interactive controls (tail/trend/momentum
 // windows, z-score toggle, scrubber) don't need a refetch per change.
 
 import { COINGECKO_IDS } from '../../lib/coingecko-ids';
-import { fetchDailyHistory } from '../../lib/coingecko-history';
+import { fetchHistory as fetchBars, parseInterval } from '../../lib/coingecko-history';
 import { withCdnCache } from '../../lib/cdnCache';
 
 export const dynamic = 'force-dynamic';
 
-function fetchHistory(symbol, apiKey) {
-  return fetchDailyHistory(COINGECKO_IDS[symbol], apiKey);
+function fetchHistory(symbol, apiKey, interval) {
+  return fetchBars(COINGECKO_IDS[symbol], apiKey, interval);
 }
 
 async function handler(request) {
@@ -25,6 +26,7 @@ async function handler(request) {
 
   const { searchParams } = new URL(request.url);
   const benchmark = searchParams.get('benchmark') || 'BTC';
+  const interval = parseInterval(searchParams.get('interval'));
   const requested = (searchParams.get('symbols') || 'ETH,SOL,SUI,LINK')
     .split(',')
     .map((s) => s.trim())
@@ -39,7 +41,7 @@ async function handler(request) {
 
   try {
     const allSymbols = [benchmark, ...symbols];
-    const results = await Promise.allSettled(allSymbols.map((sym) => fetchHistory(sym, apiKey)));
+    const results = await Promise.allSettled(allSymbols.map((sym) => fetchHistory(sym, apiKey, interval)));
 
     const failed = [...unmapped];
     const mapBySymbol = {};
@@ -67,10 +69,11 @@ async function handler(request) {
     const volumes = {};
     for (const sym of [benchmark, ...okSymbols]) {
       prices[sym] = commonDays.map((d) => mapBySymbol[sym].prices.get(d));
-      volumes[sym] = commonDays.map((d) => mapBySymbol[sym].volumes.get(d) ?? null);
+      volumes[sym] = commonDays.map((d) => mapBySymbol[sym].volumes.get(d) ?? null); // none on 4h bars
     }
 
-    return Response.json({ benchmark, days: commonDays, prices, volumes, failed, fetchedAt: new Date().toISOString() });
+    // `days` holds the bar labels (dates, 4-hour UTC starts, or week starts).
+    return Response.json({ benchmark, interval, days: commonDays, prices, volumes, failed, fetchedAt: new Date().toISOString() });
   } catch (err) {
     return Response.json(
       { error: err.message || 'Fetch failed', detail: err.detail || String(err) },

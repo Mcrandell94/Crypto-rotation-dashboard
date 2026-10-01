@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import RotationChart from './components/RotationChart';
 import RelativeRotationGraph from './components/RelativeRotationGraph';
 import MacroSentiment from './components/MacroSentiment';
@@ -43,6 +43,13 @@ import useWhaleTabData from './hooks/useWhaleTabData';
 
 const EMA_SYMBOLS = ['BTC', 'ETH'];
 
+const RRG_INTERVALS = [
+  { key: '4h', label: '4H', title: '4-hour bars, last ~3 weeks' },
+  { key: '1d', label: '1D', title: 'Daily bars, last ~100 days' },
+  { key: '1w', label: '1W', title: 'Weekly bars, last ~year' },
+];
+const RRG_INTERVAL_KEY = 'rrgInterval.v1';
+
 const TABS = [
   { key: 'rotation', label: 'Rotation' },
   { key: 'macro', label: 'Macro & Seasonality' },
@@ -61,6 +68,29 @@ export default function DashboardHome() {
   const [activeSector, setActiveSector] = useState(SECTORS[0].key);
   const [benchmark, setBenchmark] = useState(BENCHMARKS[0].key);
   const [rrgMode, setRrgMode] = useState('tickers'); // 'tickers' | 'sectors'
+  // RRG bar size: 4-hour, daily or weekly. Remembered per browser (a
+  // convenience only — the page works the same without storage).
+  // Starts null until the saved choice is read, so the RRG's first fetch
+  // uses it (rather than fetching daily and then refetching).
+  const [rrgInterval, setRrgIntervalState] = useState(null);
+  useEffect(() => {
+    let saved = null;
+    try {
+      saved = localStorage.getItem(RRG_INTERVAL_KEY);
+    } catch {
+      // storage unavailable: use the default
+    }
+    setRrgIntervalState(RRG_INTERVALS.some((i) => i.key === saved) ? saved : '1d');
+  }, []);
+  const shownInterval = rrgInterval || '1d';
+  const setRrgInterval = (key) => {
+    setRrgIntervalState(key);
+    try {
+      localStorage.setItem(RRG_INTERVAL_KEY, key);
+    } catch {
+      // storage unavailable: still switches for this visit
+    }
+  };
 
   // A benchmark can't be plotted against itself, so drop it from the sector's
   // own ticker list; when the benchmark isn't BTC, BTC becomes a plottable
@@ -80,7 +110,7 @@ export default function DashboardHome() {
   // now" below only needs to call header + rotation + whichever tab is
   // currently active, not thirty separate fetchers.
   const header = useHeaderData();
-  const rotation = useRotationData(sectorTickers, benchmark, activeSector, rrgMode);
+  const rotation = useRotationData(sectorTickers, benchmark, activeSector, rrgMode, rrgInterval);
   const macro = useMacroTabData(activeTab === 'macro');
   const levels = useLevelsTabData(activeTab === 'levels');
   const mints = useMintsTabData(activeTab === 'mints');
@@ -194,7 +224,7 @@ export default function DashboardHome() {
             </div>
           )}
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 12, color: '#8B9298' }}>Measured against</span>
             {BENCHMARKS.map((b) => (
               <button
@@ -208,6 +238,23 @@ export default function DashboardHome() {
                 }}
               >
                 {b.label}
+              </button>
+            ))}
+            <span style={{ fontSize: 12, color: '#8B9298', marginLeft: 10 }}>RRG bars</span>
+            {RRG_INTERVALS.map((i) => (
+              <button
+                key={i.key}
+                onClick={() => setRrgInterval(i.key)}
+                title={i.title}
+                aria-pressed={shownInterval === i.key}
+                style={{
+                  background: shownInterval === i.key ? '#1E252A' : '#171D21',
+                  border: `1px solid ${shownInterval === i.key ? '#C9A66B' : '#2A3136'}`,
+                  color: shownInterval === i.key ? '#C9A66B' : '#8B9298',
+                  borderRadius: 4, padding: '4px 10px', fontSize: 12, cursor: 'pointer',
+                }}
+              >
+                {i.label}
               </button>
             ))}
           </div>
