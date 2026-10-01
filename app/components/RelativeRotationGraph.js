@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import {
-  computeSeries, firstValidIndex, quadrantOf, countFlips, quadrantStreak, heading, RRG_PRESETS,
+  computeSeries, firstValidIndex, quadrantOf, countFlips, quadrantStreak, heading, presetsFor, defaultSettingsFor,
 } from '../lib/rrgMath';
 import { relativeVolume, absoluteTrend, fundingFlag, FUNDING_HOT } from '../lib/rrgOverlays';
 
@@ -42,10 +42,12 @@ function seriesStyleFor(index) {
   };
 }
 
-// Default = the Balanced preset (see RRG_PRESETS in app/lib/rrgMath.js for
+// Default = the Balanced preset for the bar size (see RRG_PRESETS_BY_INTERVAL in app/lib/rrgMath.js for
 // how the three presets were tuned).
-const DEFAULT_SETTINGS = { zscore: true, ...RRG_PRESETS.find((p) => p.key === 'balanced').settings };
-const SETTINGS_KEY = 'rrgSettings.v2';
+// Settings are kept per bar size ({ '1d': {...}, '4h': {...}, '1w': {...} }),
+// so tuning 4H doesn't change daily. v2 was a single daily object.
+const SETTINGS_KEY = 'rrgSettings.v3';
+const LEGACY_SETTINGS_KEY = 'rrgSettings.v2';
 const OVERLAYS_KEY = 'rrgOverlays.v1';
 const TREND_WINDOW = 20; // absolute-trend overlay: price vs its own 20-bar average
 
@@ -57,7 +59,7 @@ const BAR_UNITS = {
   '4h': { short: ' bars', one: '4-hour bar', many: '4-hour bars', adj: 'bar', Many: 'Bars', bars: '4-hour bars', closes: '4-hour closes (UTC)', fmt: (l) => (l ? `${l} UTC` : l), asOf: (l) => `as of ${l} UTC` },
   '1w': { short: 'w', one: 'week', many: 'weeks', adj: 'week', Many: 'Weeks', bars: 'weekly bars', closes: 'weekly closes (weeks start Monday, UTC)', fmt: (l) => (l ? `week of ${l}` : l), asOf: (l) => `week of ${l}` },
 };
-const presetMatching = (st) => RRG_PRESETS.find((p) => Object.entries(p.settings).every(([k, v]) => st[k] === v));
+const presetMatching = (st, presets) => presets.find((p) => Object.entries(p.settings).every(([k, v]) => st[k] === v));
 const RECENT_DAYS = 3; // "recent quadrant change" window for the summary
 const RECENT_MAX = 6; // how many recent changes to list before "+N more"
 
@@ -193,23 +195,37 @@ export default function RelativeRotationGraph({
   funding = null, // { [sym]: { fundingRateAnnualized } } from /api/funding (tickers view only)
 }) {
   const [tableView, setTableView] = useState(false);
-  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+  // Bar size of the data on screen; settings and presets are per bar size.
+  const interval = BAR_UNITS[data?.interval] ? data.interval : '1d';
+  const presets = presetsFor(interval);
+  const [settingsBy, setSettingsBy] = useState({});
+  const settings = { ...defaultSettingsFor(interval), ...settingsBy[interval] };
+  const setSettings = (next) => setSettingsBy((all) => {
+    const current = { ...defaultSettingsFor(interval), ...all[interval] };
+    return { ...all, [interval]: typeof next === 'function' ? next(current) : next };
+  });
   const { zscore, tailLength, trendWindow, momentumWindow, smoothing } = settings;
   const setSetting = (key, value) => setSettings((s) => ({ ...s, [key]: value }));
 
   // Remember this viewer's chart settings between visits (browser-only
-  // convenience; the chart works the same without it).
+  // convenience; the chart works the same without it). Settings saved before
+  // timeframes existed (v2) become the daily settings.
+  const settingsLoaded = useRef(false);
   useEffect(() => {
     try {
       const saved = JSON.parse(window.localStorage.getItem(SETTINGS_KEY) || 'null');
-      if (saved && typeof saved === 'object') setSettings((s) => ({ ...s, ...saved }));
+      const legacy = JSON.parse(window.localStorage.getItem(LEGACY_SETTINGS_KEY) || 'null');
+      if (saved && typeof saved === 'object') setSettingsBy(saved);
+      else if (legacy && typeof legacy === 'object') setSettingsBy({ '1d': legacy });
     } catch {}
+    settingsLoaded.current = true;
   }, []);
   useEffect(() => {
+    if (!settingsLoaded.current) return;
     try {
-      window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+      window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(settingsBy));
     } catch {}
-  }, [settings]);
+  }, [settingsBy]);
 
   // Optional overlays (all off by default, remembered per browser). None
   // move a ticker's position — see app/lib/rrgOverlays.js.
@@ -236,7 +252,6 @@ export default function RelativeRotationGraph({
   const capAvailable = !!data?.pricesCapWeighted;
   const prices = overlays.capWeighted && capAvailable ? data.pricesCapWeighted : data?.prices;
   const volumes = data?.volumes;
-  const interval = BAR_UNITS[data?.interval] ? data.interval : '1d';
   const unit = BAR_UNITS[interval];
   const plural = (n) => (n === 1 ? unit.one : unit.many);
   // 4-hour bars carry no volume (see app/lib/coingecko-history.js).
@@ -919,25 +934,21 @@ export default function RelativeRotationGraph({
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 12 }}>
                 <span style={{ fontSize: 12, color: TEXT_SECONDARY, marginRight: 2 }}>Read</span>
-                {RRG_PRESETS.map((pr) => (
+                {presets.map((pr) => (
                   <button
                     key={pr.key}
                     onClick={() => setSettings((st) => ({ ...st, ...pr.settings }))}
                     title={`${pr.blurb} — Trend ${pr.settings.trendWindow}${unit.short}, Momentum ${pr.settings.momentumWindow}${unit.short}, Smoothing ${pr.settings.smoothing}${unit.short}, Tail ${pr.settings.tailLength}${unit.short}`}
-                    style={btn(presetMatching(settings)?.key === pr.key)}
+                    style={btn(presetMatching(settings, presets)?.key === pr.key)}
                   >
                     {pr.label}
                   </button>
                 ))}
-                {!presetMatching(settings) && <span style={{ fontSize: 11, color: TEXT_MUTED, marginLeft: 4 }}>Custom</span>}
+                {!presetMatching(settings, presets) && <span style={{ fontSize: 11, color: TEXT_MUTED, marginLeft: 4 }}>Custom</span>}
               </div>
               <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '6px 0 0', lineHeight: 1.5 }}>
-                {presetMatching(settings)
-                  ? {
-                    fast: `Fast: catches turns about a ${unit.adj} sooner, with more false flips. For short-term reads.`,
-                    balanced: 'Balanced: the default — same speed as the old settings with about a third fewer false quadrant flips.',
-                    steady: 'Steady: the calmest tails, for the bigger picture; slower, and can miss short-lived moves.',
-                  }[presetMatching(settings).key]
+                {presetMatching(settings, presets)
+                  ? presetMatching(settings, presets).note
                   : 'Custom settings — pick a preset to reset the sliders.'}
               </p>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px 16px', marginTop: 10 }}>
@@ -951,7 +962,7 @@ export default function RelativeRotationGraph({
                   <input type="checkbox" checked={zscore} onChange={(e) => setSetting('zscore', e.target.checked)} />
                   Volatility-normalized (JdK-style)
                 </label>
-                <button onClick={() => setSettings(DEFAULT_SETTINGS)} style={linkBtnStyle}>Reset settings</button>
+                <button onClick={() => setSettings(defaultSettingsFor(interval))} style={linkBtnStyle}>Reset settings</button>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
                   <span style={{ fontSize: 12, color: TEXT_SECONDARY, marginRight: 2 }}>Zoom</span>
                   <button onClick={() => zoomBy(1.25)} style={zoomBtnStyle} aria-label="Zoom out">−</button>

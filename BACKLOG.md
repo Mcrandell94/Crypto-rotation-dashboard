@@ -28,6 +28,12 @@ One route that checks each provider and reports what's up or down, so a
 failing source shows up without someone having to notice it.
 
 ## Parked / disabled (code kept, see comments to re-enable)
+- **RRG 4H / 1W timeframes**: built and served by `/api/rrg?interval=4h|1w`,
+  but the toggle is hidden (`RRG_TIMEFRAMES_LIVE` in `app/page.js`) until
+  Trend / Momentum / Smoothing presets are tuned on real 4-hour and weekly
+  data (`RRG_PRESETS_BY_INTERVAL` in `app/lib/rrgMath.js`, currently copies
+  of the daily presets marked untuned). Tuning data comes from the live
+  `/api/rrg` endpoint, since the dev sandbox can't reach CoinGecko.
 - **RRG guide link** on the Rotation tab: reverted in PR #37, waiting until
   the guide can be shared publicly.
 - **BitcoinCounterFlow heatmap source**: needs `BITCOINCOUNTERFLOW_API_KEY`

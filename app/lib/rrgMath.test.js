@@ -107,3 +107,26 @@ test('presets leave most of the 100-day history plottable', () => {
     assert.ok(warm + p.settings.tailLength <= 50, `${p.key} warm-up ${warm} + tail ${p.settings.tailLength}`);
   }
 });
+
+test('each bar size has its own presets; 4H/1W start from daily until tuned', () => {
+  const { presetsFor, defaultSettingsFor, RRG_PRESETS_BY_INTERVAL, RRG_PRESETS } = require('./rrgMath');
+  assert.equal(presetsFor('1d'), RRG_PRESETS);
+  assert.equal(presetsFor('nonsense'), RRG_PRESETS);
+  for (const iv of ['4h', '1w']) {
+    const ps = presetsFor(iv);
+    assert.notEqual(ps, RRG_PRESETS); // separate objects, so tuning one can't change another
+    assert.deepEqual(ps.map((p) => p.key), ['fast', 'balanced', 'steady']);
+    if (!RRG_PRESETS_BY_INTERVAL[iv].tuned) assert.match(ps[0].note, /not yet tuned/);
+  }
+  assert.deepEqual(defaultSettingsFor('1d'), { zscore: true, trendWindow: 10, momentumWindow: 10, smoothing: 3, tailLength: 7 });
+});
+
+test('every preset fits the history each bar size serves', () => {
+  const { presetsFor } = require('./rrgMath');
+  const bars = { '1d': 100, '4h': 126, '1w': 52 }; // see app/lib/coingecko-history.js
+  for (const [iv, n] of Object.entries(bars)) {
+    for (const p of presetsFor(iv)) {
+      assert.ok(firstValidIndex(p.settings) + p.settings.tailLength < n, `${iv} ${p.key}`);
+    }
+  }
+});

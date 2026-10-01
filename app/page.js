@@ -49,6 +49,11 @@ const RRG_INTERVALS = [
   { key: '1w', label: '1W', title: 'Weekly bars, last ~year' },
 ];
 const RRG_INTERVAL_KEY = 'rrgInterval.v1';
+// The 4H / 1W toggle stays hidden (daily only) until those bar sizes have
+// their own tuned presets — see RRG_PRESETS_BY_INTERVAL in
+// app/lib/rrgMath.js. The /api/rrg `interval` param works either way; flip
+// this to true to show the toggle.
+const RRG_TIMEFRAMES_LIVE = false;
 
 const TABS = [
   { key: 'rotation', label: 'Rotation' },
@@ -80,7 +85,7 @@ export default function DashboardHome() {
     } catch {
       // storage unavailable: use the default
     }
-    setRrgIntervalState(RRG_INTERVALS.some((i) => i.key === saved) ? saved : '1d');
+    setRrgIntervalState(RRG_TIMEFRAMES_LIVE && RRG_INTERVALS.some((i) => i.key === saved) ? saved : '1d');
   }, []);
   const shownInterval = rrgInterval || '1d';
   const setRrgInterval = (key) => {
@@ -240,8 +245,8 @@ export default function DashboardHome() {
                 {b.label}
               </button>
             ))}
-            <span style={{ fontSize: 12, color: '#8B9298', marginLeft: 10 }}>RRG bars</span>
-            {RRG_INTERVALS.map((i) => (
+            {RRG_TIMEFRAMES_LIVE && <span style={{ fontSize: 12, color: '#8B9298', marginLeft: 10 }}>RRG bars</span>}
+            {RRG_TIMEFRAMES_LIVE && RRG_INTERVALS.map((i) => (
               <button
                 key={i.key}
                 onClick={() => setRrgInterval(i.key)}
