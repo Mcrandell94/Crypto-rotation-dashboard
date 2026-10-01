@@ -83,7 +83,8 @@ export default function TimeframesPanel({ data }) {
       <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '4px 0 16px' }}>
         RSI(14) and MACD(12,26,9), computed live from Kraken candles. "vs 50 SMA" and "Volume" are
         real reads, not guesses — the original prototype flagged its own "vs MAs" field as an
-        inferred guess rather than an actual chart read.
+        inferred guess rather than an actual chart read. &quot;Volume&quot; compares the last completed
+        candle with the 20 before it, since the one still forming only has partial volume.
       </p>
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
         <AssetCard symbol="BTC" timeframes={data.assets?.BTC} />

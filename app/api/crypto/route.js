@@ -4,6 +4,7 @@
 // directly from the React page.
 
 import { withCdnCache } from '../../lib/cdnCache';
+import { toProviderSymbol, fromProviderResults } from '../../lib/symbolAliases';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,7 +20,8 @@ async function handler(request) {
 
   // Default tickers — extend this list as you migrate more of the dashboard's panels over.
   const { searchParams } = new URL(request.url);
-  const symbols = searchParams.get('symbols') || 'BTC,ETH,SOL,SUI,LINK';
+  const requested = (searchParams.get('symbols') || 'BTC,ETH,SOL,SUI,LINK').split(',').map((x) => x.trim()).filter(Boolean);
+  const symbols = requested.map(toProviderSymbol).join(',');
 
   try {
     // skip_invalid=true so one unrecognized/delisted symbol in a larger sector batch
@@ -68,7 +70,7 @@ async function handler(request) {
     }
 
     return Response.json({
-      tickers,
+      tickers: fromProviderResults(requested, tickers),
       fetchedAt: new Date().toISOString(),
     });
   } catch (err) {

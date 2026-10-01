@@ -13,34 +13,12 @@
 // fetches broadly by tag and filters client-side the same way.
 
 import { withCdnCache } from '../../lib/cdnCache';
+import { classify, isBitcoinOnly } from '../../lib/polymarketBuckets';
 
 export const dynamic = 'force-dynamic';
 
 const GAMMA_BASE = 'https://gamma-api.polymarket.com';
 const CRYPTO_TAG_ID = 21; // confirmed production tag id for the Crypto category
-
-const MONTH_NAMES = [
-  'january', 'february', 'march', 'april', 'may', 'june',
-  'july', 'august', 'september', 'october', 'november', 'december',
-];
-
-function isBitcoinOnly(title) {
-  const t = title.toLowerCase();
-  if (!t.includes('bitcoin') && !/\bbtc\b/.test(t)) return false;
-  // The broad Crypto tag also carries other coins' versions of the same
-  // question format — exclude anything that names another asset too.
-  return !/ethereum|\beth\b|solana|\bsol\b|xrp|dogecoin|\bdoge\b/.test(t);
-}
-
-function classify(rawTitle) {
-  const t = rawTitle.toLowerCase().trim();
-  if (/hit (before|in) \d{4}\??$/.test(t)) return 'yearly';
-  if (MONTH_NAMES.some((m) => t.includes(`hit in ${m}`))) return 'monthly';
-  if (/hit .*\d{1,2}\s*[-–]\s*\d{1,2}/.test(t)) return 'weekly'; // e.g. "hit September 14-20"
-  if (/bitcoin above \$?[\d,]+ on /.test(t)) return 'daily';
-  if (/up or down/.test(t) && !/\d{1,2}(:\d{2})?\s*(am|pm)\s*-/.test(t)) return 'daily'; // exclude the 5m/15m variants, which carry a time range
-  return null;
-}
 
 async function fetchEvents() {
   const url = `${GAMMA_BASE}/events?tag_id=${CRYPTO_TAG_ID}&closed=false&active=true&order=volume24hr&ascending=false&limit=150`;
