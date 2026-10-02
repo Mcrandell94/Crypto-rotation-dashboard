@@ -51,11 +51,16 @@ export const COINGECKO_IDS = {
   BEAM: 'beam', // Mimblewimble privacy coin (beam.mw) — not the Avalonche gaming token ("beam-2")
   FIRO: 'zcoin',
   NYM: 'nym',
+  // Added 2026-10-02 (Bitunix-listed; CoinGecko category "Privacy Blockchain",
+  // price matched to Bitunix's)
+  MINA: 'mina-protocol',
+  DUSK: 'dusk-network',
 
   // DeFi
   AAVE: 'aave',
   UNI: 'uniswap',
   MKR: 'maker',
+  SKY: 'sky', // Sky Protocol, Maker's successor token (price matched to Bitunix's SKY)
   CRV: 'curve-dao-token',
   LDO: 'lido-dao',
   COMP: 'compound-governance-token',
@@ -96,7 +101,11 @@ export const COINGECKO_IDS = {
   POLYX: 'polymesh',
   VET: 'vechain',
   QNT: 'quant-network',
-  CFG: 'centrifuge-2',
+  CFG: 'centrifuge-2', // current Centrifuge — not "centrifuge" (marked [OLD] on CoinGecko)
+  // Added 2026-10-02 (Bitunix-listed; CoinGecko category "Real World Assets
+  // (RWA)", price matched to Bitunix's)
+  PLUME: 'plume',
+  SYRUP: 'syrup', // Maple Finance
   TRU: 'truefi',
 
   // Gaming — ids checked against CoinGecko's markets data (name + symbol).
@@ -110,4 +119,14 @@ export const COINGECKO_IDS = {
   PRIME: 'echelon-prime',
   ILV: 'illuvium',
   APE: 'apecoin',
+  // Added 2026-10-02 (Bitunix-listed; CoinGecko category "Gaming (GameFi)"
+  // or Metaverse, price matched to Bitunix's)
+  ENJ: 'enjincoin',
+  SUPER: 'superfarm', // SuperVerse
+  ALICE: 'my-neighbor-alice',
+  MAGIC: 'magic', // Treasure
+  YGG: 'yield-guild-games',
+  BIGTIME: 'big-time',
+  XAI: 'xai-blockchain',
+  PIXEL: 'pixels',
 };
