@@ -108,17 +108,20 @@ test('presets leave most of the 100-day history plottable', () => {
   }
 });
 
-test('each bar size has its own presets; 4H/1W start from daily until tuned', () => {
+test('each bar size has its own tuned presets', () => {
   const { presetsFor, defaultSettingsFor, RRG_PRESETS_BY_INTERVAL, RRG_PRESETS } = require('./rrgMath');
   assert.equal(presetsFor('1d'), RRG_PRESETS);
   assert.equal(presetsFor('nonsense'), RRG_PRESETS);
   for (const iv of ['4h', '1w']) {
     const ps = presetsFor(iv);
-    assert.notEqual(ps, RRG_PRESETS); // separate objects, so tuning one can't change another
+    assert.notEqual(ps, RRG_PRESETS);
+    assert.equal(RRG_PRESETS_BY_INTERVAL[iv].tuned, true);
     assert.deepEqual(ps.map((p) => p.key), ['fast', 'balanced', 'steady']);
-    if (!RRG_PRESETS_BY_INTERVAL[iv].tuned) assert.match(ps[0].note, /not yet tuned/);
+    for (const p of ps) assert.doesNotMatch(p.note, /not yet tuned/);
   }
   assert.deepEqual(defaultSettingsFor('1d'), { zscore: true, trendWindow: 10, momentumWindow: 10, smoothing: 3, tailLength: 7 });
+  assert.deepEqual(defaultSettingsFor('4h'), { zscore: true, trendWindow: 7, momentumWindow: 14, smoothing: 3, tailLength: 7 });
+  assert.deepEqual(defaultSettingsFor('1w'), { zscore: true, trendWindow: 14, momentumWindow: 10, smoothing: 3, tailLength: 7 });
 });
 
 test('every preset fits the history each bar size serves', () => {
