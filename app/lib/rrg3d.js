@@ -1,6 +1,8 @@
 // Camera maths for the 3D RRG view (beta). Three axes:
-//   x = RS-Ratio (left -> right), y = RS-Momentum (up), z = time (oldest
-//   bar of the tail at the back, newest at the front, toward the viewer).
+//   x = RS-Ratio (left -> right), y = RS-Momentum (up), z = depth: time by
+//   default (oldest bar of the tail at the back, newest at the front,
+//   toward the viewer), or the absolute-trend reading (price vs its own
+//   average, highest at the front).
 // The camera is orthographic: a perspective camera would shrink older
 // points toward the middle, so the same RS-Ratio would sit at different
 // screen positions at different times. Looking straight on ('front') this
@@ -16,16 +18,28 @@ export const VIEWS_3D = [
   { key: 'ratio', label: 'Ratio × time', yaw: 90, pitch: 90, title: 'From above: RS-Ratio over time, oldest left, newest right' },
 ];
 
-// Length of the time axis relative to the RRG plane's width.
+// Length of the depth axis relative to the RRG plane's width.
 export const TIME_DEPTH = 2;
 
-// Data -> world coordinates. x/y map their ranges onto [-1, 1]; bar index i
-// maps [iOld, iNew] onto [-TIME_DEPTH/2, TIME_DEPTH/2].
-export function toWorld(x, y, i, { x0, x1, y0, y1, iOld, iNew }) {
+// Data -> world coordinates. x/y map their ranges onto [-1, 1]; the depth
+// value z (a bar index, or a trend %) maps [z0, z1] onto
+// [-TIME_DEPTH/2, TIME_DEPTH/2], z1 at the front.
+export function toWorld(x, y, z, { x0, x1, y0, y1, z0, z1 }) {
   const X = x1 > x0 ? (2 * (x - x0)) / (x1 - x0) - 1 : 0;
   const Y = y1 > y0 ? (2 * (y - y0)) / (y1 - y0) - 1 : 0;
-  const Z = iNew > iOld ? TIME_DEPTH * ((i - iOld) / (iNew - iOld) - 0.5) : TIME_DEPTH / 2;
+  const Z = z1 > z0 ? TIME_DEPTH * ((z - z0) / (z1 - z0) - 0.5) : TIME_DEPTH / 2;
   return [X, Y, Z];
+}
+
+// Depth range for a set of values that always keeps `anchor` in view
+// (0% for the trend axis), padded 10% each side, at least `minHalf` wide.
+export function depthRange(values, anchor = 0, minHalf = 1) {
+  const vs = values.filter(Number.isFinite);
+  const lo = Math.min(anchor, ...vs);
+  const hi = Math.max(anchor, ...vs);
+  const half = Math.max(((hi - lo) / 2) * 1.2, minHalf);
+  const mid = (lo + hi) / 2;
+  return { z0: mid - half, z1: mid + half };
 }
 
 // World -> camera: [screen x, screen y (up), depth (larger = nearer)].

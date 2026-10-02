@@ -10,6 +10,7 @@ import {
   clamp, ticksFor, Marker, placeLabels,
 } from './rrgShared';
 import RrgPlot3D from './RrgPlot3D';
+import { timeTicks, depthRange } from '../lib/rrg3d';
 
 // Laid out like the chart itself: top row Improving | Leading, bottom row
 // Lagging | Weakening. Rotation is normally clockwise through them.
@@ -115,7 +116,7 @@ export default function RelativeRotationGraph({
 
   // Optional overlays (all off by default, remembered per browser). None
   // move a ticker's position — see app/lib/rrgOverlays.js.
-  const [overlays, setOverlays] = useState({ volume: false, trend: false, funding: false, capWeighted: false });
+  const [overlays, setOverlays] = useState({ volume: false, trend: false, funding: false, capWeighted: false, trendAxis: false });
   const setOverlay = (key, value) => setOverlays((o) => ({ ...o, [key]: value }));
   useEffect(() => {
     try {
@@ -428,6 +429,9 @@ export default function RelativeRotationGraph({
 
   const volumeOn = overlays.volume && volAvailable;
   const trendOn = overlays.trend;
+  // 3D only: depth = each bar's price vs its own TREND_WINDOW-bar average
+  // instead of time.
+  const trendAxisOn = view3d && overlays.trendAxis;
   const fundingOn = overlays.funding && !!funding;
   const headRadius = (sym) => {
     const base = pinned === sym ? 6.5 : 5.5;
@@ -479,12 +483,61 @@ export default function RelativeRotationGraph({
           {labelFor(sym)} · {unit.fmt(days[idx])}
         </div>
         <div style={{ color: QUADRANTS[q].color }}>{QUADRANTS[q].name}</div>
+        {trendAxisOn && (() => {
+          const t = absoluteTrend(prices?.[sym], idx, TREND_WINDOW);
+          return t && <div style={{ color: TEXT_SECONDARY }}>{`${t.pct >= 0 ? '+' : ''}${t.pct.toFixed(1)}% vs its ${TREND_WINDOW}-${unit.adj} average`}</div>;
+        })()}
         {idx === end && overlayNotes(summary[sym], unit).map((n) => (
           <div key={n} style={{ color: TEXT_SECONDARY }}>{n}</div>
         ))}
       </>
     );
   };
+
+  // ---- 3D view: series and the depth axis (time, or the trend axis)
+  const series3d = !view3d ? [] : shownSymbols.map((sym) => ({
+    sym,
+    ...styleOf(sym),
+    label: labelFor(sym),
+    points: tailOf(sym)
+      .map((p, i) => {
+        const idx = tailStart + i;
+        const z = trendAxisOn ? absoluteTrend(prices?.[sym], idx, TREND_WINDOW)?.pct : idx;
+        return { x: p.x, y: p.y, z, idx };
+      })
+      .filter((p) => Number.isFinite(p.z)),
+    dim: !!(focus && focus !== sym),
+    headR: headRadius(sym),
+    hollow: trendOn && summary[sym]?.trend?.above === false,
+    pinned: pinned === sym,
+    flag: fundingOn ? summary[sym]?.fundingFlag : null,
+  }));
+  const depth3d = (() => {
+    if (!view3d) return null;
+    if (!trendAxisOn) {
+      return {
+        name: 'time',
+        z0: tailStart,
+        z1: end,
+        ticks: timeTicks(tailStart, end, 4).map((i) => ({ v: i, label: days[i] ? days[i].slice(5) : '' })),
+        zeroPlane: false,
+        sideTitle: 'From the side: RS-Momentum over time, oldest left, newest right',
+        topTitle: 'From above: RS-Ratio over time, oldest left, newest right',
+        caption: `Across: RS-Ratio · up: RS-Momentum · depth: time, from ${unit.fmt(days[tailStart])} at the back to ${unit.fmt(days[end])} at the front. The dashed line is the 100/100 benchmark line through time. Drag to rotate; lengthen Tail to see more history.`,
+      };
+    }
+    const { z0, z1 } = depthRange(series3d.flatMap((s) => s.points.map((p) => p.z)), 0, 1);
+    return {
+      name: 'trend',
+      z0,
+      z1,
+      ticks: ticksFor(z0, z1).map((t) => ({ v: t.v, label: `${t.v > 0 ? '+' : ''}${t.label}%` })),
+      zeroPlane: true,
+      sideTitle: `From the side: RS-Momentum against price vs its own ${TREND_WINDOW}-${unit.adj} average, below it left, above it right`,
+      topTitle: `From above: RS-Ratio against price vs its own ${TREND_WINDOW}-${unit.adj} average, below it left, above it right`,
+      caption: `Across: RS-Ratio · up: RS-Momentum · depth: price vs its own ${TREND_WINDOW}-${unit.adj} average, highest at the front. The shaded plane is 0%: in front of it a coin is above its average (rising in its own terms), behind it below (falling) — so a coin in Leading but behind the plane is beating ${benchmark} while still falling. Tails fade from the oldest ${unit.adj} to the current one. Drag to rotate.`,
+    };
+  })();
 
   const btn = (active) => ({
     background: active ? '#1E252A' : CARD_BG,
@@ -624,27 +677,14 @@ export default function RelativeRotationGraph({
               <div ref={wrapRef} style={{ width: '100%' }}>
                 <RrgPlot3D
                   W={W}
-                  series={shownSymbols.map((sym) => ({
-                    sym,
-                    ...styleOf(sym),
-                    label: labelFor(sym),
-                    points: tailOf(sym).map((p, i) => ({ x: p.x, y: p.y, idx: tailStart + i })),
-                    dim: !!(focus && focus !== sym),
-                    headR: headRadius(sym),
-                    hollow: trendOn && summary[sym]?.trend?.above === false,
-                    pinned: pinned === sym,
-                    flag: fundingOn ? summary[sym]?.fundingFlag : null,
-                  }))}
+                  series={series3d}
                   ranges={{ x0: view.cx - view.rx, x1: view.cx + view.rx, y0: view.cy - view.ry, y1: view.cy + view.ry }}
-                  iOld={tailStart}
-                  iNew={end}
-                  days={days}
-                  unit={unit}
+                  depth={depth3d}
                   focus={focus}
                   onHoverSym={setHoverSym}
                   onPin={togglePin}
                   tooltip={tooltipBody}
-                  ariaLabel={`3D relative rotation graph of ${activeSymbols.length} assets vs ${benchmark} on ${unit.bars}, with time as depth, ${unit.asOf(days[end])}. Use the table view for exact values.`}
+                  ariaLabel={`3D relative rotation graph of ${activeSymbols.length} assets vs ${benchmark} on ${unit.bars}, with ${trendAxisOn ? `price vs its own ${TREND_WINDOW}-${unit.adj} average` : 'time'} as depth, ${unit.asOf(days[end])}. Use the table view for exact values.`}
                 />
               </div>
             ) : (
@@ -937,6 +977,17 @@ export default function RelativeRotationGraph({
                   onChange={(v) => setOverlay('trend', v)}
                   title={`Hollow head dot = below its own ${TREND_WINDOW}-${unit.adj} average (falling in absolute terms)`}
                 />
+                {RRG_3D_BETA && (
+                  <OverlayToggle
+                    label="Trend axis (3D)"
+                    checked={overlays.trendAxis}
+                    disabled={!view3d}
+                    onChange={(v) => setOverlay('trendAxis', v)}
+                    title={view3d
+                      ? `3D depth = price vs its own ${TREND_WINDOW}-${unit.adj} average instead of time`
+                      : `Turn on 3D (beta) to use: swaps the time axis for price vs its own ${TREND_WINDOW}-${unit.adj} average`}
+                  />
+                )}
                 {funding && (
                   <OverlayToggle
                     label="Funding"

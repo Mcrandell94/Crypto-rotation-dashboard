@@ -1,15 +1,15 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { VIEWS_3D, TIME_DEPTH, toWorld, fitCamera, timeTicks } from '../lib/rrg3d';
+import { VIEWS_3D, TIME_DEPTH, toWorld, fitCamera } from '../lib/rrg3d';
 import {
   TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, CARD_BORDER, PLOT_BG, GRID, AXIS_100, ACCENT, QUADRANTS,
   clamp, ticksFor, Marker, placeLabels,
 } from './rrgShared';
 
 const M = { left: 40, right: 40, top: 18, bottom: 36 };
-const ZF = TIME_DEPTH / 2; // front (newest) plane
-const ZB = -TIME_DEPTH / 2; // back (oldest) plane
+const ZF = TIME_DEPTH / 2; // front plane (newest bar, or highest trend)
+const ZB = -TIME_DEPTH / 2; // back plane
 
 // 3D rotation graph (beta): the 2D RRG with time as depth. Each tail runs
 // from its oldest bar at the back to the current bar at the front, so paths
@@ -17,12 +17,16 @@ const ZB = -TIME_DEPTH / 2; // back (oldest) plane
 // Drag to rotate (mouse: both ways; touch: sideways, so the page still
 // scrolls); the view buttons jump to fixed angles, including straight-on
 // (= the 2D chart) and the two side-on views that read as RS-Momentum and
-// RS-Ratio over time.
+// RS-Ratio over time. Depth can instead be the absolute trend (price vs
+// its own average): tails then move forward/back as a coin rises/falls in
+// its own terms, and a shaded plane marks 0% (at its average).
 //
-// series: [{ sym, color, shape, label, points: [{ x, y, idx }], dim, headR, hollow, pinned, flag }]
-// ranges: { x0, x1, y0, y1 } on the RRG axes; iOld/iNew: the tail's bar indices.
+// series: [{ sym, color, shape, label, points: [{ x, y, z, idx }], dim, headR, hollow, pinned, flag }]
+//   (z is the depth value: the bar index for time, the trend % for trend)
+// ranges: { x0, x1, y0, y1 } on the RRG axes.
+// depth: { name, z0, z1, ticks: [{ v, label }], zeroPlane, caption, sideTitle, topTitle }
 export default function RrgPlot3D({
-  W, series, ranges, iOld, iNew, days, unit, focus, onHoverSym, onPin, tooltip, ariaLabel,
+  W, series, ranges, depth, focus, onHoverSym, onPin, tooltip, ariaLabel,
 }) {
   const H = W;
   const [angles, setAngles] = useState({ yaw: VIEWS_3D[0].yaw, pitch: VIEWS_3D[0].pitch });
@@ -50,11 +54,11 @@ export default function RrgPlot3D({
 
   const area = { x0: M.left, y0: M.top, x1: W - M.right, y1: H - M.bottom };
   const project = fitCamera(angles.yaw, angles.pitch, area);
-  const r = { ...ranges, iOld, iNew };
-  const P = (x, y, i) => project(toWorld(x, y, i, r));
+  const r = { ...ranges, z0: depth.z0, z1: depth.z1 };
+  const P = (x, y, z) => project(toWorld(x, y, z, r));
   const PW = (X, Y, Z) => project([X, Y, Z]);
-  const zOf = (i) => toWorld(0, 0, i, r)[2];
-  const [X100, Y100] = toWorld(100, 100, iNew, r).map((v) => clamp(v, -1, 1));
+  const zOf = (v) => toWorld(0, 0, v, r)[2];
+  const [X100, Y100] = toWorld(100, 100, depth.z1, r).map((v) => clamp(v, -1, 1));
   const line = (a, b) => ({ x1: a.x, y1: a.y, x2: b.x, y2: b.y });
 
   // ---- series geometry, painted back to front
@@ -62,7 +66,7 @@ export default function RrgPlot3D({
   const items = [];
   const heads = [];
   for (const s of series) {
-    const pts = s.points.map((p) => ({ ...p, ...P(p.x, p.y, p.idx) }));
+    const pts = s.points.map((p) => ({ ...p, ...P(p.x, p.y, p.z) }));
     const n = pts.length;
     if (!n) continue;
     const op = s.dim ? 0.14 : 1;
@@ -89,7 +93,7 @@ export default function RrgPlot3D({
     // A faint stem from the head down to the floor locates it in depth when
     // looking down at an angle (straight on or side-on it adds nothing).
     if (showStems) {
-      const hw = toWorld(s.points[n - 1].x, s.points[n - 1].y, s.points[n - 1].idx, r);
+      const hw = toWorld(s.points[n - 1].x, s.points[n - 1].y, s.points[n - 1].z, r);
       const floor = project([hw[0], -1, hw[2]]);
       items.push({ depth: h.depth - 1e-3, el: <line key={`${s.sym}-stem`} {...line(h, floor)} stroke={s.color} strokeWidth={1} strokeDasharray="2 3" opacity={op * 0.45} /> });
     }
@@ -121,12 +125,13 @@ export default function RrgPlot3D({
     { x0: area.x0 + 2, y0: area.y0 + 2, x1: area.x1 - 2, y1: area.y1 - 2 },
   );
 
-  // ---- box, quadrant columns and time slices
+  // ---- box, quadrant columns and depth slices
   const box = [];
   for (const Y of [-1, 1]) for (const Z of [ZB, ZF]) box.push(line(PW(-1, Y, Z), PW(1, Y, Z)));
   for (const X of [-1, 1]) for (const Z of [ZB, ZF]) box.push(line(PW(X, -1, Z), PW(X, 1, Z)));
   for (const X of [-1, 1]) for (const Y of [-1, 1]) box.push(line(PW(X, Y, ZB), PW(X, Y, ZF)));
-  const ticks = timeTicks(iOld, iNew, 4);
+  const ticks = depth.ticks;
+  const zeroZ = depth.zeroPlane && depth.z0 < 0 && depth.z1 > 0 ? zOf(0) : null;
   const slice = (Z) => [PW(-1, -1, Z), PW(1, -1, Z), PW(1, 1, Z), PW(-1, 1, Z)];
   const poly = (pts) => pts.map((p) => `${p.x},${p.y}`).join(' ');
   const washes = [
@@ -173,10 +178,9 @@ export default function RrgPlot3D({
     (a, b) => ticksFor(ranges.y0, ranges.y1).map((t) => ({ w: lerp(a, b, (t.v - ranges.y0) / (ranges.y1 - ranges.y0)), label: t.label })),
     (c) => -mid(c).x + mid(c).y * 0.01,
   );
-  const shortDay = (l) => (l ? l.slice(5) : '');
   const tTickLabels = edgeLabels(
     [[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([X, Y]) => [[X, Y, ZB], [X, Y, ZF]]),
-    (a, b) => ticks.map((i) => ({ w: lerp(a, b, (zOf(i) - ZB) / (ZF - ZB)), label: shortDay(days[i]) })),
+    (a, b) => ticks.map((t) => ({ w: lerp(a, b, (zOf(t.v) - ZB) / (ZF - ZB)), label: t.label })),
     (c) => mid(c).y + mid(c).x * 0.01,
   );
 
@@ -277,11 +281,13 @@ export default function RrgPlot3D({
           {washes.map((w) => (
             <polygon key={w.q} points={poly([PW(w.X[0], w.Y[0], ZB), PW(w.X[1], w.Y[0], ZB), PW(w.X[1], w.Y[1], ZB), PW(w.X[0], w.Y[1], ZB)])} fill={QUADRANTS[w.q].color} opacity={0.09} />
           ))}
-          {/* time slices: the RRG plane at each labelled bar */}
-          {ticks.map((i) => <polygon key={`sl${i}`} points={poly(slice(zOf(i)))} fill="none" stroke={GRID} strokeWidth={1} />)}
+          {/* depth slices: the RRG plane at each labelled bar (or trend level) */}
+          {ticks.map((t) => <polygon key={`sl${t.v}`} points={poly(slice(zOf(t.v)))} fill="none" stroke={GRID} strokeWidth={1} />)}
+          {/* trend axis: the 0% plane (price at its own average) */}
+          {zeroZ != null && <polygon points={poly(slice(zeroZ))} fill={AXIS_100} fillOpacity={0.12} stroke={AXIS_100} strokeWidth={1} />}
           {box.map((l, k) => <line key={`b${k}`} {...l} stroke={GRID} strokeWidth={1} />)}
           {/* quadrant boundaries: the 100 lines on the back and front planes,
-              where they meet the box's faces, and the 100/100 spine through time */}
+              where they meet the box's faces, and the 100/100 spine through depth */}
           {[ZB, ZF].map((Z) => (
             <g key={`c${Z}`}>
               <line {...line(PW(X100, -1, Z), PW(X100, 1, Z))} stroke={AXIS_100} strokeWidth={1} />
@@ -297,7 +303,7 @@ export default function RrgPlot3D({
             { q: 'lagging', X: -1, Y: -1, ok: X100 > -0.5 && Y100 > -0.8 },
             { q: 'improving', X: -1, Y: 1, ok: X100 > -0.5 && Y100 < 0.8 },
           ].filter((c) => c.ok).map((c) => {
-            // Each quadrant is a column through time, so its name can sit at
+            // Each quadrant is a column through depth, so its name can sit at
             // either end: use whichever corner is on the box's outline, away
             // from the tails in the middle.
             const [p] = [PW(c.X, c.Y, ZB), PW(c.X, c.Y, ZF)]
@@ -355,14 +361,13 @@ export default function RrgPlot3D({
 
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 8 }}>
         <span style={{ fontSize: 12, color: TEXT_SECONDARY, marginRight: 2 }}>View</span>
-        {VIEWS_3D.map((v) => (
-          <button key={v.key} onClick={() => goTo(v)} title={v.title} style={btn(viewKey === v.key)}>{v.label}</button>
-        ))}
+        {VIEWS_3D.map((v) => {
+          const label = v.label.replace('time', depth.name);
+          const title = v.key === 'momentum' ? depth.sideTitle : v.key === 'ratio' ? depth.topTitle : v.title;
+          return <button key={v.key} onClick={() => goTo(v)} title={title} style={btn(viewKey === v.key)}>{label}</button>;
+        })}
       </div>
-      <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '6px 0 0', lineHeight: 1.5 }}>
-        Across: RS-Ratio · up: RS-Momentum · depth: time, from {unit.fmt(days[iOld])} at the back to {unit.fmt(days[iNew])} at the front.
-        The dashed line is the 100/100 benchmark line through time. Drag to rotate; lengthen Tail to see more history.
-      </p>
+      <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '6px 0 0', lineHeight: 1.5 }}>{depth.caption}</p>
     </div>
   );
 }
