@@ -129,4 +129,58 @@ export const COINGECKO_IDS = {
   BIGTIME: 'big-time',
   XAI: 'xai-blockchain',
   PIXEL: 'pixels',
+
+  // Added in the 2026-10-02 Bitunix refresh (app/lib/sectors.js). Each id was
+  // confirmed by matching CoinGecko's price to Bitunix's for that ticker.
+  // Layer 1s
+  KAS: 'kaspa',
+  INJ: 'injective-protocol',
+  SEI: 'sei-network',
+  MON: 'monad',
+  // Layer 2s
+  MNT: 'mantle',
+  POL: 'polygon-ecosystem-token', // ex-MATIC
+  STX: 'blockstack', // Stacks
+  OP: 'optimism',
+  STRK: 'starknet',
+  ZK: 'zksync',
+  LINEA: 'linea',
+  METIS: 'metis-token',
+  // AI & DePIN
+  TAO: 'bittensor',
+  WLD: 'worldcoin-wld',
+  FIL: 'filecoin',
+  FET: 'fetch-ai', // Artificial Superintelligence Alliance
+  VIRTUAL: 'virtual-protocol',
+  GRASS: 'grass',
+  AR: 'arweave',
+  THETA: 'theta-token',
+  KAITO: 'kaito',
+  IO: 'io', // io.net
+  AIXBT: 'aixbt',
+  // Oracles & Middleware
+  GRT: 'the-graph',
+  // Privacy (CoinGecko: Privacy Blockchain / Privacy Infrastructure)
+  NIGHT: 'midnight-3', // Midnight (Cardano privacy chain) — not "midnight"
+  ZAMA: 'zama',
+  AZTEC: 'aztec',
+  // DeFi
+  ENA: 'ethena',
+  ASTER: 'aster-2',
+  MORPHO: 'morpho',
+  JUP: 'jupiter-exchange-solana',
+  AERO: 'aerodrome-finance',
+  ETHFI: 'ether-fi',
+  RAY: 'raydium',
+  // Payments & Legacy
+  ETC: 'ethereum-classic',
+  XPL: 'plasma', // stablecoin-payments chain
+  CELO: 'celo',
+  // Meme & Culture
+  TRUMP: 'official-trump',
+  PENGU: 'pudgy-penguins',
+  SPX: 'spx6900',
+  USELESS: 'useless-3',
+  FARTCOIN: 'fartcoin',
+  PEOPLE: 'constitutiondao',
 };
