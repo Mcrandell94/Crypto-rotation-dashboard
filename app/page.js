@@ -49,11 +49,10 @@ const RRG_INTERVALS = [
   { key: '1w', label: '1W', title: 'Weekly bars, last ~year' },
 ];
 const RRG_INTERVAL_KEY = 'rrgInterval.v1';
-// The 4H / 1W toggle stays hidden (daily only) until those bar sizes have
-// their own tuned presets — see RRG_PRESETS_BY_INTERVAL in
-// app/lib/rrgMath.js. The /api/rrg `interval` param works either way; flip
-// this to true to show the toggle.
-const RRG_TIMEFRAMES_LIVE = false;
+// Shows the 4H / 1D / 1W toggle. Each bar size has its own tuned presets
+// (RRG_PRESETS_BY_INTERVAL in app/lib/rrgMath.js). Set to false to hide it
+// and force daily; the /api/rrg `interval` param works either way.
+const RRG_TIMEFRAMES_LIVE = true;
 
 const TABS = [
   { key: 'rotation', label: 'Rotation' },
