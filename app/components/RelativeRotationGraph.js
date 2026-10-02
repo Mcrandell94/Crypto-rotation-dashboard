@@ -11,6 +11,10 @@ import {
 } from './rrgShared';
 import RrgPlot3D from './RrgPlot3D';
 import { timeTicks, depthRange } from '../lib/rrg3d';
+import {
+  PATTERNS, HORIZON, PROJECT_STEPS, patternAt, rotationOf, projectPath, trackRecord,
+} from '../lib/rrgPatterns';
+import Collapsible from './Collapsible';
 
 // Laid out like the chart itself: top row Improving | Leading, bottom row
 // Lagging | Weakening. Rotation is normally clockwise through them.
@@ -116,7 +120,7 @@ export default function RelativeRotationGraph({
 
   // Optional overlays (all off by default, remembered per browser). None
   // move a ticker's position — see app/lib/rrgOverlays.js.
-  const [overlays, setOverlays] = useState({ volume: false, trend: false, funding: false, capWeighted: false, trendAxis: false });
+  const [overlays, setOverlays] = useState({ volume: false, trend: false, funding: false, capWeighted: false, trendAxis: false, projection: false });
   const setOverlay = (key, value) => setOverlays((o) => ({ ...o, [key]: value }));
   useEffect(() => {
     try {
@@ -261,6 +265,13 @@ export default function RelativeRotationGraph({
         x0 = Math.min(x0, s[i].x); x1 = Math.max(x1, s[i].x);
         y0 = Math.min(y0, s[i].y); y1 = Math.max(y1, s[i].y);
       }
+      // keep projected paths in frame too
+      if (overlays.projection && s[end - 1] && s[end]) {
+        for (const p of projectPath([s[end - 1], s[end]])) {
+          x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x);
+          y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y);
+        }
+      }
     }
     // Half-spans: 10% padding each side, with a floor so a quiet market
     // isn't blown up into noise.
@@ -269,7 +280,7 @@ export default function RelativeRotationGraph({
     const ry = Math.max(((y1 - y0) / 2) * 1.2, minHalf);
     return { cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, rx, ry };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seriesByTicker, hidden, tailStart, end, zscore, playing, warm]);
+  }, [seriesByTicker, hidden, tailStart, end, zscore, playing, warm, overlays.projection]);
   const [manualView, setManualView] = useState(null);
   useEffect(() => setManualView(null), [symbolsKey, benchmark, zscore, overlays.capWeighted, interval]);
   const view = manualView || autoFit;
@@ -432,6 +443,12 @@ export default function RelativeRotationGraph({
   // 3D only: depth = each bar's price vs its own TREND_WINDOW-bar average
   // instead of time.
   const trendAxisOn = view3d && overlays.trendAxis;
+  const projectionOn = overlays.projection;
+  // Projected next PROJECT_STEPS bars from the selected bar (see app/lib/rrgPatterns.js).
+  const projectionOf = (sym) => {
+    const s = seriesByTicker[sym];
+    return s && end >= 1 && s[end - 1] && s[end] ? projectPath([s[end - 1], s[end]]) : [];
+  };
   const fundingOn = overlays.funding && !!funding;
   const headRadius = (sym) => {
     const base = pinned === sym ? 6.5 : 5.5;
@@ -511,6 +528,8 @@ export default function RelativeRotationGraph({
     hollow: trendOn && summary[sym]?.trend?.above === false,
     pinned: pinned === sym,
     flag: fundingOn ? summary[sym]?.fundingFlag : null,
+    // Projection runs on past the newest bar, so only on the time axis.
+    projection: projectionOn && !trendAxisOn ? projectionOf(sym).map((p, k) => ({ ...p, z: end + k + 1 })) : [],
   }));
   const depth3d = (() => {
     if (!view3d) return null;
@@ -518,12 +537,12 @@ export default function RelativeRotationGraph({
       return {
         name: 'time',
         z0: tailStart,
-        z1: end,
+        z1: projectionOn ? end + PROJECT_STEPS : end,
         ticks: timeTicks(tailStart, end, 4).map((i) => ({ v: i, label: days[i] ? days[i].slice(5) : '' })),
         zeroPlane: false,
         sideTitle: 'From the side: RS-Momentum over time, oldest left, newest right',
         topTitle: 'From above: RS-Ratio over time, oldest left, newest right',
-        caption: `Across: RS-Ratio · up: RS-Momentum · depth: time, from ${unit.fmt(days[tailStart])} at the back to ${unit.fmt(days[end])} at the front. The dashed line is the 100/100 benchmark line through time. Drag to rotate; lengthen Tail to see more history.`,
+        caption: `Across: RS-Ratio · up: RS-Momentum · depth: time, from ${unit.fmt(days[tailStart])} at the back to ${unit.fmt(days[end])}${projectionOn ? ` and the projected next ${PROJECT_STEPS} ${unit.many} (dashed)` : ''} at the front. The dashed grey line is the 100/100 benchmark line through time. Drag to rotate; lengthen Tail to see more history.`,
       };
     }
     const { z0, z1 } = depthRange(series3d.flatMap((s) => s.points.map((p) => p.z)), 0, 1);
@@ -732,6 +751,22 @@ export default function RelativeRotationGraph({
                   })}
                   <line x1={M.left} y1={cy0} x2={M.left + PW} y2={cy0} stroke={AXIS_100} strokeWidth={1} />
                   <line x1={cx0} y1={M.top} x2={cx0} y2={M.top + PH} stroke={AXIS_100} strokeWidth={1} />
+
+                  {/* projected path: dashed, from the head */}
+                  {projectionOn && drawOrder.map((sym) => {
+                    const s = seriesByTicker[sym];
+                    const proj = projectionOf(sym);
+                    if (!proj.length) return null;
+                    const pts = [s[end], ...proj].map((p) => toPx(p.x, p.y));
+                    const [ex, ey] = pts[pts.length - 1];
+                    const { color } = styleOf(sym);
+                    return (
+                      <g key={`proj-${sym}`} opacity={focus && focus !== sym ? 0.12 : 0.8} pointerEvents="none">
+                        <polyline points={pts.map((p) => p.join(',')).join(' ')} fill="none" stroke={color} strokeWidth={1.5} strokeDasharray="3 3" />
+                        <circle cx={ex} cy={ey} r={3} fill={PLOT_BG} stroke={color} strokeWidth={1.5} />
+                      </g>
+                    );
+                  })}
 
                   {/* series: faint old tail -> bold current head */}
                   {drawOrder.map((sym) => {
@@ -977,6 +1012,12 @@ export default function RelativeRotationGraph({
                   onChange={(v) => setOverlay('trend', v)}
                   title={`Hollow head dot = below its own ${TREND_WINDOW}-${unit.adj} average (falling in absolute terms)`}
                 />
+                <OverlayToggle
+                  label="Projected path"
+                  checked={overlays.projection}
+                  onChange={(v) => setOverlay('projection', v)}
+                  title={`Dashed: where each tail heads over the next ${PROJECT_STEPS} ${unit.many} if its last move carries on, fading. A chart projection, not a price forecast — see Tail patterns below the chart.`}
+                />
                 {RRG_3D_BETA && (
                   <>
                     <OverlayToggle
@@ -1178,7 +1219,141 @@ export default function RelativeRotationGraph({
         approximation of the JdK RRG method, not the exact proprietary formula; the first {warm} {unit.many} of
         history are warm-up for the rolling windows and aren&apos;t plotted.
       </p>
+
+      {!notEnoughHistory && (
+        <Collapsible
+          title="Tail patterns & projected path"
+          badge="beta"
+          storageKey="rrgPatternsOpen.v1"
+          style={{ marginTop: 20 }}
+          subtitle={(() => {
+            const counts = {};
+            for (const sym of activeSymbols) {
+              const k = seriesByTicker[sym] && patternAt(seriesByTicker[sym], end);
+              if (k) counts[k] = (counts[k] || 0) + 1;
+            }
+            const parts = Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${PATTERNS[k].name} ×${n}`);
+            return `Classic RRG tail reads, each with its track record in this view, and where each tail is heading. ${unit.asOf(days[end])}: ${parts.join(' · ') || '—'}`;
+          })()}
+        >
+          <PatternPanel
+            seriesByTicker={seriesByTicker}
+            symbols={activeSymbols}
+            end={end}
+            warm={warm}
+            summary={summary}
+            unit={unit}
+            plural={plural}
+            labelFor={labelFor}
+            styleOf={styleOf}
+            pinned={pinned}
+            onPin={togglePin}
+            projectionOf={projectionOf}
+            projectionOn={projectionOn}
+            onShowProjection={() => setOverlay('projection', true)}
+          />
+        </Collapsible>
+      )}
     </section>
+  );
+}
+
+// Tail pattern read for each ticker at the selected bar, with each
+// pattern's track record and the projection's hit rate measured on the
+// history on screen up to that bar (no look-ahead when scrubbing back).
+// Rendered only while its dropdown is open.
+const MIN_CASES = 8;
+function PatternPanel({
+  seriesByTicker, symbols, end, warm, summary, unit, plural, labelFor, styleOf, pinned, onPin, projectionOf, projectionOn, onShowProjection,
+}) {
+  const record = trackRecord(symbols.map((sym) => (seriesByTicker[sym] || []).slice(0, end + 1)), warm);
+  const pr = record.projection;
+  const pct = (a, b) => Math.round((100 * a) / b);
+  const rows = symbols
+    .map((sym) => {
+      const s = seriesByTicker[sym];
+      const key = s && summary[sym] && patternAt(s, end);
+      if (!key) return null;
+      const proj = projectionOf(sym);
+      const pe = proj[proj.length - 1];
+      const st = summary[sym].streak;
+      return {
+        sym, key, q: summary[sym].q, x: summary[sym].last.x, streak: st,
+        projQ: pe ? quadrantOf(pe.x, pe.y) : null,
+        rotation: st.from && st.days <= RECENT_DAYS ? rotationOf(st.from, summary[sym].q) : null,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => QUADRANT_SORT[a.q] - QUADRANT_SORT[b.q] || b.x - a.x);
+
+  const outcome = (pat) => (pat.expect.to
+    ? `reached ${QUADRANTS[pat.expect.to].name} within ${HORIZON} ${unit.many}`
+    : `was still ${QUADRANTS[pat.expect.stay].name} ${HORIZON} ${unit.many} later`);
+
+  return (
+    <div style={{ marginTop: 12 }}>
+      <p style={{ fontSize: 11, color: TEXT_SECONDARY, margin: '0 0 10px', lineHeight: 1.55 }}>
+        {pr.n >= 20
+          ? <>Projection check on this view&apos;s history: the {PROJECT_STEPS}-{unit.adj} projection named the right quadrant in <span style={{ color: TEXT_PRIMARY }}>{pct(pr.hits, pr.n)}%</span> of {pr.n} past cases, vs {pct(pr.stayHits, pr.n)}% for assuming the tail stays put.</>
+          : `Too little history in this view to check the projection yet (${pr.n} cases).`}
+        {!projectionOn && (
+          <>
+            {' '}
+            <button onClick={onShowProjection} style={{ background: 'none', border: 'none', padding: 0, color: ACCENT, fontSize: 11, cursor: 'pointer', textDecoration: 'underline' }}>
+              Show projected paths on the chart
+            </button>
+          </>
+        )}
+      </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {rows.map((r) => {
+          const pat = PATTERNS[r.key];
+          const rec = record.patterns[r.key];
+          const { color, shape } = styleOf(r.sym);
+          return (
+            <div
+              key={r.sym}
+              role="button"
+              tabIndex={0}
+              onClick={() => onPin(r.sym)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPin(r.sym); } }}
+              style={{
+                background: CARD_BG, border: `1px solid ${pinned === r.sym ? ACCENT : CARD_BORDER}`, borderRadius: 6,
+                padding: '8px 10px', cursor: 'pointer',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <Swatch shape={shape} color={color} />
+                <span style={{ fontSize: 12, fontWeight: 600, color: TEXT_PRIMARY, fontFamily: 'ui-monospace,monospace' }}>{labelFor(r.sym)}</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: QUADRANTS[r.q].color }}>{pat.name}</span>
+                {r.projQ && (
+                  <span style={{ fontSize: 11, color: TEXT_MUTED, marginLeft: 'auto' }}>
+                    next {PROJECT_STEPS} {unit.many}: <span style={{ color: QUADRANTS[r.projQ].color }}>{r.projQ === r.q ? `stays ${QUADRANTS[r.q].name}` : `→ ${QUADRANTS[r.projQ].name}`}</span>
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: 11, color: TEXT_SECONDARY, marginTop: 4, lineHeight: 1.5 }}>{pat.read}</div>
+              <div style={{ fontSize: 10.5, color: TEXT_MUTED, marginTop: 3, lineHeight: 1.5 }}>
+                {rec.n >= MIN_CASES
+                  ? `In this view: ${rec.hits} of ${rec.n} times (${pct(rec.hits, rec.n)}%) this ${outcome(pat)}${rec.baseN ? ` — vs ${pct(rec.baseHits, rec.baseN)}% for any ${QUADRANTS[pat.quadrant].name} tail` : ''}.`
+                  : `Only ${rec.n} past case${rec.n === 1 ? '' : 's'} in this view — too few to judge.`}
+                {r.projQ && r.projQ !== r.q && r.projQ !== (pat.expect.to || pat.expect.stay)
+                  && ` The latest ${unit.adj} moved the other way, so the projection disagrees — a possible turn.`}
+                {r.rotation && ` Entered ${QUADRANTS[r.q].name} from ${QUADRANTS[r.streak.from].name} ${r.streak.days} ${plural(r.streak.days)} ago${
+                  r.rotation === 'clockwise' ? ' (the usual clockwise direction).' : r.rotation === 'counter-clockwise' ? ' — counter-clockwise, against the usual rotation.' : ' — a diagonal jump.'}`}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <p style={{ fontSize: 10.5, color: TEXT_MUTED, marginTop: 10, lineHeight: 1.6 }}>
+        Patterns read the quadrant plus which way RS-Momentum moved over the last 3 {unit.many}. The projection carries the last move
+        forward, fading each {unit.adj}. Both describe where a tail tends to move on the chart, not where price goes next: RS-Momentum is
+        the rate of change of RS-Ratio, so part of each read is mechanical, and in testing on ~70–80 coins vs BTC, sitting on the right of
+        the chart didn&apos;t predict the next few bars&apos; relative return on daily or 4-hour data (only modestly on weekly). Track records
+        come from this sector&apos;s loaded history only and overlap heavily — treat them loosely. Tap a row to focus that ticker.
+      </p>
+    </div>
   );
 }
 

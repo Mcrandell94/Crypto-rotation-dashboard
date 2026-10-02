@@ -21,7 +21,7 @@ const ZB = -TIME_DEPTH / 2; // back plane
 // its own average): tails then move forward/back as a coin rises/falls in
 // its own terms, and a shaded plane marks 0% (at its average).
 //
-// series: [{ sym, color, shape, label, points: [{ x, y, z, idx }], dim, headR, hollow, pinned, flag }]
+// series: [{ sym, color, shape, label, points: [{ x, y, z, idx }], dim, headR, hollow, pinned, flag, projection: [{ x, y, z }] }]
 //   (z is the depth value: the bar index for time, the trend % for trend)
 // ranges: { x0, x1, y0, y1 } on the RRG axes.
 // depth: { name, z0, z1, ticks: [{ v, label }], zeroPlane, caption, sideTitle, topTitle }
@@ -106,6 +106,18 @@ export default function RrgPlot3D({
         />
       ),
     });
+    // Projected path (dashed), running on past the newest bar.
+    if (s.projection?.length) {
+      const pp = [h, ...s.projection.map((p) => P(p.x, p.y, p.z))];
+      for (let i = 1; i < pp.length; i++) {
+        items.push({
+          depth: (pp[i - 1].depth + pp[i].depth) / 2,
+          el: <line key={`${s.sym}-p${i}`} {...line(pp[i - 1], pp[i])} stroke={s.color} strokeWidth={1.5} strokeDasharray="3 3" opacity={op * 0.8} />,
+        });
+      }
+      const e = pp[pp.length - 1];
+      items.push({ depth: e.depth, el: <circle key={`${s.sym}-pe`} cx={e.x} cy={e.y} r={3} fill={PLOT_BG} stroke={s.color} strokeWidth={1.5} opacity={op * 0.8} /> });
+    }
     // Funding overlay flags, as on the 2D chart: ▲ crowded longs, ▼ shorts paying.
     if (s.flag) {
       const fx = h.x + s.headR + 1;
