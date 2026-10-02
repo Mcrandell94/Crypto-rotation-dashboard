@@ -5,23 +5,12 @@ import {
   computeSeries, firstValidIndex, quadrantOf, countFlips, quadrantStreak, heading, presetsFor, defaultSettingsFor,
 } from '../lib/rrgMath';
 import { relativeVolume, absoluteTrend, fundingFlag, FUNDING_HOT } from '../lib/rrgOverlays';
+import {
+  TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, CARD_BG, CARD_BORDER, PLOT_BG, GRID, AXIS_100, ACCENT, QUADRANTS,
+  clamp, ticksFor, Marker, placeLabels,
+} from './rrgShared';
+import RrgPlot3D from './RrgPlot3D';
 
-const TEXT_PRIMARY = '#E7E4DD';
-const TEXT_SECONDARY = '#8B9298';
-const TEXT_MUTED = '#6E767B';
-const CARD_BG = '#171D21';
-const CARD_BORDER = '#2A3136';
-const PLOT_BG = '#141A1D';
-const GRID = '#222A2F'; // hairline, one step off the plot surface
-const AXIS_100 = '#46525A'; // the benchmark lines — the only emphasized rules
-const ACCENT = '#C9A66B';
-
-const QUADRANTS = {
-  leading: { name: 'Leading', color: '#7FA37F' },
-  weakening: { name: 'Weakening', color: '#C9A66B' },
-  lagging: { name: 'Lagging', color: '#A85D4F' },
-  improving: { name: 'Improving', color: '#5E8FA8' },
-};
 // Laid out like the chart itself: top row Improving | Leading, bottom row
 // Lagging | Weakening. Rotation is normally clockwise through them.
 const QUADRANT_GRID = ['improving', 'leading', 'lagging', 'weakening'];
@@ -49,6 +38,10 @@ function seriesStyleFor(index) {
 const SETTINGS_KEY = 'rrgSettings.v3';
 const LEGACY_SETTINGS_KEY = 'rrgSettings.v2';
 const OVERLAYS_KEY = 'rrgOverlays.v1';
+// 3D view (time as depth) is a beta: set to false to hide its toggle; the
+// code stays in place. The viewer's on/off choice is remembered per browser.
+const RRG_3D_BETA = true;
+const VIEW_3D_KEY = 'rrgView3d.v1';
 const TREND_WINDOW = 20; // absolute-trend overlay: price vs its own 20-bar average
 
 // Wording for the bar size the data came in (/api/rrg's `interval`). All
@@ -63,45 +56,11 @@ const presetMatching = (st, presets) => presets.find((p) => Object.entries(p.set
 const RECENT_DAYS = 3; // "recent quadrant change" window for the summary
 const RECENT_MAX = 6; // how many recent changes to list before "+N more"
 
-function clamp(v, lo, hi) {
-  return Math.min(hi, Math.max(lo, v));
-}
-
-// Axis ticks on a 1/2/5 step ladder (~4-6 per axis), labelled with just
-// enough decimals for the step.
-function ticksFor(lo, hi) {
-  const raw = (hi - lo) / 5;
-  const pow = 10 ** Math.floor(Math.log10(raw));
-  const f = raw / pow;
-  const step = (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * pow;
-  const decimals = Math.max(0, Math.min(3, -Math.floor(Math.log10(step) + 1e-9)));
-  const out = [];
-  const first = Math.ceil(lo / step - 1e-9);
-  for (let k = first; k * step <= hi + 1e-9; k++) {
-    const v = Math.round(k * step * 1e9) / 1e9;
-    out.push({ v, label: v.toFixed(decimals) });
-  }
-  return out;
-}
-
 // Hover handlers that only fire for a real mouse. On touch, a tap would
 // otherwise leave a hover "stuck" on; taps go through onClick instead.
 const mouseOnly = (fn) => (e) => {
   if (e.pointerType === 'mouse') fn(e);
 };
-
-// `hollow` draws the marker as an outline (used by the trend overlay).
-function Marker({ shape, x, y, r, color, ring, ringWidth = 1.5, opacity = 1, hollow = false }) {
-  const fill = hollow ? PLOT_BG : color;
-  const stroke = hollow ? color : ring;
-  const sw = hollow ? 2.2 : ringWidth;
-  if (shape === 'diamond') {
-    const rr = r * 1.15;
-    const d = `M ${x} ${y - rr} L ${x + rr} ${y} L ${x} ${y + rr} L ${x - rr} ${y} Z`;
-    return <path d={d} fill={fill} stroke={stroke} strokeWidth={sw} opacity={opacity} />;
-  }
-  return <circle cx={x} cy={y} r={r} fill={fill} stroke={stroke} strokeWidth={sw} opacity={opacity} />;
-}
 
 function Swatch({ shape, color, size = 10 }) {
   return (
@@ -113,79 +72,6 @@ function Swatch({ shape, color, size = 10 }) {
       )}
     </svg>
   );
-}
-
-// Greedy label placement: try positions around each series' head and take
-// the first that stays inside the plot and clear of other labels and heads.
-// Labels that don't fit next to their head get a second pass further out,
-// joined back to the head by a thin leader line. A label with nowhere to go
-// is still dropped — the legend, tooltip and table carry that series —
-// rather than stacked on top of another one.
-function placeLabels(items, bounds) {
-  const obstacles = items.map((it) => {
-    const r = (it.r || 5.5) + 2;
-    return { x0: it.x - r, y0: it.y - r, x1: it.x + r, y1: it.y + r, owner: it.sym, head: true };
-  });
-  const overlaps = (a, b) => !(a.x1 <= b.x0 || a.x0 >= b.x1 || a.y1 <= b.y0 || a.y0 >= b.y1);
-  const h = 13;
-  const width = (it) => it.text.length * 6.7 + 2;
-  const near = (it) => {
-    const w = width(it);
-    const { x, y } = it;
-    const extra = Math.max(0, (it.r || 5.5) - 5.5);
-    const g = extra > 0 ? extra + 3 : 0; // push labels out past bigger heads
-    return [
-      { x0: x + 8 + g, y0: y - h / 2, anchor: 'start', tx: x + 9 + g, ty: y + 4 },
-      { x0: x - 8 - g - w, y0: y - h / 2, anchor: 'end', tx: x - 9 - g, ty: y + 4 },
-      { x0: x - w / 2, y0: y - 9 - h, anchor: 'middle', tx: x, ty: y - 12 },
-      { x0: x - w / 2, y0: y + 9, anchor: 'middle', tx: x, ty: y + 19 },
-      { x0: x + 6, y0: y - 6 - h, anchor: 'start', tx: x + 7, ty: y - 9 },
-      { x0: x + 6, y0: y + 6, anchor: 'start', tx: x + 7, ty: y + 16 },
-      { x0: x - 6 - w, y0: y - 6 - h, anchor: 'end', tx: x - 7, ty: y - 9 },
-      { x0: x - 6 - w, y0: y + 6, anchor: 'end', tx: x - 7, ty: y + 16 },
-    ];
-  };
-  // Further out, in 8 directions at two distances. The label's near edge
-  // sits `d` px from the head; the leader runs from the head's rim to it.
-  const far = (it) => {
-    const w = width(it);
-    const { x, y } = it;
-    const r = it.r || 5.5;
-    const out = [];
-    for (const d of [22, 36]) {
-      for (const [dx, dy] of [[1, 0], [-1, 0], [0, -1], [0, 1], [1, -1], [1, 1], [-1, -1], [-1, 1]]) {
-        const k = dx && dy ? Math.SQRT1_2 : 1;
-        const ax = x + dx * d * k; // point on the label nearest the head
-        const ay = y + dy * d * k;
-        const x0 = dx > 0 ? ax : dx < 0 ? ax - w : ax - w / 2;
-        const y0 = dy > 0 ? ay : dy < 0 ? ay - h : ay - h / 2;
-        const anchor = dx > 0 ? 'start' : dx < 0 ? 'end' : 'middle';
-        const tx = dx > 0 ? x0 + 1 : dx < 0 ? x0 + w - 1 : x0 + w / 2;
-        out.push({
-          x0, y0, anchor, tx, ty: y0 + h - 3,
-          leader: { x1: x + dx * (r + 1) * k, y1: y + dy * (r + 1) * k, x2: ax - dx * 1, y2: ay - dy * 1 },
-        });
-      }
-    }
-    return out;
-  };
-  const out = {};
-  const tryPlace = (it, candidates) => {
-    const w = width(it);
-    for (const c of candidates) {
-      const r = { x0: c.x0, y0: c.y0, x1: c.x0 + w, y1: c.y0 + h };
-      const inside = r.x0 >= bounds.x0 && r.x1 <= bounds.x1 && r.y0 >= bounds.y0 && r.y1 <= bounds.y1;
-      const blocked = obstacles.some((o) => !(o.head && o.owner === it.sym) && overlaps(r, o));
-      if (inside && !blocked) {
-        obstacles.push({ ...r, owner: it.sym, head: false });
-        out[it.sym] = c;
-        return;
-      }
-    }
-  };
-  for (const it of items) tryPlace(it, near(it));
-  for (const it of items) if (!out[it.sym]) tryPlace(it, far(it));
-  return out;
 }
 
 const defaultAssetFormat = (v) => `$${v?.toLocaleString(undefined, { maximumFractionDigits: v < 1 ? 4 : 2 })}`;
@@ -242,6 +128,20 @@ export default function RelativeRotationGraph({
       window.localStorage.setItem(OVERLAYS_KEY, JSON.stringify(overlays));
     } catch {}
   }, [overlays]);
+
+  const [view3dPref, setView3dPref] = useState(false);
+  useEffect(() => {
+    try {
+      setView3dPref(window.localStorage.getItem(VIEW_3D_KEY) === '1');
+    } catch {}
+  }, []);
+  const setView3d = (on) => {
+    setView3dPref(on);
+    try {
+      window.localStorage.setItem(VIEW_3D_KEY, on ? '1' : '0');
+    } catch {}
+  };
+  const view3d = RRG_3D_BETA && view3dPref;
 
   const [hidden, setHidden] = useState(new Set());
   const [pinned, setPinned] = useState(null);
@@ -563,6 +463,29 @@ export default function RelativeRotationGraph({
     return { ...hoverPt, p, px, py, q: quadrantOf(p.x, p.y) };
   })();
 
+  const tooltipBody = (sym, idx) => {
+    const p = seriesByTicker[sym]?.[idx];
+    if (!p) return null;
+    const q = quadrantOf(p.x, p.y);
+    return (
+      <>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ width: 10, height: 2, background: styleOf(sym).color, flexShrink: 0 }} />
+          <span style={{ color: TEXT_PRIMARY, fontWeight: 600, fontFamily: 'ui-monospace,monospace' }}>
+            {p.x.toFixed(2)} / {p.y.toFixed(2)}
+          </span>
+        </div>
+        <div style={{ color: TEXT_SECONDARY }}>
+          {labelFor(sym)} · {unit.fmt(days[idx])}
+        </div>
+        <div style={{ color: QUADRANTS[q].color }}>{QUADRANTS[q].name}</div>
+        {idx === end && overlayNotes(summary[sym], unit).map((n) => (
+          <div key={n} style={{ color: TEXT_SECONDARY }}>{n}</div>
+        ))}
+      </>
+    );
+  };
+
   const btn = (active) => ({
     background: active ? '#1E252A' : CARD_BG,
     border: `1px solid ${active ? ACCENT : CARD_BORDER}`,
@@ -579,9 +502,21 @@ export default function RelativeRotationGraph({
             vs {benchmark} · {unit.bars} · {unit.asOf(days[end])} · {smoothing > 1 ? `${smoothing}-${unit.adj} smoothing` : 'no smoothing'}
           </p>
         </div>
-        <button onClick={() => setTableView((v) => !v)} style={btn(tableView)}>
-          {tableView ? 'Chart' : 'Table'}
-        </button>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {RRG_3D_BETA && !tableView && (
+            <button
+              onClick={() => setView3d(!view3d)}
+              style={btn(view3d)}
+              aria-pressed={view3d}
+              title="Beta: the same chart with time as a third axis, so each tail runs back in time instead of over itself"
+            >
+              3D <span style={{ fontSize: 9, letterSpacing: '0.04em', textTransform: 'uppercase', opacity: 0.8 }}>beta</span>
+            </button>
+          )}
+          <button onClick={() => setTableView((v) => !v)} style={btn(tableView)}>
+            {tableView ? 'Chart' : 'Table'}
+          </button>
+        </div>
       </div>
 
       {/* Answer first: who is where right now, laid out like the chart. */}
@@ -685,6 +620,34 @@ export default function RelativeRotationGraph({
       ) : (
         <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'flex-start', marginTop: 14 }}>
           <div style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: 12, flex: '1 1 480px', maxWidth: 584, minWidth: 0 }}>
+            {view3d ? (
+              <div ref={wrapRef} style={{ width: '100%' }}>
+                <RrgPlot3D
+                  W={W}
+                  series={shownSymbols.map((sym) => ({
+                    sym,
+                    ...styleOf(sym),
+                    label: labelFor(sym),
+                    points: tailOf(sym).map((p, i) => ({ x: p.x, y: p.y, idx: tailStart + i })),
+                    dim: !!(focus && focus !== sym),
+                    headR: headRadius(sym),
+                    hollow: trendOn && summary[sym]?.trend?.above === false,
+                    pinned: pinned === sym,
+                    flag: fundingOn ? summary[sym]?.fundingFlag : null,
+                  }))}
+                  ranges={{ x0: view.cx - view.rx, x1: view.cx + view.rx, y0: view.cy - view.ry, y1: view.cy + view.ry }}
+                  iOld={tailStart}
+                  iNew={end}
+                  days={days}
+                  unit={unit}
+                  focus={focus}
+                  onHoverSym={setHoverSym}
+                  onPin={togglePin}
+                  tooltip={tooltipBody}
+                  ariaLabel={`3D relative rotation graph of ${activeSymbols.length} assets vs ${benchmark} on ${unit.bars}, with time as depth, ${unit.asOf(days[end])}. Use the table view for exact values.`}
+                />
+              </div>
+            ) : (
             <div ref={wrapRef} style={{ position: 'relative', width: '100%' }}>
               <svg
                 ref={svgRef}
@@ -892,23 +855,12 @@ export default function RelativeRotationGraph({
                     lineHeight: 1.45,
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ width: 10, height: 2, background: styleOf(hoverInfo.sym).color, flexShrink: 0 }} />
-                    <span style={{ color: TEXT_PRIMARY, fontWeight: 600, fontFamily: 'ui-monospace,monospace' }}>
-                      {hoverInfo.p.x.toFixed(2)} / {hoverInfo.p.y.toFixed(2)}
-                    </span>
-                  </div>
-                  <div style={{ color: TEXT_SECONDARY }}>
-                    {labelFor(hoverInfo.sym)} · {unit.fmt(days[hoverInfo.idx])}
-                  </div>
-                  <div style={{ color: QUADRANTS[hoverInfo.q].color }}>{QUADRANTS[hoverInfo.q].name}</div>
-                  {hoverInfo.idx === end && overlayNotes(summary[hoverInfo.sym], unit).map((n) => (
-                    <div key={n} style={{ color: TEXT_SECONDARY }}>{n}</div>
-                  ))}
+                  {tooltipBody(hoverInfo.sym, hoverInfo.idx)}
                 </div>
               )}
 
             </div>
+            )}
 
             <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${CARD_BORDER}` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1013,7 +965,9 @@ export default function RelativeRotationGraph({
                 </p>
               )}
               <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '10px 0 0', lineHeight: 1.55 }}>
-                Hover or tap a ticker to focus it · drag to pan · pinch or Ctrl/⌘+scroll to zoom
+                {view3d
+                  ? 'Hover or tap a ticker to focus it · drag to rotate · zoom with the − / + buttons'
+                  : 'Hover or tap a ticker to focus it · drag to pan · pinch or Ctrl/⌘+scroll to zoom'}
               </p>
             </div>
           </div>
