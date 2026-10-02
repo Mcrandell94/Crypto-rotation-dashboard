@@ -25,7 +25,9 @@ import { withCdnCache } from '../../lib/cdnCache';
 
 export const dynamic = 'force-dynamic';
 
-const TICKERS_PER_SECTOR = 4;
+// 10 sectors x 3 tickers keeps the burst (30 histories) about where 8 x 4
+// was, inside the Demo tier's per-minute limit.
+const TICKERS_PER_SECTOR = 3;
 
 async function handler(request) {
   const apiKey = process.env.COINGECKO_API_KEY;

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Collapsible from './Collapsible';
 
 const GAIN = '#7FA37F';
 const LOSS = '#A85D4F';
@@ -37,15 +38,15 @@ export default function RotationChart({ tickers, symbols }) {
 
   const maxAbs = Math.max(1, ...rows.map((r) => Math.abs(r.t.percentChange7d)));
 
+  // Closed by default (remembered per browser): the RRG above covers
+  // rotation; this is the plain 7-day ranking behind it.
   return (
-    <section style={{ marginTop: 32 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 12 }}>
-        <div>
-          <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: TEXT_PRIMARY }}>Rotation — 7-day momentum</h2>
-          <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '4px 0 0' }}>
-            Ranked by 7-day change · green = gaining, rust = declining
-          </p>
-        </div>
+    <Collapsible
+      title="Rotation — 7-day momentum"
+      subtitle="Ranked by 7-day change · green = gaining, rust = declining"
+      storageKey="rotation7dOpen.v1"
+    >
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
         <div style={{ display: 'flex', gap: 6 }}>
           {['chart', 'table'].map((v) => (
             <button
@@ -206,6 +207,6 @@ export default function RotationChart({ tickers, symbols }) {
           })}
         </div>
       )}
-    </section>
+    </Collapsible>
   );
 }
