@@ -98,3 +98,24 @@ export function fetchDailyHistory(coingeckoId, apiKey) {
 export async function fetchDailyPrices(coingeckoId, apiKey) {
   return (await fetchDailyHistory(coingeckoId, apiKey)).prices;
 }
+
+// Shared bar labels for a benchmark and its tickers. Every series has to sit
+// on the same bars for the RRG maths, but intersecting them all lets one
+// young coin (say, a token that listed 34 weeks ago) cut the whole chart
+// down to its history. So a ticker missing more than `maxMissing` of the
+// benchmark's bars is left out of the shared window and reported in
+// `short` instead ({ symbol, bars, of }), and the rest keep the full window.
+// `keys`: the benchmark's bar labels; `bySymbol`: { symbol: Map<label, value> }.
+export function alignBars(keys, bySymbol, maxMissing = 0.1) {
+  const bench = [...keys].sort();
+  const allowed = Math.floor(bench.length * maxMissing);
+  const kept = [];
+  const short = [];
+  for (const [symbol, map] of Object.entries(bySymbol)) {
+    const bars = bench.filter((k) => map.has(k)).length;
+    if (bench.length - bars > allowed) short.push({ symbol, bars, of: bench.length });
+    else kept.push(symbol);
+  }
+  const days = bench.filter((k) => kept.every((s) => bySymbol[s].has(k)));
+  return { days, kept, short };
+}

@@ -48,3 +48,20 @@ test('non-numbers are skipped; unknown intervals fall back to daily', () => {
   assert.equal(parseInterval('15m'), '1d');
   assert.equal(parseInterval(null), '1d');
 });
+
+test('alignBars keeps the full window when a young ticker would cut it short', () => {
+  const { alignBars } = require('./coingecko-history.js');
+  const weeks = Array.from({ length: 53 }, (_, i) => `w${String(i).padStart(2, '0')}`);
+  const full = new Map(weeks.map((w) => [w, 1]));
+  const young = new Map(weeks.slice(19).map((w) => [w, 1])); // 34 of 53 weeks
+  const gappy = new Map(weeks.filter((_, i) => i !== 10 && i !== 40).map((w) => [w, 1])); // 2 missing
+  const r = alignBars(weeks, { OLD: full, NEW: young, GAP: gappy });
+  assert.deepEqual(r.kept, ['OLD', 'GAP']);
+  assert.deepEqual(r.short, [{ symbol: 'NEW', bars: 34, of: 53 }]);
+  assert.equal(r.days.length, 51); // only GAP's two missing weeks drop out
+  // within the 10% allowance a ticker stays and the window trims to it
+  const nearly = new Map(weeks.slice(4).map((w) => [w, 1]));
+  const r2 = alignBars(weeks, { OLD: full, NEARLY: nearly });
+  assert.deepEqual(r2.short, []);
+  assert.equal(r2.days.length, 49);
+});
