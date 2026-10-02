@@ -18,7 +18,7 @@
 // prominent names per sector in app/lib/sectors.js) rather than all of them.
 
 import { COINGECKO_IDS } from '../../lib/coingecko-ids';
-import { fetchHistory, parseInterval } from '../../lib/coingecko-history';
+import { fetchHistory, parseInterval, alignBars } from '../../lib/coingecko-history';
 import { equalWeightComposite, capWeightComposite, capWeights } from '../../lib/rrgOverlays';
 import { SECTORS } from '../../lib/sectors';
 import { withCdnCache } from '../../lib/cdnCache';
@@ -66,10 +66,14 @@ async function handler(request) {
       return Response.json({ error: `Could not fetch benchmark ${benchmark} from CoinGecko` }, { status: 502 });
     }
 
-    const okTickers = allTickers.filter((t) => mapBySymbol[t]);
-    let commonDays = [...mapBySymbol[benchmark].prices.keys()];
-    for (const t of okTickers) commonDays = commonDays.filter((d) => mapBySymbol[t].prices.has(d));
-    commonDays.sort();
+    // Members too young for this window are left out of their sector's
+    // composite (listed in `tickersShort`) rather than cutting every
+    // sector down to their history.
+    const { days: commonDays, kept, short: tickersShort } = alignBars(
+      [...mapBySymbol[benchmark].prices.keys()],
+      Object.fromEntries(allTickers.filter((t) => mapBySymbol[t]).map((t) => [t, mapBySymbol[t].prices])),
+    );
+    const usable = new Set(kept);
 
     // Two composites per sector, both rebased to 1.0 on day 0: equal-weighted
     // (each member counts the same) and cap-weighted (weighted by each
@@ -82,7 +86,7 @@ async function handler(request) {
     const memberWeights = {};
     const failed = [];
     SECTORS.forEach((sector, i) => {
-      const tickers = sectorTickers[i].filter((t) => mapBySymbol[t]);
+      const tickers = sectorTickers[i].filter((t) => usable.has(t));
       if (tickers.length === 0) {
         failed.push(sector.label);
         return;
@@ -113,6 +117,7 @@ async function handler(request) {
       // so rather than silently. Non-empty also keeps this partial result
       // out of the CDN cache (see app/lib/cdnCache.js).
       tickersFailed: failedTickers,
+      tickersShort,
       fetchedAt: new Date().toISOString(),
     });
   } catch (err) {

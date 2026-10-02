@@ -6,7 +6,7 @@
 // windows, z-score toggle, scrubber) don't need a refetch per change.
 
 import { COINGECKO_IDS } from '../../lib/coingecko-ids';
-import { fetchHistory as fetchBars, parseInterval } from '../../lib/coingecko-history';
+import { fetchHistory as fetchBars, parseInterval, alignBars } from '../../lib/coingecko-history';
 import { withCdnCache } from '../../lib/cdnCache';
 
 export const dynamic = 'force-dynamic';
@@ -55,12 +55,12 @@ async function handler(request) {
       return Response.json({ error: `Could not fetch benchmark ${benchmark} from CoinGecko` }, { status: 502 });
     }
 
-    const okSymbols = symbols.filter((s) => mapBySymbol[s]);
-    let commonDays = [...mapBySymbol[benchmark].prices.keys()];
-    for (const sym of okSymbols) {
-      commonDays = commonDays.filter((d) => mapBySymbol[sym].prices.has(d));
-    }
-    commonDays.sort();
+    // Tickers too young for this window are left out (and listed in
+    // `shortHistory`) rather than cutting every series down to theirs.
+    const { days: commonDays, kept: okSymbols, short: shortHistory } = alignBars(
+      [...mapBySymbol[benchmark].prices.keys()],
+      Object.fromEntries(symbols.filter((s) => mapBySymbol[s]).map((s) => [s, mapBySymbol[s].prices])),
+    );
 
     // Daily USD volume alongside price (same CoinGecko response) for the
     // RRG's optional volume-confirmation overlay; null where a day's
@@ -73,7 +73,7 @@ async function handler(request) {
     }
 
     // `days` holds the bar labels (dates, 4-hour UTC starts, or week starts).
-    return Response.json({ benchmark, interval, days: commonDays, prices, volumes, failed, fetchedAt: new Date().toISOString() });
+    return Response.json({ benchmark, interval, days: commonDays, prices, volumes, failed, shortHistory, fetchedAt: new Date().toISOString() });
   } catch (err) {
     return Response.json(
       { error: err.message || 'Fetch failed', detail: err.detail || String(err) },

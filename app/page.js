@@ -294,6 +294,12 @@ export default function DashboardHome() {
                     No live data for: {rotation.rrgData.failed.join(', ')} — skipped.
                   </p>
                 )}
+                {rotation.rrgData?.shortHistory?.length > 0 && (
+                  <p style={{ fontSize: 11, color: '#6E767B', marginTop: 8 }}>
+                    Too new for this timeframe, left out so they don&apos;t shorten everyone else&apos;s history:{' '}
+                    {rotation.rrgData.shortHistory.map((s) => `${s.symbol} (${s.bars} of ${s.of} bars)`).join(', ')}.
+                  </p>
+                )}
               </>
             )
           ) : rotation.rrgSectorsError ? (
@@ -322,6 +328,12 @@ export default function DashboardHome() {
               {rotation.rrgSectorsData?.failed?.length > 0 && (
                 <p style={{ fontSize: 11, color: '#6E767B', marginTop: 8 }}>
                   No live data for: {rotation.rrgSectorsData.failed.join(', ')} — skipped.
+                </p>
+              )}
+              {rotation.rrgSectorsData?.tickersShort?.length > 0 && (
+                <p style={{ fontSize: 11, color: '#6E767B', marginTop: 8 }}>
+                  Too new for this timeframe: {rotation.rrgSectorsData.tickersShort.map((s) => `${s.symbol} (${s.bars} of ${s.of} bars)`).join(', ')}
+                  {' '}— their sectors are averaged from the remaining members.
                 </p>
               )}
               {rotation.rrgSectorsData?.tickersFailed?.length > 0 && (
