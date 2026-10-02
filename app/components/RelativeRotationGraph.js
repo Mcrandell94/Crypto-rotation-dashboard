@@ -978,15 +978,24 @@ export default function RelativeRotationGraph({
                   title={`Hollow head dot = below its own ${TREND_WINDOW}-${unit.adj} average (falling in absolute terms)`}
                 />
                 {RRG_3D_BETA && (
-                  <OverlayToggle
-                    label="Trend axis (3D)"
-                    checked={overlays.trendAxis}
-                    disabled={!view3d}
-                    onChange={(v) => setOverlay('trendAxis', v)}
-                    title={view3d
-                      ? `3D depth = price vs its own ${TREND_WINDOW}-${unit.adj} average instead of time`
-                      : `Turn on 3D (beta) to use: swaps the time axis for price vs its own ${TREND_WINDOW}-${unit.adj} average`}
-                  />
+                  <>
+                    <OverlayToggle
+                      label="3D (beta)"
+                      checked={view3d}
+                      onChange={(v) => setView3d(v)}
+                      title="The same chart with a third axis (time, or the trend axis below), so tails run back in depth instead of over each other"
+                    />
+                    <OverlayToggle
+                      label="Trend axis (3D)"
+                      checked={trendAxisOn}
+                      onChange={(v) => {
+                        // Ticking it in 2D switches the 3D view on too.
+                        if (v) setView3d(true);
+                        setOverlay('trendAxis', v);
+                      }}
+                      title={`3D depth = price vs its own ${TREND_WINDOW}-${unit.adj} average instead of time (turns on 3D)`}
+                    />
+                  </>
                 )}
                 {funding && (
                   <OverlayToggle
