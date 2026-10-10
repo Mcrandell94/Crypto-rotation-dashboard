@@ -13,7 +13,7 @@
 // fetches broadly by tag and filters client-side the same way.
 
 import { withCdnCache } from '../../lib/cdnCache';
-import { classify, isBitcoinOnly } from '../../lib/polymarketBuckets';
+import { classify, isBitcoinOnly, hasEnded, dailyRank } from '../../lib/polymarketBuckets';
 
 export const dynamic = 'force-dynamic';
 
@@ -62,10 +62,17 @@ async function handler() {
     const events = await fetchEvents();
     const buckets = { daily: null, weekly: null, monthly: null, yearly: null };
 
+    // Events arrive sorted by volume desc and the first hit wins, except for
+    // "Today": a whole-day market beats the hourly ones (which otherwise
+    // out-trade it), then the soonest to resolve.
+    const now = Date.now();
+    const daily = [];
+
     for (const ev of events) {
       if (!isBitcoinOnly(ev.title || '')) continue;
+      if (hasEnded(ev.endDate, now)) continue;
       const bucket = classify(ev.title || '');
-      if (!bucket || buckets[bucket]) continue; // first hit wins — events arrive sorted by volume desc
+      if (!bucket || buckets[bucket]) continue;
 
       let thresholds = (ev.markets || [])
         .map(parseMarket)
@@ -91,8 +98,11 @@ async function handler() {
 
       if (thresholds.length === 0) continue;
 
-      buckets[bucket] = { title: ev.title, slug: ev.slug, endDate: ev.endDate, thresholds };
+      const entry = { title: ev.title, slug: ev.slug, endDate: ev.endDate, thresholds };
+      if (bucket === 'daily') daily.push(entry);
+      else buckets[bucket] = entry;
     }
+    buckets.daily = daily.sort((a, b) => dailyRank(a) - dailyRank(b))[0] || null;
 
     const missing = Object.keys(buckets).filter((k) => !buckets[k]);
     return Response.json({ buckets, missing, fetchedAt: new Date().toISOString() });

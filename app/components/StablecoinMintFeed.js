@@ -69,6 +69,9 @@ export default function StablecoinMintFeed({ data }) {
   const allMints = data.mints || [];
   const mints = allMints.filter((m) => m.amount == null || m.amount >= minSize);
   const hiddenCount = allMints.length - mints.length;
+  // Tether can go weeks without printing; say so rather than leave the
+  // feed looking USDC-only. Only when both USDT lookups actually worked.
+  const noUsdt = !allMints.some((m) => m.symbol === 'USDT') && !(data.tokensFailed || []).some((f) => f.symbol === 'USDT');
 
   return (
     <section style={{ marginTop: 32 }}>
@@ -99,6 +102,12 @@ export default function StablecoinMintFeed({ data }) {
           </button>
         ))}
       </div>
+
+      {noUsdt && (
+        <p style={{ fontSize: 11, color: TEXT_SECONDARY, margin: '0 0 10px' }}>
+          No new USDT issued on Ethereum or Tron in the last ~30 days.
+        </p>
+      )}
 
       {mints.length === 0 ? (
         <p style={{ fontSize: 12, color: TEXT_MUTED }}>

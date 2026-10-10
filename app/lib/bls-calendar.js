@@ -6,9 +6,10 @@
 // daylight saving can't shift them.
 //
 // Coverage: October–December 2026, copied from BLS's calendar as pasted
-// into this session. Once these pass, the CB Calendar simply shows no BLS
-// dates rather than guessed ones — extend this list from
-// bls.gov/schedule/ to keep it going. (Holidays on BLS's calendar —
+// into this session, and 2027's principal indicators (jobs report, CPI,
+// PPI and a few others) from OMB's published 2027 schedule. Once these
+// pass, the CB Calendar simply shows no BLS dates rather than guessed
+// ones — extend this list from bls.gov/schedule/ to keep it going. (Holidays on BLS's calendar —
 // Columbus Day, Veterans Day, Thanksgiving, Christmas — aren't releases, so they're
 // left out; the CB Calendar's closure rows already cover them.)
 //
@@ -52,4 +53,81 @@ export const BLS_RELEASES = [
   { at: '2026-12-18T10:00:00-05:00', name: 'State Employment and Unemployment (Monthly) for November 2026' },
   { at: '2026-12-18T10:00:00-05:00', name: 'Work Experience of the Population (Annual) for 2025' },
   { at: '2026-12-30T10:00:00-05:00', name: 'Metropolitan Area Employment and Unemployment (Monthly) for November 2026' },
+  // 2027, from OMB's "Schedule of Release Dates for Principal Federal
+  // Economic Indicators for 2027" (whitehouse.gov, October 2026), which
+  // carries BLS's principal indicators only; all at 8:30 a.m. Eastern.
+  { critical: true, at: '2027-01-08T08:30:00-05:00', name: 'Employment Situation for December 2026' },
+  { critical: true, at: '2027-01-13T08:30:00-05:00', name: 'Consumer Price Index for December 2026' },
+  { at: '2027-01-13T08:30:00-05:00', name: 'Real Earnings for December 2026' },
+  { critical: true, at: '2027-01-14T08:30:00-05:00', name: 'Producer Price Index for December 2026' },
+  { at: '2027-01-15T08:30:00-05:00', name: 'U.S. Import and Export Price Indexes for December 2026' },
+  { at: '2027-01-29T08:30:00-05:00', name: 'Employment Cost Index for Fourth Quarter 2026' },
+  { at: '2027-02-04T08:30:00-05:00', name: 'Productivity and Costs (P) for Fourth Quarter 2026' },
+  { critical: true, at: '2027-02-05T08:30:00-05:00', name: 'Employment Situation for January 2027' },
+  { critical: true, at: '2027-02-11T08:30:00-05:00', name: 'Consumer Price Index for January 2027' },
+  { at: '2027-02-11T08:30:00-05:00', name: 'Real Earnings for January 2027' },
+  { critical: true, at: '2027-02-12T08:30:00-05:00', name: 'Producer Price Index for January 2027' },
+  { at: '2027-02-17T08:30:00-05:00', name: 'U.S. Import and Export Price Indexes for January 2027' },
+  { at: '2027-03-04T08:30:00-05:00', name: 'Productivity and Costs (R) for Fourth Quarter 2026' },
+  { critical: true, at: '2027-03-05T08:30:00-05:00', name: 'Employment Situation for February 2027' },
+  { critical: true, at: '2027-03-10T08:30:00-05:00', name: 'Consumer Price Index for February 2027' },
+  { at: '2027-03-10T08:30:00-05:00', name: 'Real Earnings for February 2027' },
+  { critical: true, at: '2027-03-12T08:30:00-05:00', name: 'Producer Price Index for February 2027' },
+  // Daylight saving starts Mar 14, 2027: EDT (-04:00) from here.
+  { at: '2027-03-17T08:30:00-04:00', name: 'U.S. Import and Export Price Indexes for February 2027' },
+  { critical: true, at: '2027-04-02T08:30:00-04:00', name: 'Employment Situation for March 2027' },
+  { critical: true, at: '2027-04-13T08:30:00-04:00', name: 'Consumer Price Index for March 2027' },
+  { at: '2027-04-13T08:30:00-04:00', name: 'Real Earnings for March 2027' },
+  { critical: true, at: '2027-04-14T08:30:00-04:00', name: 'Producer Price Index for March 2027' },
+  { at: '2027-04-16T08:30:00-04:00', name: 'U.S. Import and Export Price Indexes for March 2027' },
+  { at: '2027-04-30T08:30:00-04:00', name: 'Employment Cost Index for First Quarter 2027' },
+  { at: '2027-05-06T08:30:00-04:00', name: 'Productivity and Costs (P) for First Quarter 2027' },
+  { critical: true, at: '2027-05-07T08:30:00-04:00', name: 'Employment Situation for April 2027' },
+  { critical: true, at: '2027-05-12T08:30:00-04:00', name: 'Consumer Price Index for April 2027' },
+  { at: '2027-05-12T08:30:00-04:00', name: 'Real Earnings for April 2027' },
+  { critical: true, at: '2027-05-13T08:30:00-04:00', name: 'Producer Price Index for April 2027' },
+  { at: '2027-05-14T08:30:00-04:00', name: 'U.S. Import and Export Price Indexes for April 2027' },
+  { at: '2027-06-03T08:30:00-04:00', name: 'Productivity and Costs (R) for First Quarter 2027' },
+  { critical: true, at: '2027-06-04T08:30:00-04:00', name: 'Employment Situation for May 2027' },
+  { critical: true, at: '2027-06-10T08:30:00-04:00', name: 'Consumer Price Index for May 2027' },
+  { at: '2027-06-10T08:30:00-04:00', name: 'Real Earnings for May 2027' },
+  { critical: true, at: '2027-06-11T08:30:00-04:00', name: 'Producer Price Index for May 2027' },
+  { at: '2027-06-16T08:30:00-04:00', name: 'U.S. Import and Export Price Indexes for May 2027' },
+  { critical: true, at: '2027-07-02T08:30:00-04:00', name: 'Employment Situation for June 2027' },
+  { critical: true, at: '2027-07-14T08:30:00-04:00', name: 'Consumer Price Index for June 2027' },
+  { at: '2027-07-14T08:30:00-04:00', name: 'Real Earnings for June 2027' },
+  { critical: true, at: '2027-07-15T08:30:00-04:00', name: 'Producer Price Index for June 2027' },
+  { at: '2027-07-16T08:30:00-04:00', name: 'U.S. Import and Export Price Indexes for June 2027' },
+  { at: '2027-07-30T08:30:00-04:00', name: 'Employment Cost Index for Second Quarter 2027' },
+  { at: '2027-08-05T08:30:00-04:00', name: 'Productivity and Costs (P) for Second Quarter 2027' },
+  { critical: true, at: '2027-08-06T08:30:00-04:00', name: 'Employment Situation for July 2027' },
+  { critical: true, at: '2027-08-10T08:30:00-04:00', name: 'Producer Price Index for July 2027' },
+  { critical: true, at: '2027-08-11T08:30:00-04:00', name: 'Consumer Price Index for July 2027' },
+  { at: '2027-08-11T08:30:00-04:00', name: 'Real Earnings for July 2027' },
+  { at: '2027-08-13T08:30:00-04:00', name: 'U.S. Import and Export Price Indexes for July 2027' },
+  { at: '2027-09-02T08:30:00-04:00', name: 'Productivity and Costs (R) for Second Quarter 2027' },
+  { critical: true, at: '2027-09-03T08:30:00-04:00', name: 'Employment Situation for August 2027' },
+  { critical: true, at: '2027-09-10T08:30:00-04:00', name: 'Producer Price Index for August 2027' },
+  { critical: true, at: '2027-09-14T08:30:00-04:00', name: 'Consumer Price Index for August 2027' },
+  { at: '2027-09-14T08:30:00-04:00', name: 'Real Earnings for August 2027' },
+  { at: '2027-09-17T08:30:00-04:00', name: 'U.S. Import and Export Price Indexes for August 2027' },
+  { critical: true, at: '2027-10-08T08:30:00-04:00', name: 'Employment Situation for September 2027' },
+  { critical: true, at: '2027-10-14T08:30:00-04:00', name: 'Consumer Price Index for September 2027' },
+  { at: '2027-10-14T08:30:00-04:00', name: 'Real Earnings for September 2027' },
+  { critical: true, at: '2027-10-15T08:30:00-04:00', name: 'Producer Price Index for September 2027' },
+  { at: '2027-10-19T08:30:00-04:00', name: 'U.S. Import and Export Price Indexes for September 2027' },
+  { at: '2027-10-29T08:30:00-04:00', name: 'Employment Cost Index for Third Quarter 2027' },
+  { at: '2027-11-04T08:30:00-04:00', name: 'Productivity and Costs (P) for Third Quarter 2027' },
+  { critical: true, at: '2027-11-05T08:30:00-04:00', name: 'Employment Situation for October 2027' },
+  // Daylight saving ends Nov 7, 2027: EST (-05:00) from here.
+  { critical: true, at: '2027-11-10T08:30:00-05:00', name: 'Consumer Price Index for October 2027' },
+  { at: '2027-11-10T08:30:00-05:00', name: 'Real Earnings for October 2027' },
+  { critical: true, at: '2027-11-12T08:30:00-05:00', name: 'Producer Price Index for October 2027' },
+  { at: '2027-11-16T08:30:00-05:00', name: 'U.S. Import and Export Price Indexes for October 2027' },
+  { critical: true, at: '2027-12-03T08:30:00-05:00', name: 'Employment Situation for November 2027' },
+  { at: '2027-12-07T08:30:00-05:00', name: 'Productivity and Costs (R) for Third Quarter 2027' },
+  { critical: true, at: '2027-12-10T08:30:00-05:00', name: 'Consumer Price Index for November 2027' },
+  { at: '2027-12-10T08:30:00-05:00', name: 'Real Earnings for November 2027' },
+  { critical: true, at: '2027-12-15T08:30:00-05:00', name: 'Producer Price Index for November 2027' },
+  { at: '2027-12-16T08:30:00-05:00', name: 'U.S. Import and Export Price Indexes for November 2027' },
 ];

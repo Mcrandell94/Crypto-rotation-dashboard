@@ -56,7 +56,9 @@ async function fetchLiquidationsForSymbol(symbol, apiKey) {
     }))
     .sort((a, b) => a.date.localeCompare(b.date));
 
-  const last24h = days[days.length - 1];
+  // Coinglass's newest daily bar is today's (UTC), still filling in.
+  const latest = days[days.length - 1];
+  const last24h = { ...latest, partial: latest.date === new Date().toISOString().slice(0, 10) };
   const last7d = days.slice(-7);
   const last7dLong = last7d.reduce((s, d) => s + d.longUsd, 0);
   const last7dShort = last7d.reduce((s, d) => s + d.shortUsd, 0);

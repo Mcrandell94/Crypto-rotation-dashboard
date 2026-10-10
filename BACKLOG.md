@@ -36,8 +36,10 @@ failing source shows up without someone having to notice it.
   (Coinglass plan doesn't cover it). See `app/hooks/useLevelsTabData.js`.
 
 ## Recurring upkeep
-- Paste BLS's 2027 release schedule into `app/lib/bls-calendar.js` when
-  it's published (current coverage ends Dec 2026).
+- 2027's CPI, PPI and jobs-report dates come from OMB's federal schedule
+  (October 2026). When BLS posts its own 2027 calendar
+  (bls.gov/schedule/), check them against it and add the other BLS
+  releases if wanted. Coverage ends Dec 2027; add 2028 when it's out.
 
 ## Working notes (for future sessions)
 - **Production domain:** `https://crypto-rotation-dashboard-xi.vercel.app`
