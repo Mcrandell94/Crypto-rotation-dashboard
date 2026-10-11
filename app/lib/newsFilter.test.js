@@ -119,3 +119,11 @@ test('drops a Dutch headline and SEO pieces, keeps the rest of the 2026-10-10 fe
   ].map(([title, link]) => ({ title, link, source: 'x' }));
   assert.deepEqual(filterNews([...keep, dutch, ...seo]), keep);
 });
+
+// Spanish item that got through on 2026-10-11: only "la" matched.
+test('drops a DiarioBitcoin Spanish headline on a .com host', () => {
+  const es = { title: 'JST cae 2,79% frente a la apertura, pero conserva ganancias mensuales', source: 'DiarioBitcoin', link: 'https://www.diariobitcoin.com/analisis/jst-cae-279-frente-a-la-apertura/' };
+  assert.equal(looksNonEnglish(es), true);
+  assert.equal(looksNonEnglish({ ...es, link: 'https://example.com/x' }), true); // title alone
+  assert.equal(looksNonEnglish({ title: 'Strive Faces Limits to Its Bitcoin Funding Model', source: 'Cointribune', link: 'https://www.cointribune.com/en/strive-faces-limits/' }), false);
+});

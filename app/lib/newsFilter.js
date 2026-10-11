@@ -19,9 +19,12 @@
 //   2026" listicles.
 
 const NON_ENGLISH_TLDS = ['fr', 'de', 'es', 'it', 'pt', 'br', 'nl', 'ru', 'jp', 'kr', 'cn', 'tr', 'pl', 'vn', 'id'];
+// Outlets on a .com that only publish in another language.
+const NON_ENGLISH_HOSTS = /(^|\.)(diariobitcoin\.com|blockchainstories\.com)$/;
 const FOREIGN_WORDS = new Set([
   'le', 'la', 'les', 'des', 'du', 'sur', 'pour', 'avec', 'est', 'une', 'dans', 'meilleurs',
   'el', 'los', 'las', 'de', 'para', 'con', 'por', 'del', 'una', 'que', 'y', 'en', 'su', 'se', 'al', 'mientras', 'sobre', 'entre',
+  'pero', 'frente', 'cae', 'sube', 'tras', 'hacia', 'ganancias', 'conserva',
   'der', 'die', 'das', 'und', 'mit', 'auf', 'ist', 'für',
   'os', 'em', 'uma', 'não', 'il', 'di', 'della', 'che', 'per',
   've', 'için', 'bir', 'ile', 'bu', 'işte',
@@ -31,7 +34,7 @@ const FOREIGN_WORDS = new Set([
   'heeft', 'tegen', 'koers', 'stijgt', 'daalt', 'nieuwe', 'lagere', 'hogere', 'positie',
 ]);
 // A language section in the link's path ("/fr/...", "/nieuws/...").
-const FOREIGN_PATH = /^\/(fr|de|es|it|pt|nl|ru|tr|ja|ko|zh|pl|vi|nieuws|noticias|nachrichten|actualites|haberler)(\/|$)/;
+const FOREIGN_PATH = /^\/(fr|de|es|it|pt|nl|ru|tr|ja|ko|zh|pl|vi|nieuws|noticias|analisis|nachrichten|actualites|haberler)(\/|$)/;
 const FOREIGN_SOURCE = /\b(tr|turkish|türkçe|español|deutsch|français)\b/i;
 const TURKISH_LETTERS = /[ıİşŞğĞ]/;
 const ACCENTED = /[áéíóúñãõâêôàèìòùç]/;
@@ -60,6 +63,7 @@ function pathOf(link) {
 export function looksNonEnglish(article) {
   const tld = hostOf(article.link).split('.').pop();
   if (NON_ENGLISH_TLDS.includes(tld)) return true;
+  if (NON_ENGLISH_HOSTS.test(hostOf(article.link))) return true;
   if (FOREIGN_PATH.test(pathOf(article.link))) return true;
   if (FOREIGN_SOURCE.test(article.source || '')) return true;
   if (TURKISH_LETTERS.test(article.title || '')) return true;
