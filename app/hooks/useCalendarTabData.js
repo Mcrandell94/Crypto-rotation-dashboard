@@ -12,6 +12,8 @@ export default function useCalendarTabData(isActive) {
   const [fedOddsError, setFedOddsError] = useState(null);
   const [congressData, setCongressData] = useState(null);
   const [congressError, setCongressError] = useState(null);
+  const [inflationOddsData, setInflationOddsData] = useState(null);
+  const [inflationOddsError, setInflationOddsError] = useState(null);
 
   const fetchFedOdds = useCallback(async () => {
     setFedOddsError(null);
@@ -37,10 +39,23 @@ export default function useCalendarTabData(isActive) {
     }
   }, []);
 
+  const fetchInflationOdds = useCallback(async () => {
+    setInflationOddsError(null);
+    try {
+      const res = await fetch('/api/inflationodds');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setInflationOddsData(json);
+    } catch (e) {
+      setInflationOddsError(e.message);
+    }
+  }, []);
+
   const refetch = useCallback(() => {
     fetchFedOdds();
     fetchCongressBills();
-  }, [fetchFedOdds, fetchCongressBills]);
+    fetchInflationOdds();
+  }, [fetchFedOdds, fetchCongressBills, fetchInflationOdds]);
 
   useEffect(() => {
     if (isActive && !loaded) {
@@ -52,6 +67,7 @@ export default function useCalendarTabData(isActive) {
   return {
     fedOddsData, fedOddsError,
     congressData, congressError,
+    inflationOddsData, inflationOddsError,
     refetch,
   };
 }

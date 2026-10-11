@@ -92,7 +92,7 @@ export default function LiquidationsPanel({ data }) {
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
         <div style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: '10px 12px', flex: '1 1 130px' }}>
-          <div style={{ fontSize: 10, color: TEXT_MUTED }}>Latest day ({formatDate(last24h.date)})</div>
+          <div style={{ fontSize: 10, color: TEXT_MUTED }}>{last24h.partial ? `Today so far (${formatDate(last24h.date)}, UTC)` : `Latest day (${formatDate(last24h.date)})`}</div>
           <div style={{ fontSize: 16, fontWeight: 600, marginTop: 3, fontFamily: 'ui-monospace, monospace' }}>
             <span style={{ color: LOSS }}>{formatUsdAbs(last24h.longUsd)}</span>
             <span style={{ color: TEXT_MUTED, fontSize: 12 }}> long / </span>

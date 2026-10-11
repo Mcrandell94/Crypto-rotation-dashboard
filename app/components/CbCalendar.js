@@ -202,6 +202,41 @@ const CATEGORY_BADGE = {
   'options-expiry': { label: 'Options expiry', color: '#8B6FB8' },
 };
 
+const fmtSpread = (cents) => (cents >= 100 ? '$1.00' : `${cents}¢`);
+
+// Kalshi's read of the next print: the likeliest values per measure, or a
+// plain note where its market is too thin to read (see lib/inflationOdds).
+function InflationOdds({ measures }) {
+  const readable = measures.filter((m) => m.readable && m.likeliest?.length);
+  const thin = measures.filter((m) => m.reason === 'thin');
+  const failed = measures.filter((m) => m.error);
+  return (
+    <>
+      {readable.length > 0 && (
+        <div style={{ fontSize: 12, color: TEXT_SECONDARY, marginTop: 8, lineHeight: 1.6 }}>
+          Market-implied (Kalshi), likeliest prints:
+          {readable.map((m) => (
+            <div key={m.series}>
+              <span style={{ color: TEXT_MUTED }}>{m.label}</span> {m.likeliest.map((b) => `${b.label} ${b.pct}%`).join(' · ')}
+            </div>
+          ))}
+        </div>
+      )}
+      {thin.length > 0 && (
+        <div style={{ fontSize: 12, color: TEXT_MUTED, marginTop: 8, lineHeight: 1.6 }}>
+          Kalshi&apos;s {thin.map((m) => m.label).join(' and ')} {thin.length > 1 ? 'markets are' : 'market is'} too thinly
+          traded to read odds from right now (bids and asks up to {fmtSpread(Math.max(...thin.map((m) => m.widestSpreadCents)))} apart).
+        </div>
+      )}
+      {failed.length > 0 && (
+        <div style={{ fontSize: 12, color: TEXT_MUTED, marginTop: 8 }}>
+          Kalshi {failed.map((m) => m.label).join(' and ')} odds unavailable this refresh.
+        </div>
+      )}
+    </>
+  );
+}
+
 function EventCard({ ev, now }) {
   const severity = ev.severity;
   const color = SEVERITY_COLOR[severity] || TEXT_MUTED;
@@ -236,6 +271,8 @@ function EventCard({ ev, now }) {
             )}
           </div>
         )}
+
+        {ev.category === 'economic-data' && !ev.resolved && ev.inflationOdds && <InflationOdds measures={ev.inflationOdds} />}
 
         {ev.category === 'central-bank' && !ev.resolved && ev.marketOutcomes && (
           <div style={{ fontSize: 12, color: TEXT_SECONDARY, marginTop: 8, lineHeight: 1.6 }}>
@@ -277,7 +314,7 @@ function EventCard({ ev, now }) {
   );
 }
 
-export default function CbCalendar({ optionsData, fedOddsData, fedOddsError, congressData, congressError }) {
+export default function CbCalendar({ optionsData, fedOddsData, fedOddsError, congressData, congressError, inflationOddsData, inflationOddsError }) {
   const [now, setNow] = useState(null);
   const [horizonMonths, setHorizonMonths] = useState(3);
 
@@ -307,6 +344,18 @@ export default function CbCalendar({ optionsData, fedOddsData, fedOddsError, con
   const sameMeeting = !Number.isFinite(marketEnd) || Math.abs(marketEnd - nextFomc?.date) < 10 * 86400000;
   if (nextFomc && fedOddsData?.market && sameMeeting) {
     nextFomc.marketOutcomes = fedOddsData.market.outcomes;
+  }
+
+  // Live Kalshi odds for the next CPI and PPI prints, on that release only:
+  // Kalshi closes each release's markets minutes before BLS publishes, so
+  // the close has to land within a day of the row's date.
+  for (const [key, prefix] of [['cpi', 'Consumer Price Index'], ['ppi', 'Producer Price Index']]) {
+    const release = inflationOddsData?.releases?.[key];
+    const close = Date.parse(release?.closeTime || '');
+    const next = events.find((e) => e.category === 'economic-data' && !e.resolved && e.name.startsWith(prefix));
+    if (next && release && Number.isFinite(close) && Math.abs(close - next.date) < 86400000) {
+      next.inflationOdds = release.measures;
+    }
   }
 
   events = events.map((ev) => {
@@ -352,7 +401,7 @@ export default function CbCalendar({ optionsData, fedOddsData, fedOddsError, con
       </div>
       <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '4px 0 4px' }}>
         Central bank decisions (Fed, BOE, BOJ — hand-maintained from each bank's own published calendar),
-        crypto-moving U.S. data releases (CPI, PPI, jobs report — hand-maintained from BLS's own release calendar, currently through December 2026),
+        crypto-moving U.S. data releases (CPI, PPI, jobs report — hand-maintained from BLS's own release calendar and OMB's 2027 schedule, currently through December 2027),
         weekdays U.S. banks and/or the stock market are closed, plus stock market early closes (computed from the federal holiday, Fed and NYSE rules),
         BTC options expiries (live, mirrors the Options panel on Macro & Seasonality), and crypto
         market-structure legislation (live, from Congress.gov's own API), scoped to the window above.
@@ -361,6 +410,7 @@ export default function CbCalendar({ optionsData, fedOddsData, fedOddsError, con
       <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '0 0 14px', lineHeight: 1.5 }}>
         Severity is a judgment call, not an official rating — for Fed meetings it's driven by
         live Polymarket odds where a market exists; otherwise it's a rough days-until proxy.
+        The next CPI and PPI show Kalshi&apos;s market-implied odds for the printed figure.
       </p>
 
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 4 }}>
@@ -381,6 +431,11 @@ export default function CbCalendar({ optionsData, fedOddsData, fedOddsError, con
       {fedOddsError && (
         <p style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 10 }}>
           Live Fed odds unavailable this refresh: {fedOddsError}
+        </p>
+      )}
+      {inflationOddsError && (
+        <p style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 10 }}>
+          Live CPI/PPI odds unavailable this refresh: {inflationOddsError}
         </p>
       )}
       {congressError && (

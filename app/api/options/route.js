@@ -125,7 +125,12 @@ async function fetchOptionsForCurrency(currency) {
       })
       .filter(Boolean);
 
-    const price = instruments.find((i) => i.underlyingPrice)?.underlyingPrice || null;
+    // Each option's underlying_price is its own expiry's future, which for
+    // far-dated expiries trades a few percent above spot (contango) — the
+    // nearest expiry's is the closest to spot.
+    const price = instruments
+      .filter((i) => i.underlyingPrice > 0)
+      .sort((a, b) => a.expiry - b.expiry)[0]?.underlyingPrice || null;
 
     const totalCallOI = instruments.filter((i) => i.type === 'call').reduce((s, i) => s + i.openInterest, 0);
     const totalPutOI = instruments.filter((i) => i.type === 'put').reduce((s, i) => s + i.openInterest, 0);
