@@ -37,7 +37,8 @@ function formatUsdAbs(v) {
   if (v == null || !Number.isFinite(v)) return '—';
   if (v >= 1e9) return `$${(v / 1e9).toFixed(2)}B`;
   if (v >= 1e6) return `$${(v / 1e6).toFixed(1)}M`;
-  return `$${v.toLocaleString()}`;
+  if (v >= 1e3) return `$${(v / 1e3).toFixed(1)}K`;
+  return `$${Math.round(v).toLocaleString()}`;
 }
 
 function formatDate(iso) {
