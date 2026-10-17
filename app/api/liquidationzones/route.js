@@ -58,9 +58,12 @@ export async function GET() {
 
     return Response.json({ assets: { BTC: btc, ETH: eth }, fetchedAt: new Date().toISOString() });
   } catch (err) {
+    // CoinLobster's own status goes in the message; this route answers 502
+    // (bad upstream), since passing its 401 through reads as this site's
+    // own login wall.
     return Response.json(
       { error: err.message || 'Fetch failed', detail: err.detail || String(err) },
-      { status: err.status || 500 }
+      { status: err.status ? 502 : 500 }
     );
   }
 }
