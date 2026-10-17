@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { LEVELS_BY_ASSET } from '../lib/liquidationLevels';
+import { crossedNow, horizonAge } from '../lib/liquidationLevelsStatus';
 
 const TEXT_PRIMARY = '#E7E4DD';
 const TEXT_SECONDARY = '#8B9298';
@@ -43,12 +44,6 @@ function writeHit(asset, horizonKey, capturedAt, id) {
     // localStorage unavailable (private mode, blocked) — hit state just
     // won't persist across reloads; not worth failing the panel over.
   }
-}
-
-function isNowHit(l, price, spotAtCapture) {
-  if (l.kind === 'zone') return price >= l.zoneLow && price <= l.zoneHigh;
-  if (spotAtCapture == null) return false;
-  return l.price < spotAtCapture ? price <= l.price : price >= l.price;
 }
 
 function AssetPicker({ asset, setAsset }) {
@@ -118,7 +113,7 @@ export default function LiquidationLevelsTracker({ btcPrice, btcPriceError, ethP
             if (!set.has(id)) set.add(id);
             continue;
           }
-          if (isNowHit(l, price, h.spotAtCapture)) {
+          if (crossedNow(l, price, h.spotAtCapture)) {
             set.add(id);
             writeHit(asset, h.key, h.capturedAt, id);
             changed = true;
@@ -135,7 +130,15 @@ export default function LiquidationLevelsTracker({ btcPrice, btcPriceError, ethP
 
   const horizonList = Object.values(LEVELS_BY_ASSET[asset]);
   const active = LEVELS_BY_ASSET[asset][horizonKey] || horizonList[0];
-  const hitIds = hitByAssetHorizon[asset]?.[active?.key] || new Set();
+  // Hits remembered since capture, plus every level live price is past
+  // right now — worked out on each render, so a crossed level shows as hit
+  // even if the remembered state didn't update (seen on a phone: 0 / 4 hit
+  // with price below two of the four long levels).
+  const hitIds = new Set([
+    ...(hitByAssetHorizon[asset]?.[active?.key] || []),
+    ...(active?.levels || []).filter((l) => crossedNow(l, price, active.spotAtCapture)).map(levelId),
+  ]);
+  const age = horizonAge(active, price);
 
   if (!active || active.levels.length === 0) {
     return (
@@ -170,7 +173,11 @@ export default function LiquidationLevelsTracker({ btcPrice, btcPriceError, ethP
         Squeeze zones and liquidity levels read off a screenshot you sent — not modeled, not pulled from an
         API. Live price is checked against each one; once crossed, it's marked hit and stays that way.
         {active.source ? ` Source: ${active.source}.` : ''}
-        {active.capturedAt ? ` Captured ${new Date(active.capturedAt).toLocaleString()}.` : ''}
+        {active.capturedAt ? ` Captured ${new Date(active.capturedAt).toLocaleString()}` : ''}
+        {age ? ` — ${age.ageDays === 0 ? 'today' : `${age.ageDays} day${age.ageDays === 1 ? '' : 's'} ago`}` : ''}
+        {age && active.spotAtCapture ? `, with ${asset} at ${formatPrice(active.spotAtCapture)}` : ''}
+        {age?.movePct != null ? ` (now ${age.movePct > 0 ? '+' : ''}${age.movePct.toFixed(1)}%)` : ''}
+        {active.capturedAt ? '.' : ''}
       </p>
 
       <AssetPicker asset={asset} setAsset={setAsset} />
@@ -197,7 +204,15 @@ export default function LiquidationLevelsTracker({ btcPrice, btcPriceError, ethP
         </div>
       )}
 
-      {hitCount > 0 && (
+      {age?.stale && (
+        <div style={{ background: '#1E1B14', border: `1px solid ${AMBER}`, borderRadius: 6, padding: 12, color: AMBER, fontSize: 12, marginBottom: 14, lineHeight: 1.5 }}>
+          <strong>Out of date</strong> — this map was read off a screenshot {age.ageDays} days ago, longer than a{' '}
+          {active.label.toLowerCase()} view stays current, and {asset} has moved {Math.abs(age.movePct ?? 0).toFixed(1)}% since.
+          Treat these levels as history, not current liquidity — send a fresh screenshot to refresh them.
+        </div>
+      )}
+
+      {hitCount > 0 && !age?.stale && (
         <div style={{ background: '#1E1B14', border: `1px solid ${AMBER}`, borderRadius: 6, padding: 12, color: AMBER, fontSize: 12, marginBottom: 14 }}>
           <strong>Liquidation map update required</strong> — {hitCount} level{hitCount === 1 ? '' : 's'} hit
           on this horizon since it was captured. Send a fresh screenshot to refresh it.
@@ -217,7 +232,7 @@ export default function LiquidationLevelsTracker({ btcPrice, btcPriceError, ethP
               style={{
                 display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px',
                 background: CARD_BG, border: `1px solid ${hit ? CARD_BORDER : color}`, borderRadius: 4,
-                opacity: hit ? 0.5 : 1,
+                opacity: hit ? 0.5 : age?.stale ? 0.7 : 1,
               }}
             >
               <span style={{ fontSize: 10, color, textTransform: 'uppercase', width: 46, flexShrink: 0 }}>
