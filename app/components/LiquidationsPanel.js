@@ -44,7 +44,51 @@ function formatDate(iso) {
   return new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
 
-export default function LiquidationsPanel({ data }) {
+const WINDOW_LABELS = { '1h': 'Last 1h', '4h': 'Last 4h', '12h': 'Last 12h', '24h': 'Last 24h' };
+const venueName = (v) => ({ okx: 'OKX', bybit: 'Bybit', hyperliquid: 'Hyperliquid', binance: 'Binance' }[v] || v);
+
+// Trailing-window realized liquidations from CryptoDataAPI, under the daily
+// Coinglass view: what's been forced out in the last few hours, which the
+// UTC daily bars can't show until the day closes.
+function RollingWindows({ asset, recent, recentError }) {
+  if (recentError) {
+    return <p style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 14 }}>Rolling windows unavailable this refresh: {recentError}</p>;
+  }
+  if (!recent) return null;
+  const r = recent.liquidations?.[asset];
+  if (!r) {
+    const gated = (recent.unavailable || []).some((u) => u.kind === 'liquidations' && u.symbol === asset);
+    return (
+      <p style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 14 }}>
+        {gated ? `Rolling ${asset} windows aren't on the current CryptoDataAPI plan (free covers BTC).` : `No rolling ${asset} windows this refresh.`}
+      </p>
+    );
+  }
+  const venues = r.venues.map(venueName).join(', ');
+  const excludes = r.excludes.map(venueName).join(', ');
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div style={{ fontSize: 10, color: TEXT_MUTED, marginBottom: 6 }}>
+        Rolling windows — {venues}{excludes ? ` (excludes ${excludes}, so totals run low)` : ''}, via CryptoDataAPI
+      </div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {r.windows.map((w) => (
+          <div key={w.window} style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: '8px 10px', flex: '1 1 120px' }}>
+            <div style={{ fontSize: 10, color: TEXT_MUTED }}>{WINDOW_LABELS[w.window] || w.window}</div>
+            <div style={{ fontSize: 13, fontWeight: 600, marginTop: 3, fontFamily: 'ui-monospace, monospace' }}>
+              <span style={{ color: LOSS }}>{formatUsdAbs(w.longUsd)}</span>
+              <span style={{ color: TEXT_MUTED, fontSize: 11 }}> L / </span>
+              <span style={{ color: GAIN }}>{formatUsdAbs(w.shortUsd)}</span>
+              <span style={{ color: TEXT_MUTED, fontSize: 11 }}> S</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export default function LiquidationsPanel({ data, recent: recentWindows, recentError }) {
   const [asset, setAsset] = useState('BTC');
 
   if (!data) {
@@ -113,6 +157,8 @@ export default function LiquidationsPanel({ data }) {
           </div>
         </div>
       </div>
+
+      <RollingWindows asset={asset} recent={recentWindows} recentError={recentError} />
 
       <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 3 }}>
         {recent.map((d) => {
