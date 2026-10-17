@@ -154,6 +154,11 @@ export default function HyperliquidPositioning({ data, error }) {
             </p>
           )}
           <Picker asset={asset} setAsset={setAsset} />
+          {p?.asOf && (
+            <div style={{ fontSize: 10, color: TEXT_MUTED, margin: '-6px 0 8px' }}>
+              Positions as of {new Date(p.asOf).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })} UTC
+            </div>
+          )}
           <div style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: '6px 12px' }}>
             {p ? (
               p.rows.map((row) => <PositionRow key={row.key} row={row} />)

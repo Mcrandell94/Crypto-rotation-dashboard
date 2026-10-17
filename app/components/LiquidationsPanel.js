@@ -71,6 +71,7 @@ function RollingWindows({ asset, recent, recentError }) {
     <div style={{ marginTop: 14 }}>
       <div style={{ fontSize: 10, color: TEXT_MUTED, marginBottom: 6 }}>
         Rolling windows — {venues}{excludes ? ` (excludes ${excludes}, so totals run low)` : ''}, via CryptoDataAPI
+        {r.asOf && `, as of ${new Date(r.asOf).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })} UTC`}
       </div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {r.windows.map((w) => (
