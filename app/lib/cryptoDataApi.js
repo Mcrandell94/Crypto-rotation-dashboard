@@ -53,3 +53,76 @@ export function takerLegs(json, symbol) {
   walk(entry);
   return legs.length ? { window: '4h', legs } : null;
 }
+
+// --- Pro: Hyperliquid positioning (accounts >= $100k) -------------------
+
+const TYPE_ROWS = [
+  ['whale', 'Whales', 'by_type'],
+  ['smart_money', 'Smart money', 'by_tag'],
+  ['high_leverage', 'High leverage', 'by_tag'],
+  ['market_maker', 'Market makers', 'by_type'],
+  ['other', 'Everyone else', 'by_type'],
+  ['all', 'All accounts', 'by_type'],
+];
+
+// /api/v1/quant/positioning?symbol=X: { coins: { X: { mark, positions_as_of,
+//   by_type: { market_maker|whale|other|all: { long_usd, short_usd, net_usd,
+//   n_accounts } }, by_tag: { smart_money, high_leverage } } } }.
+// by_type classes sum to `all`; by_tag groups overlap them.
+export function positioningOf(json, symbol) {
+  const c = json?.coins?.[symbol];
+  if (!c) return null;
+  const rows = TYPE_ROWS.map(([key, label, group]) => {
+    const r = c[group]?.[key];
+    if (!r) return null;
+    return { key, label, longUsd: num(r.long_usd), shortUsd: num(r.short_usd), netUsd: num(r.net_usd), nAccounts: num(r.n_accounts) };
+  }).filter((r) => r && r.longUsd != null && r.shortUsd != null);
+  if (!rows.length) return null;
+  return { mark: num(c.mark), rows, asOf: num(c.positions_as_of) ? new Date(c.positions_as_of).toISOString() : null };
+}
+
+// /api/v1/quant/whales: the whole >= $100k book in one read.
+export function whaleSummaryOf(json) {
+  const s = json?.summary;
+  if (!s) return null;
+  return {
+    accounts: num(s.accounts_tracked),
+    longPct: num(s.long_pct),
+    longShortRatio: num(s.long_short_ratio),
+    netBias: s.net_bias || null,
+    longUsd: num(s.total_long_usd),
+    shortUsd: num(s.total_short_usd),
+  };
+}
+
+// --- Pro: dealer gamma (Hyperliquid market-maker accounts) --------------
+
+// /api/v1/quant/gex?symbol=X: { coins: { X: { mark, mm_net_delta,
+//   mm_n_accounts, gamma_flip, dist_to_flip_pct, levels: [{ price,
+//   dist_pct, total_usd, side, n_accounts }], regime: { state, score,
+//   confidence, coverage, rationale, since } } } }.
+// `levels` are the nearest market-maker liquidation clusters either side
+// of the mark (side = which positions liquidate there).
+export function gexOf(json, symbol, perSide = 2) {
+  const c = json?.coins?.[symbol];
+  if (!c || !c.regime?.state) return null;
+  const levels = (c.levels || [])
+    .map((l) => ({ price: num(l.price), distPct: num(l.dist_pct), totalUsd: num(l.total_usd), side: l.side, nAccounts: num(l.n_accounts) }))
+    .filter((l) => l.price != null && l.distPct != null && l.totalUsd != null);
+  const byDist = (a, b) => Math.abs(a.distPct) - Math.abs(b.distPct);
+  return {
+    mark: num(c.mark),
+    state: c.regime.state,
+    score: num(c.regime.score),
+    confidence: num(c.regime.confidence),
+    coverage: c.regime.coverage || null,
+    rationale: c.regime.rationale || null,
+    since: c.regime.since || null,
+    flipPrice: num(c.gamma_flip),
+    distToFlipPct: num(c.dist_to_flip_pct),
+    mmNetDeltaUsd: num(c.mm_net_delta),
+    mmAccounts: num(c.mm_n_accounts),
+    above: levels.filter((l) => l.distPct > 0).sort(byDist).slice(0, perSide),
+    below: levels.filter((l) => l.distPct < 0).sort(byDist).slice(0, perSide),
+  };
+}

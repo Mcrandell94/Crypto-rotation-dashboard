@@ -53,7 +53,7 @@ export default function TakerBuySell({ data, error }) {
                   t.legs.map((l) => <Leg key={l.exchange} {...l} />)
                 ) : (
                   <p style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 8 }}>
-                    {gated ? "Not on the current CryptoDataAPI plan." : 'No reading this refresh.'}
+                    {gated ? 'Not on the current CryptoDataAPI plan.' : 'No reading this refresh.'}
                   </p>
                 )}
               </div>

@@ -11,9 +11,10 @@
 // spec (cryptodataapi.com/api/openapi.json) and live responses on
 // 2026-10-17; parsing in lib/cryptoDataApi.
 //
-// The free tier allows 1,000 requests/day and 10/minute. Each URL below is
-// fetched at most once per REVALIDATE seconds (shared Data Cache), so four
-// URLs stay under ~400 calls/day however many people load the page.
+// The free tier covers BTC (1,000 requests/day); Pro adds ETH's rolling
+// liquidations (10,000/day, 30/minute). Each URL below is fetched at most
+// once per REVALIDATE seconds (shared Data Cache), so four URLs stay under
+// ~1,200 calls/day however many people load the page.
 
 import { withCdnCache } from '../../lib/cdnCache';
 import { liquidationWindows, takerLegs } from '../../lib/cryptoDataApi';
@@ -22,7 +23,7 @@ export const dynamic = 'force-dynamic';
 
 const BASE = 'https://cryptodataapi.com/api/v1/market-intelligence';
 const ASSETS = ['BTC', 'ETH'];
-const REVALIDATE = 900;
+const REVALIDATE = 300;
 
 async function getJson(path, key) {
   const res = await fetch(`${BASE}${path}`, {

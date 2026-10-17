@@ -19,6 +19,7 @@ import MarketNews from './components/MarketNews';
 import OpenInterestPanel from './components/OpenInterestPanel';
 import TakerFlow from './components/TakerFlow';
 import TakerBuySell from './components/TakerBuySell';
+import HyperliquidPositioning from './components/HyperliquidPositioning';
 import LiquidationsPanel from './components/LiquidationsPanel';
 import LiquidationHeatmap from './components/LiquidationHeatmap';
 import LiveLiquidationFeed from './components/LiveLiquidationFeed';
@@ -548,6 +549,8 @@ export default function DashboardHome() {
           )}
 
           <TakerBuySell data={levels.derivativesFlowData} error={levels.derivativesFlowError} />
+
+          <HyperliquidPositioning data={levels.positioningData} error={levels.positioningError} />
 
           {rotation.fundingError ? (
             <div style={{ marginTop: 32, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>

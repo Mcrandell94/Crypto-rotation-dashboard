@@ -61,7 +61,7 @@ function RollingWindows({ asset, recent, recentError }) {
     const gated = (recent.unavailable || []).some((u) => u.kind === 'liquidations' && u.symbol === asset);
     return (
       <p style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 14 }}>
-        {gated ? `Rolling ${asset} windows aren't on the current CryptoDataAPI plan (free covers BTC).` : `No rolling ${asset} windows this refresh.`}
+        {gated ? `Rolling ${asset} windows need a CryptoDataAPI Pro key (free covers BTC).` : `No rolling ${asset} windows this refresh.`}
       </p>
     );
   }
