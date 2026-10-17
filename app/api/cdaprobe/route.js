@@ -5,14 +5,7 @@
 export const dynamic = 'force-dynamic';
 
 const BASE = 'https://cryptodataapi.com';
-const PATHS = [
-  '/api/v1/auth/keys/me',
-  '/api/v1/market-intelligence/liquidations?symbol=ETH',
-  '/api/v1/quant/gex?symbol=BTC',
-  '/api/v1/quant/whales',
-  '/api/v1/quant/positioning?symbol=BTC',
-  '/api/v1/quant/positioning/ladder?symbol=BTC',
-];
+const PATHS = ['/api/v1/quant/gex?symbol=BTC', '/api/v1/quant/gex?symbol=ETH'];
 
 export async function GET() {
   const key = (process.env.CRYPTODATAAPI_API_KEY || '').trim();
@@ -28,11 +21,20 @@ export async function GET() {
         delete body.email;
         delete body.key_prefix;
         delete body.upgrade;
+        delete body.meta;
+        delete body.regime_legend;
+        // keep the shape readable: first and last few bins of any long array
+        const trim = (v) => {
+          if (Array.isArray(v)) return v.length > 8 ? [...v.slice(0, 4).map(trim), `…${v.length - 8} more…`, ...v.slice(-4).map(trim)] : v.map(trim);
+          if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, trim(x)]));
+          return v;
+        };
+        body = trim(body);
       }
     } catch {
       body = text.slice(0, 200);
     }
-    results.push({ path: p, status: res.status, sample: JSON.stringify(body).slice(0, 3000) });
+    results.push({ path: p, status: res.status, sample: JSON.stringify(body).slice(0, 6000) });
     await new Promise((r) => setTimeout(r, 400));
   }
   return Response.json({ results, at: new Date().toISOString() });
