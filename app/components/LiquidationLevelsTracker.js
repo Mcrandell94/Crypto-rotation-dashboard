@@ -204,15 +204,7 @@ export default function LiquidationLevelsTracker({ btcPrice, btcPriceError, ethP
         </div>
       )}
 
-      {age?.stale && (
-        <div style={{ background: '#1E1B14', border: `1px solid ${AMBER}`, borderRadius: 6, padding: 12, color: AMBER, fontSize: 12, marginBottom: 14, lineHeight: 1.5 }}>
-          <strong>Out of date</strong> — this map was read off a screenshot {age.ageDays} days ago, longer than a{' '}
-          {active.label.toLowerCase()} view stays current, and {asset} has moved {Math.abs(age.movePct ?? 0).toFixed(1)}% since.
-          Treat these levels as history, not current liquidity — send a fresh screenshot to refresh them.
-        </div>
-      )}
-
-      {hitCount > 0 && !age?.stale && (
+      {hitCount > 0 && (
         <div style={{ background: '#1E1B14', border: `1px solid ${AMBER}`, borderRadius: 6, padding: 12, color: AMBER, fontSize: 12, marginBottom: 14 }}>
           <strong>Liquidation map update required</strong> — {hitCount} level{hitCount === 1 ? '' : 's'} hit
           on this horizon since it was captured. Send a fresh screenshot to refresh it.
@@ -232,7 +224,7 @@ export default function LiquidationLevelsTracker({ btcPrice, btcPriceError, ethP
               style={{
                 display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px',
                 background: CARD_BG, border: `1px solid ${hit ? CARD_BORDER : color}`, borderRadius: 4,
-                opacity: hit ? 0.5 : age?.stale ? 0.7 : 1,
+                opacity: hit ? 0.5 : 1,
               }}
             >
               <span style={{ fontSize: 10, color, textTransform: 'uppercase', width: 46, flexShrink: 0 }}>

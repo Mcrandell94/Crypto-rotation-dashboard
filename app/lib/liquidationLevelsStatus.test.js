@@ -30,12 +30,10 @@ test('levels live price is already past count as crossed', () => {
   assert.equal(crossedNow(medium.levels[0], null, medium.spotAtCapture), false);
 });
 
-test('a horizon past its window is stale, with the move since capture', () => {
+test('a horizon reports its age and the move since capture', () => {
   const a = horizonAge(medium, 81208, Date.parse('2026-10-17T16:30:00Z'));
   assert.equal(a.ageDays, 26);
-  assert.equal(a.stale, true);
   assert.equal(a.movePct.toFixed(1), '-6.2');
-  const fresh = horizonAge(medium, 86000, Date.parse('2026-09-24T00:00:00Z'));
-  assert.equal(fresh.stale, false);
+  assert.equal(horizonAge(medium, null, Date.parse('2026-09-21T20:00:00Z')).movePct, null);
   assert.equal(horizonAge({ key: 'mediumTerm' }, 1), null);
 });
