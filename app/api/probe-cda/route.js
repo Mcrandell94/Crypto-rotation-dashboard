@@ -4,6 +4,7 @@
 
 export const dynamic = 'force-dynamic';
 
+const s = (v, n) => String(JSON.stringify(v ?? null)).slice(0, n);
 const BASE = 'https://cryptodataapi.com/api/v1';
 
 async function hit(path, key) {
@@ -29,15 +30,15 @@ export async function GET() {
     if (r.status === 200 && r.json) {
       const d = r.json.data ?? r.json;
       const coin = d?.[sym] ?? d;
-      out.ladder[sym] = { status: 200, keys: Object.keys(coin || {}).slice(0, 30), bins: Array.isArray(coin?.bins) ? coin.bins.length : null, sample: JSON.stringify(coin?.bins?.[0] ?? coin).slice(0, 300) };
+      out.ladder[sym] = { status: 200, keys: Object.keys(coin || {}).slice(0, 30), bins: Array.isArray(coin?.bins) ? coin.bins.length : null, sample: s(coin?.bins?.[0] ?? coin, 300) };
     } else {
-      out.ladder[sym] = { status: r.status, detail: (r.json?.detail ? JSON.stringify(r.json.detail) : r.text).slice(0, 400) };
+      out.ladder[sym] = { status: r.status, detail: (r.json?.detail ? s(r.json.detail, 400) : r.text.slice(0, 400)) };
     }
   }
   const g = await hit('/quant/gex?symbol=BTC', key);
   const gd = g.json?.data ?? g.json;
   const gc = gd?.BTC ?? gd;
   const prof = gc?.gamma_profile;
-  out.gexProfile = { status: g.status, type: Array.isArray(prof) ? `array(${prof.length})` : typeof prof, sample: JSON.stringify(Array.isArray(prof) ? prof.slice(0, 2) : prof).slice(0, 400) };
+  out.gexProfile = { status: g.status, type: Array.isArray(prof) ? `array(${prof.length})` : typeof prof, sample: s(Array.isArray(prof) ? prof.slice(0, 2) : prof, 400) };
   return Response.json(out);
 }
