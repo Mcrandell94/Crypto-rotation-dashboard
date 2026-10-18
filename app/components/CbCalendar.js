@@ -21,6 +21,8 @@ const HIGH = LOSS;
 const MEDIUM = AMBER;
 const LOW = GAIN;
 const DAY_MS = 24 * 60 * 60 * 1000;
+// How long a meeting or expiry stays on the calendar after it has passed.
+const PASSED_SHOWN_MS = 3 * DAY_MS;
 
 function fmtDateTime(date, timeZone) {
   return date.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone });
@@ -430,13 +432,15 @@ export default function CbCalendar({ optionsData, fedOddsData, fedOddsError, con
   cutoff.setMonth(cutoff.getMonth() + horizonMonths);
 
   // Keep the calendar focused: everything still-upcoming within the
-  // window, plus the last couple of resolved meetings for context.
+  // window, plus meetings and expiries that passed in the last 3 days.
   const upcoming = events.filter(
     (e) => !e.resolved && (e.category === 'legislative' || e.date <= cutoff)
   );
-  // Past data releases are dropped — the print itself is what matters, and
-  // the Macro tab already shows it.
-  const recentlyResolved = events.filter((e) => e.resolved && e.category !== 'economic-data' && e.category !== 'closure' && e.category !== 'fed-operation').slice(-3);
+  // Past data releases, closures and Fed operations are dropped right away
+  // — the print itself is what matters, and the Macro tab already shows it.
+  const recentlyResolved = events.filter(
+    (e) => e.resolved && now - e.date <= PASSED_SHOWN_MS && e.category !== 'economic-data' && e.category !== 'closure' && e.category !== 'fed-operation'
+  );
   const shown = [...recentlyResolved, ...upcoming];
   const firstFedOperation = shown.find((e) => e.category === 'fed-operation');
   if (firstFedOperation) firstFedOperation.showPlan = true;
@@ -455,6 +459,7 @@ export default function CbCalendar({ optionsData, fedOddsData, fedOddsError, con
         Treasury bill purchases for the current monthly period (live, from the NY Fed Desk&apos;s own published schedule), and crypto
         market-structure legislation (live, from Congress.gov's own API), scoped to the window above.
         Legislative tracking always shows regardless of window — it's a live status check, not a scheduled date.
+        Dates that have passed drop off within 3 days.
       </p>
       <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '0 0 14px', lineHeight: 1.5 }}>
         Severity is a judgment call, not an official rating — for Fed meetings it's driven by
