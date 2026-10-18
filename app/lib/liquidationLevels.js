@@ -1,27 +1,19 @@
-// Hand-maintained from liquidation heatmap screenshots the user uploads
-// (Coinglass, BitcoinCounterFlow, or similar — whatever they're looking at).
-// There's no working free live API for this data (see this session's history
-// with Coinglass's $699+/mo Professional gate, BitcoinCounterFlow's
-// Nakamoto PRO key-generation gate, and OpenMarket.xyz's "included in free
-// tier" claim turning out to reject the actual heatmap type) — so instead of
-// chasing another provider, price levels get read off a screenshot by eye
-// and entered here directly.
+// Levels for the Liquidation Levels Tracker, per asset (BTC, ETH — the
+// tracker has an asset picker), then per horizon. Each horizon is tracked
+// (and gets its own "map update required" banner) separately, since a hit
+// on a 1-day magnet is a today-event and a hit on a 1-year magnet is a much
+// bigger structural move:
+//   live    — filled at runtime from LiqWall's live liquidation map
+//             (/api/liquidationmap); no hand-entered levels
+//   day1, day3, week1, month1, month3, year1
+//           — hand-maintained, read by eye off liquidation heatmap
+//             screenshots the user sends
 //
-// Organized per-asset (BTC, ETH — LiquidationLevelsTracker has an asset
-// picker), then within each asset as independent horizons, since a hit on
-// a near-term magnet is a today-event and a hit on a 1-year magnet is a
-// much bigger structural move — each is tracked (and its own "map update
-// required" banner) separately in LiquidationLevelsTracker:
-//   shortTerm  — near-term magnets, from currently-open positions
-//   mediumTerm — magnets over the past week
-//   monthTerm  — magnets over the past month
-//   longTerm   — structural magnets, read off a 1-year heatmap
-//
-// Update a horizon's capturedAt/spotAtCapture/source/levels wholesale when
-// a new screenshot for that horizon comes in (don't merge/diff against the
-// old set — a new screenshot is a new snapshot, not an update to the old
-// one). The other horizon is untouched unless a new screenshot for it also
-// comes in.
+// Update a hand-entered horizon's capturedAt/spotAtCapture/source/levels
+// wholesale when a new screenshot for that horizon comes in (don't
+// merge/diff against the old set — a new screenshot is a new snapshot, not
+// an update to the old one). Other horizons are untouched unless a new
+// screenshot for them also comes in.
 //
 // levels entries:
 //   { kind: 'level', price, side: 'long' | 'short', label }
@@ -36,170 +28,224 @@
 // spotAtCapture it was on when captured (long below, short above) — that
 // relationship is what LiquidationLevelsTracker uses to decide whether
 // current price has crossed it.
+//
+// Current hand-entered set: Datawallet's liquidation heatmap, aggregated
+// across exchanges, one screenshot per timeframe (1D, 3D, 1W, 1M, 3M, 1Y)
+// for each asset, all sent 2026-10-18 around 15:00 UTC. Datawallet's own
+// note: "Liquidation
+// data is estimated based on open interest and common leverage ratios" —
+// a model, like every heatmap of this kind. Bands that ended on the chart
+// (price already traded through them) are left out. Eyeballed pixel read
+// against each chart's price axis — treat exact prices as approximate
+// (about ±0.5% on the short views, ±1% on the 1-year view).
 
-// BTC horizons — replaced wholesale with a fresh Binance BTC/USDT capture
-// (Coinglass): two chart types per horizon, the per-price liquidation
-// LEVERAGE distribution (bar height = leverage volume from currently-open
-// positions, split into 5x/10x/25x/50x/100x bands, with running cumulative
-// long/short lines) plus Binance's own liquidation HEATMAP (color
-// intensity over time, with its own aggregated per-price side panel).
-// Spot has moved meaningfully since the previous (BCF/multi-exchange)
-// capture — ~$79-81K then, ~$86.5K now — so this is a fresh read, not a
-// diff against the old levels. All four horizons came from Binance
-// specifically this round, not a cross-exchange comparison, so
-// "confirmed" here means "shows up on both the bar chart AND the heatmap
-// for that horizon," not "confirmed across multiple exchanges." $84K and
-// $82K-ish clusters recur across every single horizon (24h through
-// 1-year) — the closest thing to a standout magnet in this dataset.
-// Eyeballed pixel/bar-height read, same as every other source here —
-// treat exact prices as approximate (±0.5-1%). The short (above-spot)
-// side stays thin at the shorter horizons (24h/1-week/1-month) — real
-// short-liquidation clusters only show up once the 1-year view is wide
-// enough to include price action from well above current spot.
-const BTC_CAPTURED_AT = '2026-09-21T19:15:00Z';
-const SHORT_SPOT = 86516;
-const MEDIUM_SPOT = 86533;
-const MONTH_SPOT = 86571;
-const LONG_SPOT = 86533;
+const DATAWALLET = 'Datawallet liquidation heatmap, aggregated across exchanges (estimated from open interest and common leverage ratios)';
+const CAPTURED_AT = '2026-10-18T15:00:00Z';
+
+const LIVE = {
+  key: 'live',
+  label: 'Live',
+  live: true,
+  levels: [],
+};
 
 const BTC_HORIZONS = {
-  shortTerm: {
-    key: 'shortTerm',
-    label: 'Near-Term (live leverage map)',
-    capturedAt: BTC_CAPTURED_AT,
-    spotAtCapture: SHORT_SPOT,
-    source: "Coinglass Binance BTC/USDT liquidation leverage distribution + Binance's own liquidation heatmap, 24h view",
+  live: LIVE,
+  day1: {
+    key: 'day1',
+    label: '1-Day',
+    capturedAt: CAPTURED_AT,
+    spotAtCapture: 81147,
+    source: `${DATAWALLET}, 1-day view`,
     levels: [
-      { kind: 'level', price: 88500, side: 'short', label: 'Only thin/moderate short-side liquidity has built up above spot so far at this timeframe — light 10x-25x bars, no dominant single level yet' },
-      { kind: 'level', price: 86200, side: 'long', label: 'Thin band right below spot, heatmap' },
-      { kind: 'level', price: 84000, side: 'long', label: 'Dominant, brightest cluster — tallest bar on the leverage chart AND the brightest, longest band on the heatmap' },
-      { kind: 'level', price: 82600, side: 'long', label: 'Secondary cluster, heatmap' },
+      { kind: 'level', price: 83350, side: 'short', label: 'Pink band, building since about 07:30 UTC' },
+      { kind: 'level', price: 82500, side: 'short', label: 'Brightest band above price on the 1-day map' },
+      { kind: 'level', price: 82150, side: 'short', label: 'Band just under the $82.5K one' },
+      { kind: 'level', price: 80900, side: 'long', label: 'Pink band just under price' },
+      { kind: 'level', price: 80500, side: 'long', label: 'Brightest spot on the whole 1-day map, at the right edge' },
+      { kind: 'level', price: 80300, side: 'long', label: 'Band under the $80.5K one' },
+      { kind: 'level', price: 79500, side: 'long', label: 'Cluster of fainter bands, about $79.3K–$79.7K' },
     ],
   },
-  mediumTerm: {
-    key: 'mediumTerm',
-    label: 'Medium-Term (7-day)',
-    capturedAt: BTC_CAPTURED_AT,
-    spotAtCapture: MEDIUM_SPOT,
-    source: "Coinglass Binance BTC/USDT liquidation leverage distribution + Binance's own liquidation heatmap, 7-day view",
+  day3: {
+    key: 'day3',
+    label: '3-Day',
+    capturedAt: CAPTURED_AT,
+    spotAtCapture: 81078,
+    source: `${DATAWALLET}, 3-day view`,
     levels: [
-      { kind: 'level', price: 84000, side: 'long', label: 'Cross-confirms the near-term horizon\'s dominant $84K cluster — visible on the 7-day heatmap too' },
-      { kind: 'level', price: 83000, side: 'long', label: 'Leverage-chart spike, ~$77M' },
-      { kind: 'level', price: 81000, side: 'long', label: 'Brightest, longest band on the 7-day heatmap — the single strongest feature in this horizon' },
-      { kind: 'level', price: 78300, side: 'long', label: 'Leverage-chart spike (~$82M) overlapping a heatmap band at the same level' },
+      { kind: 'level', price: 84000, side: 'short', label: 'Wide purple band, about $83.9K–$84.1K' },
+      { kind: 'level', price: 83250, side: 'short', label: 'Bright pink band, there since 16 Oct' },
+      { kind: 'level', price: 82750, side: 'short', label: 'Orange band, since 17 Oct' },
+      { kind: 'level', price: 82500, side: 'short', label: 'Brightest band on the 3-day map, at the right edge (18 Oct)' },
+      { kind: 'level', price: 80550, side: 'long', label: 'Pink band just under price' },
+      { kind: 'level', price: 80300, side: 'long', label: 'Bright band, since 17 Oct' },
+      { kind: 'level', price: 80000, side: 'long', label: 'Band at $80K' },
     ],
   },
-  monthTerm: {
-    key: 'monthTerm',
-    label: 'Monthly (1-month)',
-    capturedAt: BTC_CAPTURED_AT,
-    spotAtCapture: MONTH_SPOT,
-    source: "Coinglass Binance BTC/USDT liquidation leverage distribution + Binance's own liquidation heatmap, 1-month view",
+  week1: {
+    key: 'week1',
+    label: '7-Day',
+    capturedAt: CAPTURED_AT,
+    spotAtCapture: 81056,
+    source: `${DATAWALLET}, 1-week view`,
     levels: [
-      { kind: 'level', price: 84000, side: 'long', label: 'Cross-confirms the shorter horizons\' $84K cluster — still visible a month out, heatmap' },
-      { kind: 'level', price: 82100, side: 'long', label: 'Single tallest spike on the whole 1-month leverage chart, ~$150M — the dominant level at this horizon' },
-      { kind: 'level', price: 81000, side: 'long', label: 'Brightest, longest band on the 1-month heatmap, same level as the 7-day horizon\'s dominant band' },
-      { kind: 'level', price: 78900, side: 'long', label: 'Leverage-chart cluster spanning roughly $78.3K-$79.4K' },
-      { kind: 'level', price: 77300, side: 'long', label: 'Leverage-chart spike, ~$100M+' },
+      { kind: 'level', price: 85400, side: 'short', label: 'Purple bands, about $85.2K–$85.6K' },
+      { kind: 'level', price: 84550, side: 'short', label: 'Brightest band on the 7-day map, there since 13 Oct' },
+      { kind: 'level', price: 83700, side: 'short', label: 'Pink band' },
+      { kind: 'level', price: 83250, side: 'short', label: 'Second-brightest band, since 16 Oct' },
+      { kind: 'level', price: 82450, side: 'short', label: 'Pink band' },
+      { kind: 'level', price: 80100, side: 'long', label: 'Pink band near $80K' },
+      { kind: 'level', price: 79200, side: 'long', label: 'Purple band' },
+      { kind: 'level', price: 78300, side: 'long', label: 'Purple band' },
     ],
   },
-  longTerm: {
-    key: 'longTerm',
-    label: '1-Year (structural)',
-    capturedAt: BTC_CAPTURED_AT,
-    spotAtCapture: LONG_SPOT,
-    source: "Coinglass Binance BTC/USDT liquidation leverage distribution + Binance's own liquidation heatmap, 1-year view",
+  month1: {
+    key: 'month1',
+    label: '1-Month',
+    capturedAt: CAPTURED_AT,
+    spotAtCapture: 81084,
+    source: `${DATAWALLET}, 1-month view`,
     levels: [
-      { kind: 'level', price: 100000, side: 'short', label: 'Long-standing, historical band on the 1-year heatmap' },
-      { kind: 'level', price: 96300, side: 'short', label: 'Leverage-chart spike above spot' },
-      { kind: 'level', price: 94600, side: 'short', label: 'Leverage-chart spike above spot' },
-      { kind: 'level', price: 93300, side: 'short', label: 'Leverage-chart spike above spot' },
-      { kind: 'level', price: 90600, side: 'short', label: 'Leverage-chart spike closest to spot on the short side' },
-      { kind: 'level', price: 82300, side: 'long', label: 'Single tallest spike across the ENTIRE dataset, ~$330M on the 1-year leverage chart — by far the most dominant level found at any horizon' },
-      { kind: 'level', price: 80000, side: 'long', label: 'Bright, recent band on the 1-year heatmap' },
-      { kind: 'level', price: 70000, side: 'long', label: 'Leverage-chart cluster spanning roughly $68.9K-$70.8K, older/deeper price action' },
-      { kind: 'level', price: 60000, side: 'long', label: 'Major long-standing support band on the 1-year heatmap, from well before this capture\'s price range' },
+      { kind: 'level', price: 87500, side: 'short', label: 'Brightest band on the 1-month map, there since 2 Oct' },
+      { kind: 'level', price: 85500, side: 'short', label: 'Band' },
+      { kind: 'level', price: 84700, side: 'short', label: 'Bright orange band, since about 12 Oct' },
+      { kind: 'level', price: 79600, side: 'long', label: 'Pink band, since 14 Oct — the main band below price' },
+    ],
+  },
+  month3: {
+    key: 'month3',
+    label: '3-Month',
+    capturedAt: CAPTURED_AT,
+    spotAtCapture: 81079,
+    source: `${DATAWALLET}, 3-month view`,
+    levels: [
+      { kind: 'level', price: 87600, side: 'short', label: 'Pink band, since early October' },
+      { kind: 'level', price: 84700, side: 'short', label: 'Pink band, since about 9 Oct' },
+      { kind: 'level', price: 79700, side: 'long', label: 'Pink band just under price' },
+      { kind: 'level', price: 75000, side: 'long', label: 'Bands about $74.7K–$75.0K, since late August' },
+      { kind: 'level', price: 67400, side: 'long', label: 'Bands' },
+      { kind: 'level', price: 64500, side: 'long', label: 'Bands' },
+      { kind: 'level', price: 62200, side: 'long', label: 'Brightest band on the 3-month map, since mid-August' },
+    ],
+  },
+  year1: {
+    key: 'year1',
+    label: '1-Year',
+    capturedAt: CAPTURED_AT,
+    spotAtCapture: 81130,
+    source: `${DATAWALLET}, 1-year view`,
+    levels: [
+      { kind: 'level', price: 112000, side: 'short', label: 'Long-standing band from last November\'s range' },
+      { kind: 'level', price: 104000, side: 'short', label: 'Band' },
+      { kind: 'level', price: 98300, side: 'short', label: 'Band' },
+      { kind: 'level', price: 93500, side: 'short', label: 'Band' },
+      { kind: 'level', price: 87500, side: 'short', label: 'Pink band from the September–October highs' },
+      { kind: 'level', price: 75000, side: 'long', label: 'Band' },
+      { kind: 'level', price: 69000, side: 'long', label: 'Band' },
+      { kind: 'level', price: 62000, side: 'long', label: 'Brightest band on the whole 1-year map, since August' },
+      { kind: 'level', price: 58000, side: 'long', label: 'Band near the bottom of the range' },
     ],
   },
 };
 
-// ETH horizons — same shape as BTC's. Source: Coinfuty's ETH liquidation
-// heatmap, "All exchanges" view — a genuine aggregate across ~17 venues
-// (Binance, OKX, Bybit, Bitfinex, Bitmex, Kraken, KuCoin, BingX, Coinbase,
-// Crypto.com, MEXC, Gate, Hyperliquid, HTX, Bitget, Lighter, Aster),
-// confirmed via the tool's own exchange picker. This is ONE already-
-// aggregated chart, not several independent per-exchange charts compared
-// against each other the way BCF's BTC reads were — so labeled as an
-// aggregate, not as cross-exchange-confirmed. Eyeballed pixel-intensity
-// read, same as every other heatmap source here — treat exact prices as
-// approximate (±0.5-1%).
-//
-// Second, cleaner capture — replaces an earlier pass whose screenshots
-// didn't show the timeframe selector clearly. These show it explicitly
-// (1Y, 1M, 1W, 24H, 4H), so shortTerm now blends the 4H and 24H views
-// (near-identical, cross-confirmed) and longTerm is populated for the
-// first time. The standout: ~$2.2K is the dominant band on the 1-year,
-// 1-month, AND 1-week views — nearly unbroken across the whole year,
-// the ETH analog of BTC's $60.5K super-magnet.
-const ETH_SOURCE = "Coinfuty — ETH liquidation heatmap, \"All exchanges\" aggregate across ~17 venues (Binance, OKX, Bybit, Bitfinex, Bitmex, Kraken, KuCoin, BingX, Coinbase, Crypto.com, MEXC, Gate, Hyperliquid, HTX, Bitget, Lighter, Aster)";
-const ETH_SPOT = 2670;
-const ETH_CAPTURED_AT = '2026-09-21T01:33:00Z';
-
 const ETH_HORIZONS = {
-  shortTerm: {
-    key: 'shortTerm',
-    label: 'Near-Term (live leverage map)',
-    capturedAt: ETH_CAPTURED_AT,
-    spotAtCapture: ETH_SPOT,
-    source: ETH_SOURCE + ' — 4H and 24H views, near-identical',
+  live: LIVE,
+  day1: {
+    key: 'day1',
+    label: '1-Day',
+    capturedAt: CAPTURED_AT,
+    spotAtCapture: 2380,
+    source: `${DATAWALLET}, 1-day view`,
     levels: [
-      { kind: 'level', price: 2750, side: 'short', label: 'Thin but consistent line, both 4H and 24H windows' },
-      { kind: 'level', price: 2700, side: 'short', label: 'Dominant, wide, solid band right above spot — the most solid feature in both near-term windows' },
-      { kind: 'level', price: 2550, side: 'long', label: 'Solid, bright band below spot, both windows' },
-      { kind: 'level', price: 2350, side: 'long', label: 'Bright band, both windows' },
-      { kind: 'level', price: 2300, side: 'long', label: 'Bright, wide, dominant band, both windows' },
+      { kind: 'level', price: 2451, side: 'short', label: 'Pink band' },
+      { kind: 'level', price: 2444, side: 'short', label: 'Brightest band on the 1-day map, at the right edge' },
+      { kind: 'level', price: 2434, side: 'short', label: 'Pink bands, about $2,430–$2,437' },
+      { kind: 'level', price: 2400, side: 'short', label: 'Band at $2,400' },
+      { kind: 'level', price: 2369, side: 'long', label: 'Bright band just under price' },
+      { kind: 'level', price: 2354, side: 'long', label: 'Red-orange band, since about 21:00 UTC on 17 Oct' },
+      { kind: 'level', price: 2345, side: 'long', label: 'Pink band' },
     ],
   },
-  mediumTerm: {
-    key: 'mediumTerm',
-    label: 'Medium-Term (1-week)',
-    capturedAt: ETH_CAPTURED_AT,
-    spotAtCapture: ETH_SPOT,
-    source: ETH_SOURCE + ' — 1-week view',
+  day3: {
+    key: 'day3',
+    label: '3-Day',
+    capturedAt: CAPTURED_AT,
+    spotAtCapture: 2377,
+    source: `${DATAWALLET}, 3-day view`,
     levels: [
-      { kind: 'level', price: 2780, side: 'short', label: 'Bright band above spot, strongest in the recent portion of the week' },
-      { kind: 'level', price: 2700, side: 'short', label: 'Band tight to spot' },
-      { kind: 'zone', zoneLow: 2400, zoneHigh: 2520, label: 'Thinner, faint stretch between the near-spot bands and the $2.3K band, most of the week' },
-      { kind: 'level', price: 2300, side: 'long', label: 'Bright, wide, persistent band spanning most of the week' },
-      { kind: 'level', price: 2200, side: 'long', label: 'Extremely bright, dominant band at the bottom — matches the monthly and yearly views exactly' },
+      { kind: 'level', price: 2525, side: 'short', label: 'Purple bands' },
+      { kind: 'level', price: 2500, side: 'short', label: 'Orange band, since 16 Oct' },
+      { kind: 'level', price: 2466, side: 'short', label: 'Pink band' },
+      { kind: 'level', price: 2452, side: 'short', label: 'Brightest band on the 3-day map (18 Oct)' },
+      { kind: 'level', price: 2385, side: 'short', label: 'Pink band just above price' },
+      { kind: 'level', price: 2369, side: 'long', label: 'Bright band just under price' },
+      { kind: 'level', price: 2347, side: 'long', label: 'Orange band, since 22:00 UTC on 17 Oct' },
     ],
   },
-  monthTerm: {
-    key: 'monthTerm',
-    label: 'Monthly (1-month)',
-    capturedAt: ETH_CAPTURED_AT,
-    spotAtCapture: ETH_SPOT,
-    source: ETH_SOURCE + ' — 1-month view',
+  week1: {
+    key: 'week1',
+    label: '7-Day',
+    capturedAt: CAPTURED_AT,
+    spotAtCapture: 2373,
+    source: `${DATAWALLET}, 1-week view`,
     levels: [
-      { kind: 'level', price: 2980, side: 'short', label: 'Weak-moderate band right at the top edge, recent period only — treat cautiously, possible edge effect' },
-      { kind: 'level', price: 2750, side: 'short', label: 'Very bright, dominant band just above spot, spans nearly the whole month' },
-      { kind: 'level', price: 2600, side: 'long', label: 'Solid band near/below spot' },
-      { kind: 'zone', zoneLow: 2400, zoneHigh: 2520, label: 'Thin, faint stretch between the $2.6K and $2.3K bands' },
-      { kind: 'level', price: 2300, side: 'long', label: 'Bright, wide, persistent band spanning nearly the whole month' },
-      { kind: 'level', price: 2200, side: 'long', label: 'The single most dominant band in this view — extremely bright and wide; also the dominant band on the 1-year view' },
+      { kind: 'level', price: 2584, side: 'short', label: 'Bright band, since 12 Oct' },
+      { kind: 'level', price: 2558, side: 'short', label: 'Brightest band on the 7-day map' },
+      { kind: 'level', price: 2534, side: 'short', label: 'Pink band' },
+      { kind: 'level', price: 2500, side: 'short', label: 'Bright band' },
+      { kind: 'level', price: 2450, side: 'short', label: 'Pink band' },
+      { kind: 'level', price: 2420, side: 'short', label: 'Pink band, since 16 Oct' },
+      { kind: 'level', price: 2348, side: 'long', label: 'Pink band under price' },
+      { kind: 'level', price: 2320, side: 'long', label: 'Band' },
     ],
   },
-  longTerm: {
-    key: 'longTerm',
-    label: '1-Year (structural)',
-    capturedAt: ETH_CAPTURED_AT,
-    spotAtCapture: ETH_SPOT,
-    source: ETH_SOURCE + ' — 1-year view',
+  month1: {
+    key: 'month1',
+    label: '1-Month',
+    capturedAt: CAPTURED_AT,
+    spotAtCapture: 2374,
+    source: `${DATAWALLET}, 1-month view`,
     levels: [
-      { kind: 'level', price: 3600, side: 'short', label: 'Moderate band, mid-year (Feb-May), faded by now' },
-      { kind: 'level', price: 2800, side: 'short', label: 'Solid, wide band just above spot, persistent since around May' },
-      { kind: 'level', price: 2200, side: 'long', label: "Dominant, nearly unbroken band spanning almost the entire year — by far the strongest magnet on the chart, the ETH analog of BTC's $60.5K super-magnet" },
-      { kind: 'level', price: 1700, side: 'long', label: 'Weaker patches near the bottom edge, mostly in the older (last Sep-early this year) portion of the chart' },
+      { kind: 'level', price: 2790, side: 'short', label: 'Brightest bands on the 1-month map, about $2,785–$2,800, since 2 Oct' },
+      { kind: 'level', price: 2740, side: 'short', label: 'Pink band' },
+      { kind: 'level', price: 2635, side: 'short', label: 'Orange-pink band, since about 7 Oct' },
+      { kind: 'level', price: 2590, side: 'short', label: 'Pink band, since about 13 Oct' },
+      { kind: 'level', price: 2330, side: 'long', label: 'Purple band under price — the below-price side is thin this month' },
+    ],
+  },
+  month3: {
+    key: 'month3',
+    label: '3-Month',
+    capturedAt: CAPTURED_AT,
+    spotAtCapture: 2376,
+    source: `${DATAWALLET}, 3-month view`,
+    levels: [
+      { kind: 'level', price: 2790, side: 'short', label: 'Bright bands, about $2,787–$2,800, since early October' },
+      { kind: 'level', price: 2635, side: 'short', label: 'Pink band, since about 6 Oct' },
+      { kind: 'level', price: 2585, side: 'short', label: 'Band' },
+      { kind: 'level', price: 2270, side: 'long', label: 'Purple bands, about $2,245–$2,275' },
+      { kind: 'level', price: 2060, side: 'long', label: 'Purple bands' },
+      { kind: 'level', price: 1905, side: 'long', label: 'Band' },
+      { kind: 'level', price: 1850, side: 'long', label: 'Brightest band on the 3-month map, since mid-August' },
+    ],
+  },
+  year1: {
+    key: 'year1',
+    label: '1-Year',
+    capturedAt: CAPTURED_AT,
+    spotAtCapture: 2377,
+    source: `${DATAWALLET}, 1-year view`,
+    levels: [
+      { kind: 'level', price: 3990, side: 'short', label: 'Cluster about $3,930–$4,050, from last November–December\'s range' },
+      { kind: 'level', price: 3650, side: 'short', label: 'Band' },
+      { kind: 'level', price: 3440, side: 'short', label: 'Band' },
+      { kind: 'level', price: 3040, side: 'short', label: 'Band' },
+      { kind: 'level', price: 2820, side: 'short', label: 'Band from the September–October highs' },
+      { kind: 'level', price: 2420, side: 'short', label: 'Pink band just above price, since about late April' },
+      { kind: 'level', price: 1860, side: 'long', label: 'Brightest band on the whole 1-year map, since August' },
+      { kind: 'level', price: 1675, side: 'long', label: 'Band' },
+      { kind: 'level', price: 1550, side: 'long', label: 'Band near the bottom of the range' },
     ],
   },
 };

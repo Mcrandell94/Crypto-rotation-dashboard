@@ -20,6 +20,8 @@ export default function useLevelsTabData(isActive) {
   const [liquidationHeatmapBcfError, setLiquidationHeatmapBcfError] = useState(null);
   const [liquidationFeedData, setLiquidationFeedData] = useState(null);
   const [liquidationFeedError, setLiquidationFeedError] = useState(null);
+  const [liquidationMapData, setLiquidationMapData] = useState(null);
+  const [liquidationMapError, setLiquidationMapError] = useState(null);
   const [liquidationZonesData, setLiquidationZonesData] = useState(null);
   const [liquidationZonesError, setLiquidationZonesError] = useState(null);
   const [btcPriceData, setBtcPriceData] = useState(null);
@@ -127,6 +129,18 @@ export default function useLevelsTabData(isActive) {
     }
   }, []);
 
+  const fetchLiquidationMap = useCallback(async () => {
+    setLiquidationMapError(null);
+    try {
+      const res = await fetch('/api/liquidationmap');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setLiquidationMapData(json);
+    } catch (e) {
+      setLiquidationMapError(e.message);
+    }
+  }, []);
+
   const fetchLiquidationZones = useCallback(async () => {
     setLiquidationZonesError(null);
     try {
@@ -169,13 +183,10 @@ export default function useLevelsTabData(isActive) {
   // back below and removing `disabled` from its entry in
   // LiquidationHeatmap.js's SOURCES.
   //
-  // Taker buy/sell volume (Coinglass) and Liquidation Zones (CoinLobster)
-  // are disabled here for now — both fail every call in production
-  // (Coinglass: key/plan doesn't cover this endpoint; CoinLobster: the
-  // unresolved REST 401 auth issue from earlier this session). Not
-  // removed, just not called: fetchTakerFlow and fetchLiquidationZones
-  // above are untouched and still returned below — re-enable by adding
-  // both calls back into refetch() and its dependency array.
+  // Taker buy/sell volume (Coinglass) is disabled here for now — the
+  // Coinglass key/plan doesn't cover that endpoint. Not removed, just not
+  // called: fetchTakerFlow above is untouched and still returned below —
+  // re-enable by adding it back into refetch() and its dependency array.
   const refetch = useCallback(() => {
     fetchTimeframes();
     fetchLiquidationHeatmap();
@@ -185,7 +196,9 @@ export default function useLevelsTabData(isActive) {
     fetchEthPrice();
     fetchDerivativesFlow();
     fetchPositioning();
-  }, [fetchTimeframes, fetchLiquidationHeatmap, fetchLiquidationHeatmapCoinalyze, fetchLiquidationFeed, fetchBtcPrice, fetchEthPrice, fetchDerivativesFlow, fetchPositioning]);
+    fetchLiquidationZones();
+    fetchLiquidationMap();
+  }, [fetchTimeframes, fetchLiquidationHeatmap, fetchLiquidationHeatmapCoinalyze, fetchLiquidationFeed, fetchBtcPrice, fetchEthPrice, fetchDerivativesFlow, fetchPositioning, fetchLiquidationZones, fetchLiquidationMap]);
 
   useEffect(() => {
     if (isActive && !loaded) {
@@ -202,6 +215,7 @@ export default function useLevelsTabData(isActive) {
     liquidationHeatmapBcfData, liquidationHeatmapBcfError,
     liquidationFeedData, liquidationFeedError,
     liquidationZonesData, liquidationZonesError,
+    liquidationMapData, liquidationMapError,
     derivativesFlowData, derivativesFlowError,
     positioningData, positioningError,
     btcPriceData, btcPriceError,

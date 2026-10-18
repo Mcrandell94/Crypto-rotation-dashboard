@@ -32,10 +32,14 @@ failing source shows up without someone having to notice it.
   the guide can be shared publicly.
 - **BitcoinCounterFlow heatmap source**: needs `BITCOINCOUNTERFLOW_API_KEY`
   in Vercel (Developer plan). See `app/components/LiquidationHeatmap.js`.
-- **Liquidation Zones** (CoinLobster REST 401) and **Taker Flow**
-  (Coinglass plan doesn't cover it). See `app/hooks/useLevelsTabData.js`.
+- **Taker Flow** (Coinglass plan doesn't cover it). See
+  `app/hooks/useLevelsTabData.js`.
 
 ## Recurring upkeep
+- The Liquidation Levels Tracker's 1-Day to 1-Year horizons are
+  hand-read from Datawallet heatmap screenshots (last set 2026-10-18).
+  Re-read them when new screenshots come in; the Live horizon updates
+  itself from LiqWall.
 - 2027's CPI, PPI and jobs-report dates come from OMB's federal schedule
   (October 2026). When BLS posts its own 2027 calendar
   (bls.gov/schedule/), check them against it and add the other BLS

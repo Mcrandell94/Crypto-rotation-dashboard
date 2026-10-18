@@ -37,8 +37,21 @@
 // unverified-response-shape problem — now shared from one place; see
 // app/lib/apiParsing.js for what each one does.
 export { pick, extractArray, normalizeTimeMs } from './apiParsing';
+import { callMcpTool } from './mcpClient';
 
 const BASE_URL = 'https://coinlobster.com/api/ai/v1';
+
+// CoinLobster's MCP tools (coin_brief, liquidations, traders, ...), for
+// data the REST API no longer offers — projected liquidation levels among
+// it. Checked live 2026-10-18 with the account's Pro key: their public MCP
+// URL answers live when the REST key is sent as Bearer (30 minutes late
+// without one), while /api/ai/v1/mcp answers "Authentication required."
+// even for that valid key. See lib/mcpClient for the call itself.
+const MCP_URL = 'https://coinlobster.com/mcp';
+
+export function callCoinLobsterTool(tool, args, apiKey, { revalidateSeconds = 300 } = {}) {
+  return callMcpTool(MCP_URL, tool, args, { key: (apiKey || '').trim(), revalidateSeconds });
+}
 
 export async function fetchCoinLobster(tool, params, apiKey, { revalidateSeconds = 300 } = {}) {
   // Trimmed defensively — a stray trailing newline/space from copy-paste
@@ -55,14 +68,12 @@ export async function fetchCoinLobster(tool, params, apiKey, { revalidateSeconds
 
   if (!res.ok) {
     const detail = await res.text();
-    // Never the full key — but on a 401 specifically, its length and a few
-    // characters from each end are safe to surface and let us compare
-    // against what the site shows, to catch a copy-paste mismatch/typo
-    // without needing to see the secret itself.
+    // Never any part of the key — on a 401, only its length, to catch a
+    // truncated or empty paste.
     const keyHint =
       res.status === 401
         ? key
-          ? ` [key check: length=${key.length}, starts "${key.slice(0, 6)}", ends "${key.slice(-4)}"]`
+          ? ` [key check: length=${key.length}]`
           : ' [key check: COINLOBSTER_API_KEY read as EMPTY at request time]'
         : '';
     const err = new Error(`CoinLobster returned ${res.status} for ${tool}.${keyHint} Raw response: ${detail.slice(0, 400)}`);

@@ -474,12 +474,10 @@ export default function DashboardHome() {
 
       {activeTab === 'levels' && (
         <TabErrorBoundary tabName="Levels & Liquidations">
-          {/* Liquidation Zones (CoinLobster) and Taker Flow (Coinglass) are
-              temporarily off this tab — both fail every call right now
-              (CoinLobster's unresolved REST 401, Coinglass's key/plan not
-              covering this endpoint). Not removed: their fetchers stay
-              intact in useLevelsTabData, just uncalled — see that hook's
-              refetch() comment for how to bring them back. */}
+          {/* Taker Flow (Coinglass) is temporarily off this tab — the
+              Coinglass key/plan doesn't cover that endpoint. Not removed:
+              its fetcher stays intact in useLevelsTabData, just uncalled —
+              see that hook's refetch() comment for how to bring it back. */}
           {header.emaError ? (
             <div style={{ marginTop: 20, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
               <strong>EMA fetch failed:</strong> {header.emaError}
@@ -513,7 +511,17 @@ export default function DashboardHome() {
             btcPriceError={levels.btcPriceError}
             ethPrice={levels.ethPriceData?.price ?? null}
             ethPriceError={levels.ethPriceError}
+            liveMap={levels.liquidationMapData}
+            liveMapError={levels.liquidationMapError}
           />
+
+          {levels.liquidationZonesError ? (
+            <div style={{ marginTop: 20, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
+              <strong>Liquidation zones fetch failed:</strong> {levels.liquidationZonesError}
+            </div>
+          ) : (
+            <LiquidationZones data={levels.liquidationZonesData} />
+          )}
 
           {header.openInterestError ? (
             <div style={{ marginTop: 20, background: '#1E1B14', border: '1px solid #A85D4F', borderRadius: 6, padding: 16, color: '#C9A66B' }}>
