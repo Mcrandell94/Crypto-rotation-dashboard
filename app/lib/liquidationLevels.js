@@ -41,8 +41,9 @@
 
 const DATAWALLET = 'Datawallet liquidation heatmap, aggregated across exchanges (estimated from open interest and common leverage ratios)';
 const CAPTURED_AT = '2026-10-18T15:00:00Z';
-// ETH's 1-day and 3-day maps were re-sent later the same day.
+// Re-sent later the same day: ETH's 1-day and 3-day maps, then BTC's 1-day.
 const ETH_UPDATED_AT = '2026-10-18T16:55:00Z';
+const BTC_UPDATED_AT = '2026-10-18T17:00:00Z';
 
 const LIVE = {
   key: 'live',
@@ -56,17 +57,20 @@ const BTC_HORIZONS = {
   day1: {
     key: 'day1',
     label: '1-Day',
-    capturedAt: CAPTURED_AT,
-    spotAtCapture: 81147,
+    capturedAt: BTC_UPDATED_AT,
+    spotAtCapture: 81024,
     source: `${DATAWALLET}, 1-day view`,
     levels: [
-      { kind: 'level', price: 83350, side: 'short', label: 'Pink band, building since about 07:30 UTC' },
-      { kind: 'level', price: 82500, side: 'short', label: 'Brightest band above price on the 1-day map' },
-      { kind: 'level', price: 82150, side: 'short', label: 'Band just under the $82.5K one' },
-      { kind: 'level', price: 80900, side: 'long', label: 'Pink band just under price' },
-      { kind: 'level', price: 80500, side: 'long', label: 'Brightest spot on the whole 1-day map, at the right edge' },
-      { kind: 'level', price: 80300, side: 'long', label: 'Band under the $80.5K one' },
-      { kind: 'level', price: 79500, side: 'long', label: 'Cluster of fainter bands, about $79.3K–$79.7K' },
+      { kind: 'level', price: 83320, side: 'short', label: 'Pink band, since about 07:40 UTC' },
+      { kind: 'level', price: 83000, side: 'short', label: 'Pink band at the right edge' },
+      { kind: 'level', price: 82740, side: 'short', label: 'Pink band at the right edge' },
+      { kind: 'level', price: 82460, side: 'short', label: 'Bright pink band since about 07:40 UTC — the longest-running one above price' },
+      { kind: 'level', price: 82170, side: 'short', label: 'Pink band at the right edge' },
+      { kind: 'level', price: 81940, side: 'short', label: 'Brightest band above price, at the right edge (since about 14:00 UTC)' },
+      { kind: 'level', price: 80870, side: 'long', label: 'Pink band just under price, since about 07:40 UTC' },
+      { kind: 'level', price: 80480, side: 'long', label: 'Brightest spot on the whole 1-day map, at the right edge' },
+      { kind: 'level', price: 80300, side: 'long', label: 'Pink band' },
+      { kind: 'level', price: 79500, side: 'long', label: 'Purple bands, about $79.4K–$79.6K' },
     ],
   },
   day3: {
