@@ -39,5 +39,20 @@ export async function GET() {
     try { body = scrub(JSON.parse(text)); } catch { body = text.slice(0, 200).replace(/cl_\S+/g, '[removed]'); }
     out[path] = { status: res.status, body: JSON.stringify(body).slice(0, 600) };
   }
+  for (const [label, withKey] of [['mcp+key', true], ['mcp keyless', false]]) {
+    const headers = { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' };
+    if (withKey) headers.Authorization = `Bearer ${key}`;
+    const res = await fetch('https://coinlobster.com/mcp', {
+      method: 'POST', headers, cache: 'no-store',
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'liquidations', arguments: { coin: 'BTC', scope: 'projected', detail: 'full' } } }),
+    });
+    const text = await res.text();
+    const data = text.split('\n').filter((l) => l.startsWith('data:')).map((l) => l.slice(5)).join('') || text;
+    let j = null;
+    try { j = JSON.parse(JSON.parse(data).result.content[0].text); } catch {}
+    out[label] = j
+      ? { status: res.status, as_of: j.as_of, delayed: j.delayed ?? null, bands: j.projection?.bands?.length ?? null, sides: [...new Set((j.projection?.bands || []).map((b) => b.side))], access_note: String(j.access_note || '').slice(0, 160) }
+      : { status: res.status, body: data.slice(0, 300).replace(/cl_\S+/g, '[removed]') };
+  }
   return Response.json(out);
 }
