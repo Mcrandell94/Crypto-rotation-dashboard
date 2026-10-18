@@ -20,6 +20,7 @@ export default function useLevelsTabData(isActive) {
   const [liquidationHeatmapBcfError, setLiquidationHeatmapBcfError] = useState(null);
   const [liquidationFeedData, setLiquidationFeedData] = useState(null);
   const [liquidationFeedError, setLiquidationFeedError] = useState(null);
+  const [levelHitsData, setLevelHitsData] = useState(null);
   const [liquidationMapData, setLiquidationMapData] = useState(null);
   const [liquidationMapError, setLiquidationMapError] = useState(null);
   const [liquidationZonesData, setLiquidationZonesData] = useState(null);
@@ -129,6 +130,15 @@ export default function useLevelsTabData(isActive) {
     }
   }, []);
 
+  // When price first touched each hand-entered tracker level since its
+  // capture. A failure here just leaves hits to the live-price check.
+  const fetchLevelHits = useCallback(async () => {
+    try {
+      const res = await fetch('/api/levelhits');
+      if (res.ok) setLevelHitsData(await res.json());
+    } catch {}
+  }, []);
+
   const fetchLiquidationMap = useCallback(async () => {
     setLiquidationMapError(null);
     try {
@@ -198,7 +208,8 @@ export default function useLevelsTabData(isActive) {
     fetchPositioning();
     fetchLiquidationZones();
     fetchLiquidationMap();
-  }, [fetchTimeframes, fetchLiquidationHeatmap, fetchLiquidationHeatmapCoinalyze, fetchLiquidationFeed, fetchBtcPrice, fetchEthPrice, fetchDerivativesFlow, fetchPositioning, fetchLiquidationZones, fetchLiquidationMap]);
+    fetchLevelHits();
+  }, [fetchTimeframes, fetchLiquidationHeatmap, fetchLiquidationHeatmapCoinalyze, fetchLiquidationFeed, fetchBtcPrice, fetchEthPrice, fetchDerivativesFlow, fetchPositioning, fetchLiquidationZones, fetchLiquidationMap, fetchLevelHits]);
 
   useEffect(() => {
     if (isActive && !loaded) {
@@ -216,6 +227,7 @@ export default function useLevelsTabData(isActive) {
     liquidationFeedData, liquidationFeedError,
     liquidationZonesData, liquidationZonesError,
     liquidationMapData, liquidationMapError,
+    levelHitsData,
     derivativesFlowData, derivativesFlowError,
     positioningData, positioningError,
     btcPriceData, btcPriceError,

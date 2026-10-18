@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { LEVELS_BY_ASSET } from '../lib/liquidationLevels';
-import { crossedNow, horizonAge } from '../lib/liquidationLevelsStatus';
+import { crossedNow, horizonAge, levelId } from '../lib/liquidationLevelsStatus';
 
 const TEXT_PRIMARY = '#E7E4DD';
 const TEXT_SECONDARY = '#8B9298';
@@ -32,10 +32,16 @@ function listOf(names) {
 
 // The Live horizon's levels come from LiqWall (/api/liquidationmap) at
 // runtime, with that snapshot's own price as spotAtCapture; every other
-// horizon is hand-entered in lib/liquidationLevels.
-function horizonsFor(asset, liveMap) {
+// horizon is hand-entered in lib/liquidationLevels, and carries `touched`
+// — when price first reached each level since capture, from
+// /api/levelhits (only while that answer is for this same capture).
+function horizonsFor(asset, liveMap, levelHits) {
   return Object.values(LEVELS_BY_ASSET[asset]).map((h) => {
-    const m = h.live ? liveMap?.assets?.[asset] : null;
+    if (!h.live) {
+      const t = levelHits?.hits?.[asset]?.[h.key];
+      return t && t.capturedAt === h.capturedAt ? { ...h, touched: t.hits || {} } : h;
+    }
+    const m = liveMap?.assets?.[asset];
     if (!m) return h;
     return {
       ...h,
@@ -53,10 +59,6 @@ function horizonsFor(asset, liveMap) {
       })),
     };
   });
-}
-
-function levelId(l) {
-  return l.kind === 'zone' ? `zone-${l.zoneLow}-${l.zoneHigh}` : `level-${l.side}-${l.price}`;
 }
 
 // Once a level is hit it stays hit, even if price later moves back — a
@@ -124,7 +126,13 @@ function HorizonPicker({ horizonList, horizonKey, setHorizonKey }) {
   );
 }
 
-export default function LiquidationLevelsTracker({ btcPrice, btcPriceError, ethPrice, ethPriceError, liveMap, liveMapError }) {
+function fmtHitTime(iso) {
+  const d = new Date(iso);
+  const sameDay = new Date().toDateString() === d.toDateString();
+  return d.toLocaleString('en-US', sameDay ? { hour: 'numeric', minute: '2-digit' } : { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+export default function LiquidationLevelsTracker({ btcPrice, btcPriceError, ethPrice, ethPriceError, liveMap, liveMapError, levelHits }) {
   const [asset, setAsset] = useState('BTC');
   const [horizonKey, setHorizonKey] = useState(Object.values(LEVELS_BY_ASSET.BTC)[0]?.key);
   const [hitByAssetHorizon, setHitByAssetHorizon] = useState(() =>
@@ -139,7 +147,7 @@ export default function LiquidationLevelsTracker({ btcPrice, btcPriceError, ethP
     setHitByAssetHorizon((prev) => {
       let changedAny = false;
       const next = { ...prev, [asset]: { ...prev[asset] } };
-      for (const h of horizonsFor(asset, liveMap)) {
+      for (const h of horizonsFor(asset, liveMap, levelHits)) {
         if (h.levels.length === 0) continue;
         const set = new Set(next[asset][h.key]);
         let changed = false;
@@ -149,7 +157,7 @@ export default function LiquidationLevelsTracker({ btcPrice, btcPriceError, ethP
             if (!set.has(id)) set.add(id);
             continue;
           }
-          if (crossedNow(l, price, h.spotAtCapture)) {
+          if (crossedNow(l, price, h.spotAtCapture) || h.touched?.[id]) {
             set.add(id);
             writeHit(asset, h.key, h.capturedAt, id);
             changed = true;
@@ -162,17 +170,18 @@ export default function LiquidationLevelsTracker({ btcPrice, btcPriceError, ethP
       }
       return changedAny ? next : prev;
     });
-  }, [asset, price, liveMap]);
+  }, [asset, price, liveMap, levelHits]);
 
-  const horizonList = horizonsFor(asset, liveMap);
+  const horizonList = horizonsFor(asset, liveMap, levelHits);
   const active = horizonList.find((h) => h.key === horizonKey) || horizonList[0];
-  // Hits remembered since capture, plus every level live price is past
-  // right now — worked out on each render, so a crossed level shows as hit
-  // even if the remembered state didn't update (seen on a phone: 0 / 4 hit
-  // with price below two of the four long levels).
+  // Hits remembered in this browser, every level live price is past right
+  // now, and every level a candle has touched since capture (a wick that
+  // bounced back included) — worked out on each render, so a crossed level
+  // shows as hit even if nobody had the page open when it happened.
   const hitIds = new Set([
     ...(hitByAssetHorizon[asset]?.[active?.key] || []),
     ...(active?.levels || []).filter((l) => crossedNow(l, price, active.spotAtCapture)).map(levelId),
+    ...Object.keys(active?.touched || {}),
   ]);
   const age = horizonAge(active, price);
 
@@ -223,8 +232,9 @@ export default function LiquidationLevelsTracker({ btcPrice, btcPriceError, ethP
         </p>
       ) : (
         <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '4px 0 12px', maxWidth: 680, lineHeight: 1.5 }}>
-          Liquidation levels read off a heatmap screenshot you sent. Live price is checked against each one; once
-          crossed, it&apos;s marked hit and stays that way.
+          Liquidation levels read off a heatmap screenshot you sent. Live price, and every price candle since the
+          screenshot (Kraken), is checked against each one; once price touches a level it&apos;s crossed off and stays
+          that way, even if price has bounced back since.
           {active.source ? ` Source: ${active.source}.` : ''}
           {active.capturedAt ? ` Captured ${new Date(active.capturedAt).toLocaleString()}` : ''}
           {age ? ` — ${age.ageDays === 0 ? 'today' : `${age.ageDays} day${age.ageDays === 1 ? '' : 's'} ago`}` : ''}
@@ -287,8 +297,13 @@ export default function LiquidationLevelsTracker({ btcPrice, btcPriceError, ethP
               <span style={{ fontSize: 12, color: TEXT_PRIMARY, fontFamily: 'ui-monospace, monospace', flex: '0 0 150px', textDecoration: hit ? 'line-through' : 'none' }}>
                 {priceLabel}
               </span>
-              <span style={{ fontSize: 11, color: TEXT_SECONDARY, flex: 1 }}>{l.label || ''}</span>
-              {hit && <span style={{ fontSize: 10, color: AMBER, fontWeight: 600 }}>HIT</span>}
+              <span style={{ fontSize: 11, color: TEXT_SECONDARY, flex: 1, textDecoration: hit ? 'line-through' : 'none' }}>{l.label || ''}</span>
+              {hit && (
+                <span style={{ fontSize: 10, color: AMBER, fontWeight: 600, whiteSpace: 'nowrap', textAlign: 'right' }}>
+                  HIT
+                  {active.touched?.[id] && <span style={{ display: 'block', fontWeight: 400, color: TEXT_MUTED }}>{fmtHitTime(active.touched[id])}</span>}
+                </span>
+              )}
             </div>
           );
         })}

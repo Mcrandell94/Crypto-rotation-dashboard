@@ -515,6 +515,7 @@ export default function DashboardHome() {
             ethPriceError={levels.ethPriceError}
             liveMap={levels.liquidationMapData}
             liveMapError={levels.liquidationMapError}
+            levelHits={levels.levelHitsData}
           />
 
           {levels.liquidationZonesError ? (
