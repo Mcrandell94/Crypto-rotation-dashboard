@@ -11,14 +11,17 @@
 // their MCP endpoint with the same Bearer key (lib/coinlobster). Answer shape confirmed live
 // 2026-10-18: {pair, as_of, projection: {price, bands: [{price, side,
 // intensityUsd, leverage}], stats}, ...}. Each answer spends 20-100
-// credits from the plan's monthly balance, so this refreshes every 15
-// minutes at most (shared Data Cache).
+// credits from the plan's monthly balance — shared with the trading bot's
+// own CoinLobster use — so this refreshes once an hour at most: the Data
+// Cache holds the upstream answers, and the CDN holds this route's
+// response, so page views never trigger a paid call on their own.
 
 export const dynamic = 'force-dynamic';
 
 import { callCoinLobsterTool, extractArray, pick } from '../../lib/coinlobster';
+import { withCdnCache } from '../../lib/cdnCache';
 
-const REVALIDATE = 900;
+const REVALIDATE = 3600;
 
 async function fetchZonesForCoin(coin, apiKey) {
   const json = await callCoinLobsterTool('liquidations', { coin, scope: 'projected', detail: 'full' }, apiKey, { revalidateSeconds: REVALIDATE });
@@ -39,7 +42,7 @@ async function fetchZonesForCoin(coin, apiKey) {
   return { coin, levels, currentPrice: json?.projection?.price ?? null, asOf: json?.as_of ?? null };
 }
 
-export async function GET() {
+async function handler() {
   const apiKey = process.env.COINLOBSTER_API_KEY;
   if (!apiKey) {
     return Response.json(
@@ -61,7 +64,10 @@ export async function GET() {
       );
     }
 
-    return Response.json({ assets: { BTC: btc, ETH: eth }, fetchedAt: new Date().toISOString() });
+    // A coin that failed is listed in `failed` too, so lib/cdnCache won't
+    // hold a half-empty answer at the edge for the whole hour.
+    const failed = [btc, eth].filter((a) => a.error).map((a) => ({ coin: a.coin, error: a.error }));
+    return Response.json({ assets: { BTC: btc, ETH: eth }, failed, fetchedAt: new Date().toISOString() });
   } catch (err) {
     // CoinLobster's own status goes in the message; this route answers 502
     // (bad upstream), since passing its 401 through reads as this site's
@@ -72,3 +78,5 @@ export async function GET() {
     );
   }
 }
+
+export const GET = withCdnCache(handler, REVALIDATE);
