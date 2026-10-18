@@ -41,6 +41,8 @@
 
 const DATAWALLET = 'Datawallet liquidation heatmap, aggregated across exchanges (estimated from open interest and common leverage ratios)';
 const CAPTURED_AT = '2026-10-18T15:00:00Z';
+// ETH's 1-day and 3-day maps were re-sent later the same day.
+const ETH_UPDATED_AT = '2026-10-18T16:55:00Z';
 
 const LIVE = {
   key: 'live',
@@ -154,33 +156,35 @@ const ETH_HORIZONS = {
   day1: {
     key: 'day1',
     label: '1-Day',
-    capturedAt: CAPTURED_AT,
-    spotAtCapture: 2380,
+    capturedAt: ETH_UPDATED_AT,
+    spotAtCapture: 2365,
     source: `${DATAWALLET}, 1-day view`,
     levels: [
-      { kind: 'level', price: 2451, side: 'short', label: 'Pink band' },
-      { kind: 'level', price: 2444, side: 'short', label: 'Brightest band on the 1-day map, at the right edge' },
-      { kind: 'level', price: 2434, side: 'short', label: 'Pink bands, about $2,430–$2,437' },
-      { kind: 'level', price: 2400, side: 'short', label: 'Band at $2,400' },
-      { kind: 'level', price: 2369, side: 'long', label: 'Bright band just under price' },
-      { kind: 'level', price: 2354, side: 'long', label: 'Red-orange band, since about 21:00 UTC on 17 Oct' },
-      { kind: 'level', price: 2345, side: 'long', label: 'Pink band' },
+      { kind: 'level', price: 2473, side: 'short', label: 'Purple bands' },
+      { kind: 'level', price: 2447, side: 'short', label: 'Pink band' },
+      { kind: 'level', price: 2443, side: 'short', label: 'Brightest band on the 1-day map, building since about 02:00 UTC' },
+      { kind: 'level', price: 2432, side: 'short', label: 'Orange-pink band, since about 02:00 UTC' },
+      { kind: 'level', price: 2400, side: 'short', label: 'Pink band at $2,400, since about 13:00 UTC' },
+      { kind: 'level', price: 2355, side: 'long', label: 'Orange-red band just under price, since about 22:00 UTC on 17 Oct' },
+      { kind: 'level', price: 2347, side: 'long', label: 'Pink band' },
+      { kind: 'level', price: 2331, side: 'long', label: 'Purple bands' },
     ],
   },
   day3: {
     key: 'day3',
     label: '3-Day',
-    capturedAt: CAPTURED_AT,
-    spotAtCapture: 2377,
+    capturedAt: ETH_UPDATED_AT,
+    spotAtCapture: 2366,
     source: `${DATAWALLET}, 3-day view`,
     levels: [
-      { kind: 'level', price: 2525, side: 'short', label: 'Purple bands' },
       { kind: 'level', price: 2500, side: 'short', label: 'Orange band, since 16 Oct' },
-      { kind: 'level', price: 2466, side: 'short', label: 'Pink band' },
-      { kind: 'level', price: 2452, side: 'short', label: 'Brightest band on the 3-day map (18 Oct)' },
-      { kind: 'level', price: 2385, side: 'short', label: 'Pink band just above price' },
-      { kind: 'level', price: 2369, side: 'long', label: 'Bright band just under price' },
-      { kind: 'level', price: 2347, side: 'long', label: 'Orange band, since 22:00 UTC on 17 Oct' },
+      { kind: 'level', price: 2463, side: 'short', label: 'Pink bands, about $2,460–$2,466' },
+      { kind: 'level', price: 2451, side: 'short', label: 'Brightest band on the 3-day map, at the right edge — a pink band sits just under it at about $2,446' },
+      { kind: 'level', price: 2400, side: 'short', label: 'Pink band at $2,400, at the right edge' },
+      { kind: 'level', price: 2354, side: 'long', label: 'Pink band just under price, at the right edge' },
+      { kind: 'level', price: 2348, side: 'long', label: 'Purple band' },
+      { kind: 'level', price: 2330, side: 'long', label: 'Purple bands, about $2,326–$2,333' },
+      { kind: 'level', price: 2306, side: 'long', label: 'Purple band' },
     ],
   },
   week1: {
