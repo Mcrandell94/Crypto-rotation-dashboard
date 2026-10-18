@@ -37,8 +37,17 @@
 // unverified-response-shape problem — now shared from one place; see
 // app/lib/apiParsing.js for what each one does.
 export { pick, extractArray, normalizeTimeMs } from './apiParsing';
+import { callMcpTool } from './mcpClient';
 
 const BASE_URL = 'https://coinlobster.com/api/ai/v1';
+
+// CoinLobster's MCP tools (coin_brief, liquidations, traders, ...) over
+// their MCP endpoint, with the same Bearer key and credit balance as REST.
+// Some data — projected liquidation levels among it — is only offered
+// there now. See lib/mcpClient for the call itself.
+export function callCoinLobsterTool(tool, args, apiKey, { revalidateSeconds = 300 } = {}) {
+  return callMcpTool(`${BASE_URL}/mcp`, tool, args, { key: (apiKey || '').trim(), revalidateSeconds });
+}
 
 export async function fetchCoinLobster(tool, params, apiKey, { revalidateSeconds = 300 } = {}) {
   // Trimmed defensively — a stray trailing newline/space from copy-paste

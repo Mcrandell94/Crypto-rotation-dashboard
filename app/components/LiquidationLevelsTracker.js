@@ -19,6 +19,42 @@ function formatPrice(v) {
   return v == null ? '—' : `$${Math.round(v).toLocaleString()}`;
 }
 
+function usdShort(v) {
+  if (v == null || !Number.isFinite(v)) return '—';
+  if (v >= 1e9) return `$${(v / 1e9).toFixed(2)}B`;
+  if (v >= 1e6) return `$${Math.round(v / 1e6)}M`;
+  return `$${Math.round(v / 1e3)}K`;
+}
+
+function listOf(names) {
+  return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names.join('');
+}
+
+// The Live horizon's levels come from LiqWall (/api/liquidationmap) at
+// runtime, with that snapshot's own price as spotAtCapture; every other
+// horizon is hand-entered in lib/liquidationLevels.
+function horizonsFor(asset, liveMap) {
+  return Object.values(LEVELS_BY_ASSET[asset]).map((h) => {
+    const m = h.live ? liveMap?.assets?.[asset] : null;
+    if (!m) return h;
+    return {
+      ...h,
+      capturedAt: m.asOf,
+      spotAtCapture: m.price,
+      venues: m.venues,
+      withinPct: m.withinPct,
+      longBelow: m.longBelow,
+      shortAbove: m.shortAbove,
+      levels: m.levels.map((l) => ({
+        kind: 'level',
+        price: l.price,
+        side: l.side,
+        label: `${usdShort(l.usd)} of ${l.side}s${l.exchange ? `, most on ${l.exchange}` : ''}`,
+      })),
+    };
+  });
+}
+
 function levelId(l) {
   return l.kind === 'zone' ? `zone-${l.zoneLow}-${l.zoneHigh}` : `level-${l.side}-${l.price}`;
 }
@@ -88,7 +124,7 @@ function HorizonPicker({ horizonList, horizonKey, setHorizonKey }) {
   );
 }
 
-export default function LiquidationLevelsTracker({ btcPrice, btcPriceError, ethPrice, ethPriceError }) {
+export default function LiquidationLevelsTracker({ btcPrice, btcPriceError, ethPrice, ethPriceError, liveMap, liveMapError }) {
   const [asset, setAsset] = useState('BTC');
   const [horizonKey, setHorizonKey] = useState(Object.values(LEVELS_BY_ASSET.BTC)[0]?.key);
   const [hitByAssetHorizon, setHitByAssetHorizon] = useState(() =>
@@ -103,7 +139,7 @@ export default function LiquidationLevelsTracker({ btcPrice, btcPriceError, ethP
     setHitByAssetHorizon((prev) => {
       let changedAny = false;
       const next = { ...prev, [asset]: { ...prev[asset] } };
-      for (const h of Object.values(LEVELS_BY_ASSET[asset])) {
+      for (const h of horizonsFor(asset, liveMap)) {
         if (h.levels.length === 0) continue;
         const set = new Set(next[asset][h.key]);
         let changed = false;
@@ -126,10 +162,10 @@ export default function LiquidationLevelsTracker({ btcPrice, btcPriceError, ethP
       }
       return changedAny ? next : prev;
     });
-  }, [asset, price]);
+  }, [asset, price, liveMap]);
 
-  const horizonList = Object.values(LEVELS_BY_ASSET[asset]);
-  const active = LEVELS_BY_ASSET[asset][horizonKey] || horizonList[0];
+  const horizonList = horizonsFor(asset, liveMap);
+  const active = horizonList.find((h) => h.key === horizonKey) || horizonList[0];
   // Hits remembered since capture, plus every level live price is past
   // right now — worked out on each render, so a crossed level shows as hit
   // even if the remembered state didn't update (seen on a phone: 0 / 4 hit
@@ -148,11 +184,17 @@ export default function LiquidationLevelsTracker({ btcPrice, btcPriceError, ethP
         </h2>
         <AssetPicker asset={asset} setAsset={setAsset} />
         <HorizonPicker horizonList={horizonList} horizonKey={active?.key} setHorizonKey={setHorizonKey} />
-        <p style={{ fontSize: 12, color: TEXT_MUTED, maxWidth: 680, lineHeight: 1.5 }}>
-          No {asset} liquidation map loaded yet for this horizon. Send a liquidation heatmap screenshot and
-          its squeeze zones and liquidity levels get read off it and tracked here — live price is checked
-          against each one, and once it's crossed, that level is marked hit.
-        </p>
+        {active?.live ? (
+          <p style={{ fontSize: 12, color: TEXT_MUTED, maxWidth: 680, lineHeight: 1.5 }}>
+            {liveMapError ? `Live liquidation map unavailable this refresh: ${liveMapError}` : 'Loading the live liquidation map…'}
+          </p>
+        ) : (
+          <p style={{ fontSize: 12, color: TEXT_MUTED, maxWidth: 680, lineHeight: 1.5 }}>
+            No {asset} liquidation map loaded yet for this horizon. Send a liquidation heatmap screenshot and
+            its squeeze zones and liquidity levels get read off it and tracked here — live price is checked
+            against each one, and once it's crossed, that level is marked hit.
+          </p>
+        )}
       </section>
     );
   }
@@ -169,16 +211,28 @@ export default function LiquidationLevelsTracker({ btcPrice, btcPriceError, ethP
       <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, color: TEXT_PRIMARY }}>
         Liquidation Levels Tracker
       </h2>
-      <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '4px 0 12px', maxWidth: 680, lineHeight: 1.5 }}>
-        Squeeze zones and liquidity levels read off a screenshot you sent — not modeled, not pulled from an
-        API. Live price is checked against each one; once crossed, it's marked hit and stays that way.
-        {active.source ? ` Source: ${active.source}.` : ''}
-        {active.capturedAt ? ` Captured ${new Date(active.capturedAt).toLocaleString()}` : ''}
-        {age ? ` — ${age.ageDays === 0 ? 'today' : `${age.ageDays} day${age.ageDays === 1 ? '' : 's'} ago`}` : ''}
-        {age && active.spotAtCapture ? `, with ${asset} at ${formatPrice(active.spotAtCapture)}` : ''}
-        {age?.movePct != null ? ` (now ${age.movePct > 0 ? '+' : ''}${age.movePct.toFixed(1)}%)` : ''}
-        {active.capturedAt ? '.' : ''}
-      </p>
+      {active.live ? (
+        <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '4px 0 12px', maxWidth: 680, lineHeight: 1.5 }}>
+          Live from LiqWall: the largest liquidation levels within {active.withinPct ?? 10}% of price, across{' '}
+          {listOf(active.venues || [])}, refreshed every few minutes. Live price is checked against each one; once
+          crossed, it&apos;s marked hit.
+          {active.longBelow?.within_5pct != null && active.shortAbove?.within_5pct != null
+            ? ` Within 5% of price: ${usdShort(active.longBelow.within_5pct)} of longs below, ${usdShort(active.shortAbove.within_5pct)} of shorts above.`
+            : ''}
+          {active.capturedAt ? ` As of ${new Date(active.capturedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })} UTC.` : ''}
+        </p>
+      ) : (
+        <p style={{ fontSize: 11, color: TEXT_MUTED, margin: '4px 0 12px', maxWidth: 680, lineHeight: 1.5 }}>
+          Liquidation levels read off a heatmap screenshot you sent. Live price is checked against each one; once
+          crossed, it&apos;s marked hit and stays that way.
+          {active.source ? ` Source: ${active.source}.` : ''}
+          {active.capturedAt ? ` Captured ${new Date(active.capturedAt).toLocaleString()}` : ''}
+          {age ? ` — ${age.ageDays === 0 ? 'today' : `${age.ageDays} day${age.ageDays === 1 ? '' : 's'} ago`}` : ''}
+          {age && active.spotAtCapture ? `, with ${asset} at ${formatPrice(active.spotAtCapture)}` : ''}
+          {age?.movePct != null ? ` (now ${age.movePct > 0 ? '+' : ''}${age.movePct.toFixed(1)}%)` : ''}
+          {active.capturedAt ? '.' : ''}
+        </p>
+      )}
 
       <AssetPicker asset={asset} setAsset={setAsset} />
       <HorizonPicker horizonList={horizonList} horizonKey={active.key} setHorizonKey={setHorizonKey} />
@@ -204,7 +258,7 @@ export default function LiquidationLevelsTracker({ btcPrice, btcPriceError, ethP
         </div>
       )}
 
-      {hitCount > 0 && (
+      {hitCount > 0 && !active.live && (
         <div style={{ background: '#1E1B14', border: `1px solid ${AMBER}`, borderRadius: 6, padding: 12, color: AMBER, fontSize: 12, marginBottom: 14 }}>
           <strong>Liquidation map update required</strong> — {hitCount} level{hitCount === 1 ? '' : 's'} hit
           on this horizon since it was captured. Send a fresh screenshot to refresh it.

@@ -511,6 +511,8 @@ export default function DashboardHome() {
             btcPriceError={levels.btcPriceError}
             ethPrice={levels.ethPriceData?.price ?? null}
             ethPriceError={levels.ethPriceError}
+            liveMap={levels.liquidationMapData}
+            liveMapError={levels.liquidationMapError}
           />
 
           {levels.liquidationZonesError ? (

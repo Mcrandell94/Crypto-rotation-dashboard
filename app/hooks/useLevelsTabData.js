@@ -20,6 +20,8 @@ export default function useLevelsTabData(isActive) {
   const [liquidationHeatmapBcfError, setLiquidationHeatmapBcfError] = useState(null);
   const [liquidationFeedData, setLiquidationFeedData] = useState(null);
   const [liquidationFeedError, setLiquidationFeedError] = useState(null);
+  const [liquidationMapData, setLiquidationMapData] = useState(null);
+  const [liquidationMapError, setLiquidationMapError] = useState(null);
   const [liquidationZonesData, setLiquidationZonesData] = useState(null);
   const [liquidationZonesError, setLiquidationZonesError] = useState(null);
   const [btcPriceData, setBtcPriceData] = useState(null);
@@ -127,6 +129,18 @@ export default function useLevelsTabData(isActive) {
     }
   }, []);
 
+  const fetchLiquidationMap = useCallback(async () => {
+    setLiquidationMapError(null);
+    try {
+      const res = await fetch('/api/liquidationmap');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setLiquidationMapData(json);
+    } catch (e) {
+      setLiquidationMapError(e.message);
+    }
+  }, []);
+
   const fetchLiquidationZones = useCallback(async () => {
     setLiquidationZonesError(null);
     try {
@@ -183,7 +197,8 @@ export default function useLevelsTabData(isActive) {
     fetchDerivativesFlow();
     fetchPositioning();
     fetchLiquidationZones();
-  }, [fetchTimeframes, fetchLiquidationHeatmap, fetchLiquidationHeatmapCoinalyze, fetchLiquidationFeed, fetchBtcPrice, fetchEthPrice, fetchDerivativesFlow, fetchPositioning, fetchLiquidationZones]);
+    fetchLiquidationMap();
+  }, [fetchTimeframes, fetchLiquidationHeatmap, fetchLiquidationHeatmapCoinalyze, fetchLiquidationFeed, fetchBtcPrice, fetchEthPrice, fetchDerivativesFlow, fetchPositioning, fetchLiquidationZones, fetchLiquidationMap]);
 
   useEffect(() => {
     if (isActive && !loaded) {
@@ -200,6 +215,7 @@ export default function useLevelsTabData(isActive) {
     liquidationHeatmapBcfData, liquidationHeatmapBcfError,
     liquidationFeedData, liquidationFeedError,
     liquidationZonesData, liquidationZonesError,
+    liquidationMapData, liquidationMapError,
     derivativesFlowData, derivativesFlowError,
     positioningData, positioningError,
     btcPriceData, btcPriceError,
