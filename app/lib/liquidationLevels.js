@@ -29,16 +29,17 @@
 // relationship is what LiquidationLevelsTracker uses to decide whether
 // current price has crossed it.
 //
-// Current hand-entered set: Datawallet's liquidation heatmap, one
-// screenshot per timeframe (1D, 3D, 1W, 1M, 3M, 1Y) for each asset, all
-// sent 2026-10-18 around 15:00 UTC. Datawallet's own note: "Liquidation
+// Current hand-entered set: Datawallet's liquidation heatmap, aggregated
+// across exchanges, one screenshot per timeframe (1D, 3D, 1W, 1M, 3M, 1Y)
+// for each asset, all sent 2026-10-18 around 15:00 UTC. Datawallet's own
+// note: "Liquidation
 // data is estimated based on open interest and common leverage ratios" —
 // a model, like every heatmap of this kind. Bands that ended on the chart
 // (price already traded through them) are left out. Eyeballed pixel read
 // against each chart's price axis — treat exact prices as approximate
 // (about ±0.5% on the short views, ±1% on the 1-year view).
 
-const DATAWALLET = 'Datawallet liquidation heatmap (estimated from open interest and common leverage ratios)';
+const DATAWALLET = 'Datawallet liquidation heatmap, aggregated across exchanges (estimated from open interest and common leverage ratios)';
 const CAPTURED_AT = '2026-10-18T15:00:00Z';
 
 const LIVE = {
