@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { crossedNow, horizonAge } = require('./liquidationLevelsStatus');
+const { crossedNow, horizonAge, touchesSince, intervalFor, levelId } = require('./liquidationLevelsStatus');
 
 // The BTC 7-day horizon as captured on 2026-09-21 (spot $86,533), checked
 // with BTC at $81,208 on 2026-10-17 — the case that showed "0 / 4 hit".
@@ -36,4 +36,36 @@ test('a horizon reports its age and the move since capture', () => {
   assert.equal(a.movePct.toFixed(1), '-6.2');
   assert.equal(horizonAge(medium, null, Date.parse('2026-09-21T20:00:00Z')).movePct, null);
   assert.equal(horizonAge({ key: 'mediumTerm' }, 1), null);
+});
+
+test('a level wicked through after capture counts as hit, with when', () => {
+  const since = Date.parse('2026-10-18T17:00:00Z');
+  const t = (iso) => Date.parse(iso) / 1000;
+  const levels = [
+    { kind: 'level', price: 80480, side: 'long' },
+    { kind: 'level', price: 80000, side: 'long' },
+    { kind: 'level', price: 81940, side: 'short' },
+    { kind: 'zone', zoneLow: 79300, zoneHigh: 79700 },
+  ];
+  // [open time, open, high, low, close]
+  const candles = [
+    [t('2026-10-18T16:45:00Z'), 81000, 81100, 79000, 81000], // before capture: ignored
+    [t('2026-10-18T17:00:00Z'), 81020, 81100, 80900, 81000],
+    [t('2026-10-18T17:15:00Z'), 81000, 81050, 80450, 81000], // wick to 80,450, closes back up
+    [t('2026-10-18T17:30:00Z'), 81000, 81950, 80990, 81500],
+  ];
+  const hits = touchesSince(levels, candles, since, 81024);
+  assert.deepEqual(hits, {
+    [levelId(levels[0])]: Date.parse('2026-10-18T17:15:00Z'),
+    [levelId(levels[2])]: Date.parse('2026-10-18T17:30:00Z'),
+  });
+  assert.deepEqual(touchesSince(levels, null, since, 81024), {});
+});
+
+test('the candle size is the finest that reaches back to capture', () => {
+  const now = Date.parse('2026-10-18T17:00:00Z');
+  assert.equal(intervalFor(now - 2 * 86400000, now), 15);
+  assert.equal(intervalFor(now - 20 * 86400000, now), 60);
+  assert.equal(intervalFor(now - 90 * 86400000, now), 240);
+  assert.equal(intervalFor(now - 200 * 86400000, now), 1440);
 });

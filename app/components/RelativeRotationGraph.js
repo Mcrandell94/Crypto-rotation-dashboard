@@ -48,6 +48,8 @@ const OVERLAYS_KEY = 'rrgOverlays.v1';
 const RRG_3D_BETA = true;
 const VIEW_3D_KEY = 'rrgView3d.v1';
 const TREND_WINDOW = 20; // absolute-trend overlay: price vs its own 20-bar average
+// Height kept free for the full-screen title bar and padding.
+const FULLSCREEN_CHROME = 64;
 
 // Wording for the bar size the data came in (/api/rrg's `interval`). All
 // windows (trend, momentum, smoothing, tail) are counted in bars, so the
@@ -233,18 +235,78 @@ export default function RelativeRotationGraph({
   const shownSymbols = activeSymbols.filter((s) => !hidden.has(s));
   const focus = hoverSym || pinned;
 
-  // ---- sizing: render at the container's real width so text stays legible on phones
-  const [W, setW] = useState(460);
+  // ---- full screen: the chart card fills the screen. The browser's own
+  // full-screen mode where it allows it (Android, desktop); otherwise (iPhone
+  // Safari only does full screen for video) the card is pinned over the page.
+  const [fullscreen, setFullscreen] = useState(false);
+  const [viewportH, setViewportH] = useState(null);
+  const cardRef = useRef(null);
+  const nativeFsElement = () => (typeof document === 'undefined' ? null : document.fullscreenElement || document.webkitFullscreenElement || null);
+  const enterFullscreen = () => {
+    const el = cardRef.current;
+    const request = el?.requestFullscreen || el?.webkitRequestFullscreen;
+    setFullscreen(true);
+    if (request) {
+      try {
+        Promise.resolve(request.call(el)).catch(() => {});
+      } catch {}
+    }
+  };
+  const exitFullscreen = () => {
+    if (nativeFsElement()) {
+      const exit = document.exitFullscreen || document.webkitExitFullscreen;
+      try {
+        Promise.resolve(exit?.call(document)).catch(() => {});
+      } catch {}
+    }
+    setFullscreen(false);
+  };
+  useEffect(() => {
+    const onChange = () => {
+      if (!nativeFsElement()) setFullscreen(false);
+    };
+    document.addEventListener('fullscreenchange', onChange);
+    document.addEventListener('webkitfullscreenchange', onChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', onChange);
+      document.removeEventListener('webkitfullscreenchange', onChange);
+    };
+  }, []);
+  useEffect(() => {
+    if (!fullscreen) return undefined;
+    const onResize = () => setViewportH(window.innerHeight);
+    const onKey = (e) => {
+      if (e.key === 'Escape') setFullscreen(false);
+    };
+    onResize();
+    window.addEventListener('resize', onResize);
+    window.addEventListener('keydown', onKey);
+    // Pinned-over-the-page mode: stop the page behind from scrolling.
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [fullscreen]);
+
+  // ---- sizing: render at the container's real width so text stays legible
+  // on phones; in full screen, as big as the screen's width and height allow.
+  const [boxW, setBoxW] = useState(460);
   const roRef = useRef(null);
   const wrapRef = useCallback((node) => {
     roRef.current?.disconnect();
     roRef.current = null;
     if (node && typeof ResizeObserver !== 'undefined') {
-      const ro = new ResizeObserver(([entry]) => setW(clamp(Math.floor(entry.contentRect.width), 260, 560)));
+      const ro = new ResizeObserver(([entry]) => setBoxW(Math.floor(entry.contentRect.width)));
       ro.observe(node);
       roRef.current = ro;
     }
   }, []);
+  const W = fullscreen
+    ? clamp(Math.min(boxW, (viewportH || 800) - FULLSCREEN_CHROME), 260, 1400)
+    : clamp(boxW, 260, 560);
   const M = { left: 52, right: 10, top: 10, bottom: 38 };
   const H = W;
   const PW = W - M.left - M.right;
@@ -585,6 +647,11 @@ export default function RelativeRotationGraph({
               3D <span style={{ fontSize: 9, letterSpacing: '0.04em', textTransform: 'uppercase', opacity: 0.8 }}>beta</span>
             </button>
           )}
+          {!tableView && (
+            <button onClick={enterFullscreen} style={btn(false)} title="Show the chart full screen">
+              ⤢ Full screen
+            </button>
+          )}
           <button onClick={() => setTableView((v) => !v)} style={btn(tableView)}>
             {tableView ? 'Chart' : 'Table'}
           </button>
@@ -691,9 +758,24 @@ export default function RelativeRotationGraph({
         </div>
       ) : (
         <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'flex-start', marginTop: 14 }}>
-          <div style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: 12, flex: '1 1 480px', maxWidth: 584, minWidth: 0 }}>
+          <div
+            ref={cardRef}
+            style={fullscreen
+              ? { background: CARD_BG, position: 'fixed', inset: 0, zIndex: 1000, width: '100%', height: '100%', maxWidth: 'none', margin: 0, padding: 12, boxSizing: 'border-box', overflowY: 'auto' }
+              : { background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: 6, padding: 12, flex: '1 1 480px', maxWidth: 584, minWidth: 0 }}
+          >
+            {fullscreen && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: TEXT_PRIMARY, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  Relative Rotation Graph <span style={{ fontWeight: 400, color: TEXT_MUTED, fontSize: 11 }}>vs {benchmark} · {unit.bars} · {unit.fmt(days[end])}</span>
+                </span>
+                <button onClick={exitFullscreen} style={btn(true)} aria-label="Exit full screen">
+                  ✕ Exit full screen
+                </button>
+              </div>
+            )}
             {view3d ? (
-              <div ref={wrapRef} style={{ width: '100%' }}>
+              <div ref={wrapRef} style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
                 <RrgPlot3D
                   W={W}
                   series={series3d}
@@ -707,7 +789,8 @@ export default function RelativeRotationGraph({
                 />
               </div>
             ) : (
-            <div ref={wrapRef} style={{ position: 'relative', width: '100%' }}>
+            <div ref={wrapRef} style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
+            <div style={{ position: 'relative', width: W }}>
               <svg
                 ref={svgRef}
                 width={W}
@@ -934,6 +1017,7 @@ export default function RelativeRotationGraph({
                 </div>
               )}
 
+            </div>
             </div>
             )}
 
