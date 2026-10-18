@@ -41,12 +41,16 @@ import { callMcpTool } from './mcpClient';
 
 const BASE_URL = 'https://coinlobster.com/api/ai/v1';
 
-// CoinLobster's MCP tools (coin_brief, liquidations, traders, ...) over
-// their MCP endpoint, with the same Bearer key and credit balance as REST.
-// Some data — projected liquidation levels among it — is only offered
-// there now. See lib/mcpClient for the call itself.
+// CoinLobster's MCP tools (coin_brief, liquidations, traders, ...), for
+// data the REST API no longer offers — projected liquidation levels among
+// it. Checked live 2026-10-18 with the account's Pro key: their public MCP
+// URL answers live when the REST key is sent as Bearer (30 minutes late
+// without one), while /api/ai/v1/mcp answers "Authentication required."
+// even for that valid key. See lib/mcpClient for the call itself.
+const MCP_URL = 'https://coinlobster.com/mcp';
+
 export function callCoinLobsterTool(tool, args, apiKey, { revalidateSeconds = 300 } = {}) {
-  return callMcpTool(`${BASE_URL}/mcp`, tool, args, { key: (apiKey || '').trim(), revalidateSeconds });
+  return callMcpTool(MCP_URL, tool, args, { key: (apiKey || '').trim(), revalidateSeconds });
 }
 
 export async function fetchCoinLobster(tool, params, apiKey, { revalidateSeconds = 300 } = {}) {

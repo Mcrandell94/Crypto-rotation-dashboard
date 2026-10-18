@@ -5,10 +5,10 @@
 // as a cross-check, not a replacement.
 //
 // The old REST endpoint (/api/ai/v1/liq_zones) is gone from CoinLobster's
-// REST API — a valid key now gets "Authentication required." there. The
-// same data lives in their MCP tool `liquidations` with scope `projected`
-// (the old `liq_zones` tool name maps to it), called here over their MCP
-// endpoint with the same Bearer key. Answer shape confirmed live
+// REST API — a valid Pro key now gets "Authentication required." there.
+// The same data lives in their MCP tool `liquidations` with scope
+// `projected` (the old `liq_zones` tool name maps to it), called here over
+// their MCP endpoint with the same Bearer key (lib/coinlobster). Answer shape confirmed live
 // 2026-10-18: {pair, as_of, projection: {price, bands: [{price, side,
 // intensityUsd, leverage}], stats}, ...}. Each answer spends 20-100
 // credits from the plan's monthly balance, so this refreshes every 15
