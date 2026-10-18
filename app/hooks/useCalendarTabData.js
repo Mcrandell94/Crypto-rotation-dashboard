@@ -14,6 +14,8 @@ export default function useCalendarTabData(isActive) {
   const [congressError, setCongressError] = useState(null);
   const [inflationOddsData, setInflationOddsData] = useState(null);
   const [inflationOddsError, setInflationOddsError] = useState(null);
+  const [fedPurchasesData, setFedPurchasesData] = useState(null);
+  const [fedPurchasesError, setFedPurchasesError] = useState(null);
 
   const fetchFedOdds = useCallback(async () => {
     setFedOddsError(null);
@@ -51,11 +53,24 @@ export default function useCalendarTabData(isActive) {
     }
   }, []);
 
+  const fetchFedPurchases = useCallback(async () => {
+    setFedPurchasesError(null);
+    try {
+      const res = await fetch('/api/fedpurchases');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Unknown error');
+      setFedPurchasesData(json);
+    } catch (e) {
+      setFedPurchasesError(e.message);
+    }
+  }, []);
+
   const refetch = useCallback(() => {
     fetchFedOdds();
     fetchCongressBills();
     fetchInflationOdds();
-  }, [fetchFedOdds, fetchCongressBills, fetchInflationOdds]);
+    fetchFedPurchases();
+  }, [fetchFedOdds, fetchCongressBills, fetchInflationOdds, fetchFedPurchases]);
 
   useEffect(() => {
     if (isActive && !loaded) {
@@ -68,6 +83,7 @@ export default function useCalendarTabData(isActive) {
     fedOddsData, fedOddsError,
     congressData, congressError,
     inflationOddsData, inflationOddsError,
+    fedPurchasesData, fedPurchasesError,
     refetch,
   };
 }

@@ -361,6 +361,8 @@ export default function DashboardHome() {
             congressError={calendar.congressError}
             inflationOddsData={calendar.inflationOddsData}
             inflationOddsError={calendar.inflationOddsError}
+            fedPurchasesData={calendar.fedPurchasesData}
+            fedPurchasesError={calendar.fedPurchasesError}
           />
         </TabErrorBoundary>
       )}

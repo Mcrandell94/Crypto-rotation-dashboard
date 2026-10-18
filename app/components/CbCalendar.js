@@ -194,12 +194,39 @@ function buildOptionsEvents(optionsData) {
   }));
 }
 
+// The NY Fed Desk's scheduled Treasury purchase operations for the current
+// monthly period, live from its own published schedule (/api/fedpurchases).
+// No severity — routine market operations; the Desk's one-line plan for the
+// period (how much is reinvestment, how much is reserve management
+// purchases) is shown verbatim on the first upcoming one.
+function buildFedOperationEvents(data, now) {
+  if (!data?.operations) return [];
+  return data.operations.map((op) => ({
+    id: `nyfed-${op.date}-${op.security}`,
+    date: new Date(op.at),
+    name: 'NY Fed bill purchase',
+    shortName: 'NY Fed bill purchase',
+    category: 'fed-operation',
+    resolved: new Date(op.closeAt || op.at) < now,
+    tz: 'America/New_York',
+    op,
+    period: data.period,
+    plan: data.plan,
+    pageUrl: data.pageUrl,
+  }));
+}
+
+function fmtIsoDay(iso) {
+  return iso ? new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }) : '—';
+}
+
 const CATEGORY_BADGE = {
   'central-bank': { label: 'Central bank', color: '#4C7EB8' },
   legislative: { label: 'Legislative', color: '#C9A66B' },
   'economic-data': { label: 'US data (BLS)', color: '#5E9C98' },
   closure: { label: 'Closed', color: TEXT_SECONDARY },
   'options-expiry': { label: 'Options expiry', color: '#8B6FB8' },
+  'fed-operation': { label: 'Fed operation', color: '#7A8FB8' },
 };
 
 const fmtSpread = (cents) => (cents >= 100 ? '$1.00' : `${cents}¢`);
@@ -302,6 +329,25 @@ function EventCard({ ev, now }) {
           </div>
         )}
 
+        {ev.category === 'fed-operation' && (
+          <div style={{ fontSize: 12, color: TEXT_SECONDARY, marginTop: 8, lineHeight: 1.6 }}>
+            Up to {ev.op.maxSizeLabel} · {ev.op.security} (maturing {ev.op.maturityRange.replace(' - ', ' – ')}) · settles {fmtIsoDay(ev.op.settlementDate)}
+            {ev.showPlan && ev.plan && (
+              <div style={{ color: TEXT_MUTED, marginTop: 4 }}>
+                NY Fed plan for {ev.period || 'this period'}: {ev.plan}
+                {ev.pageUrl && (
+                  <>
+                    {' '}
+                    <a href={ev.pageUrl} target="_blank" rel="noopener noreferrer" style={{ color: AMBER }}>
+                      Schedule on newyorkfed.org
+                    </a>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {ev.category === 'options-expiry' && (
           <div style={{ fontSize: 12, color: TEXT_SECONDARY, marginTop: 8, lineHeight: 1.6 }}>
             {ev.expiry.type === 'quarterly' ? 'Quarterly expiry' : ev.expiry.type === 'monthly' ? 'Monthly expiry' : ev.expiry.type === 'weekly' ? 'Weekly expiry' : 'Daily expiry'}
@@ -314,7 +360,7 @@ function EventCard({ ev, now }) {
   );
 }
 
-export default function CbCalendar({ optionsData, fedOddsData, fedOddsError, congressData, congressError, inflationOddsData, inflationOddsError }) {
+export default function CbCalendar({ optionsData, fedOddsData, fedOddsError, congressData, congressError, inflationOddsData, inflationOddsError, fedPurchasesData, fedPurchasesError }) {
   const [now, setNow] = useState(null);
   const [horizonMonths, setHorizonMonths] = useState(3);
 
@@ -333,7 +379,7 @@ export default function CbCalendar({ optionsData, fedOddsData, fedOddsError, con
     );
   }
 
-  let events = [...buildCentralBankEvents(now), ...buildEconomicDataEvents(now), ...buildClosureEvents(now), ...buildOptionsEvents(optionsData), ...buildLegislativeEvents(congressData)];
+  let events = [...buildCentralBankEvents(now), ...buildEconomicDataEvents(now), ...buildClosureEvents(now), ...buildOptionsEvents(optionsData), ...buildLegislativeEvents(congressData), ...buildFedOperationEvents(fedPurchasesData, now)];
 
   // Attach live Polymarket odds to the nearest upcoming Fed meeting only —
   // the market tracks "the next decision," not a specific date. Skipped if
@@ -368,7 +414,7 @@ export default function CbCalendar({ optionsData, fedOddsData, fedOddsError, con
       );
       return { ...ev, severity };
     }
-    if (ev.category === 'legislative' || ev.category === 'economic-data' || ev.category === 'closure') {
+    if (ev.category === 'legislative' || ev.category === 'economic-data' || ev.category === 'closure' || ev.category === 'fed-operation') {
       return ev;
     }
     return { ...ev, severity: expirySeverity(ev.expiry.type) };
@@ -390,8 +436,10 @@ export default function CbCalendar({ optionsData, fedOddsData, fedOddsError, con
   );
   // Past data releases are dropped — the print itself is what matters, and
   // the Macro tab already shows it.
-  const recentlyResolved = events.filter((e) => e.resolved && e.category !== 'economic-data' && e.category !== 'closure').slice(-3);
+  const recentlyResolved = events.filter((e) => e.resolved && e.category !== 'economic-data' && e.category !== 'closure' && e.category !== 'fed-operation').slice(-3);
   const shown = [...recentlyResolved, ...upcoming];
+  const firstFedOperation = shown.find((e) => e.category === 'fed-operation');
+  if (firstFedOperation) firstFedOperation.showPlan = true;
 
   return (
     <section style={{ marginTop: 32 }}>
@@ -403,7 +451,8 @@ export default function CbCalendar({ optionsData, fedOddsData, fedOddsError, con
         Central bank decisions (Fed, BOE, BOJ — hand-maintained from each bank's own published calendar),
         crypto-moving U.S. data releases (CPI, PPI, jobs report — hand-maintained from BLS's own release calendar and OMB's 2027 schedule, currently through December 2027),
         weekdays U.S. banks and/or the stock market are closed, plus stock market early closes (computed from the federal holiday, Fed and NYSE rules),
-        BTC options expiries (live, mirrors the Options panel on Macro & Seasonality), and crypto
+        BTC options expiries (live, mirrors the Options panel on Macro & Seasonality), the NY Fed&apos;s scheduled
+        Treasury bill purchases for the current monthly period (live, from the NY Fed Desk&apos;s own published schedule), and crypto
         market-structure legislation (live, from Congress.gov's own API), scoped to the window above.
         Legislative tracking always shows regardless of window — it's a live status check, not a scheduled date.
       </p>
@@ -436,6 +485,11 @@ export default function CbCalendar({ optionsData, fedOddsData, fedOddsError, con
       {inflationOddsError && (
         <p style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 10 }}>
           Live CPI/PPI odds unavailable this refresh: {inflationOddsError}
+        </p>
+      )}
+      {fedPurchasesError && (
+        <p style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 10 }}>
+          Live NY Fed operation schedule unavailable this refresh: {fedPurchasesError}
         </p>
       )}
       {congressError && (
